@@ -1,6 +1,6 @@
 # Layered CAD professional handoff
 
-The permit workspace exports a model-space DXF from the same canonical property, site, deck, stair, framing, foundation, guard, and structural-connection graph used by the eleven-sheet-minimum PDF set. The exchange is not a traced picture and does not create a second editable source of truth.
+The permit workspace exports a model-space DXF from the same canonical property, site, deck, stair, framing, foundation, guard, and structural-connection graph used by the twelve-sheet-minimum PDF set. The exchange is not a traced picture and does not create a second editable source of truth.
 
 ## Coordinate and issue control
 

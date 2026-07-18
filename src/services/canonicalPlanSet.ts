@@ -6,7 +6,7 @@ import type { PlanSheet, Property } from '../types';
 import { renderOrthographicElevationSvg } from './orthographicElevationSvg';
 
 const CONTENT_BOTTOM = 970;
-export const CANONICAL_PLAN_SET_SCHEMA = 'permitly-canonical-plan-set/v5' as const;
+export const CANONICAL_PLAN_SET_SCHEMA = 'permitly-canonical-plan-set/v6' as const;
 
 interface CanonicalPlanSetInput {
   property: Property;
@@ -53,14 +53,16 @@ export function generateCanonicalPlanSet(input: CanonicalPlanSetInput): Canonica
     revision: input.revision || 1,
     issuedAt: input.issuedAt || new Date().toISOString(),
   };
+  const connectionSchedules = connectionScheduleSheets(input, issue);
   const assemblySchedules = assemblyScheduleSheets(input, issue);
   const sheets = [
-    coverSheet(input, issue, assemblySchedules.length),
+    coverSheet(input, issue, connectionSchedules.length, assemblySchedules.length),
     existingConditionsSheet(input, issue),
     siteSheet(input, issue),
     deckPlanSheet(input, issue),
     foundationSheet(input, issue),
     framingSheet(input, issue),
+    ...connectionSchedules,
     elevationSheet(input, issue),
     sectionSheet(input, issue),
     detailSheet(input, issue),
@@ -70,7 +72,7 @@ export function generateCanonicalPlanSet(input: CanonicalPlanSetInput): Canonica
   return { fingerprint: issue.fingerprint, sheets };
 }
 
-function coverSheet(input: CanonicalPlanSetInput, issue: IssueMeta, assemblyScheduleCount: number): PlanSheet {
+function coverSheet(input: CanonicalPlanSetInput, issue: IssueMeta, connectionScheduleCount: number, assemblyScheduleCount: number): PlanSheet {
   const { property, site, design, framing } = input;
   const totalArea = design.platforms.reduce((sum, platform) => sum + polygonArea(platform.boundary.vertices.map((vertex): PointMm => [vertex.xMm, vertex.yMm])) / 1_000_000, 0);
   const projectRows = [
@@ -86,7 +88,7 @@ function coverSheet(input: CanonicalPlanSetInput, issue: IssueMeta, assemblySche
   ];
   const indexRows = [
     ['A0.0', 'Cover, project data, drawing index'], ['C1.0', 'Evidence and existing conditions'], ['A1.0', 'Site and property relationship'], ['A2.0', 'Dimensioned deck and landing plan'],
-    ['S1.0', 'Foundation and post plan'], ['S2.0', 'Framing plan and member schedule'], ['A3.0', 'Platform and stair elevations'],
+    ['S1.0', 'Foundation and post plan'], ['S2.0', 'Framing plan and member schedule'], [connectionScheduleCount === 1 ? 'S2.1' : `S2.1–S2.${connectionScheduleCount}`, 'All keyed structural connection design controls'], ['A3.0', 'Platform and stair elevations'],
     ['S3.0', 'Typical building sections'], ['A4.0', 'Stair, guard, footing, connection details'], [assemblyScheduleCount === 1 ? 'A4.1' : `A4.1–A4.${assemblyScheduleCount}`, 'All stair and guard design-control schedules'], ['S4.0', 'Design basis, checks, review gates'],
   ];
   const required = framing.reviewGates.filter((gate) => gate.status === 'required');
@@ -95,7 +97,7 @@ function coverSheet(input: CanonicalPlanSetInput, issue: IssueMeta, assemblySche
     <text class="subheading" x="70" y="128">${esc(property.address?.fullAddress || 'Address unconfirmed')}</text>
     ${notice(70, 160, 1560, 78, 'ISSUED FOR COORDINATED PROFESSIONAL REVIEW — NOT FOR CONSTRUCTION', 'Field geometry, structural capacity, footings, connections, guards, stairs, and municipal requirements remain subject to the review gates shown in this set.')}
     <text class="section" x="70" y="286">PROJECT DATA</text>${table(projectRows, 70, 310, 850, 48, 185)}
-    <text class="section" x="970" y="286">DRAWING INDEX</text>${table(indexRows, 970, 310, 660, 29, 100)}
+    <text class="section" x="970" y="286">DRAWING INDEX</text>${table(indexRows, 970, 310, 660, 26, 100)}
     <text class="section" x="970" y="648">REQUIRED REVIEW WORK PACKAGES</text>
     ${required.slice(0, 5).map((gate, index) => statusBox(970, 675 + index * 52, 660, gate.discipline.toUpperCase(), gate.title, 'review')).join('')}
     ${notice(70, 790, 850, 120, 'GENERAL NOTES', 'Do not scale drawings. Written dimensions govern. Verify property boundaries, house wall, openings, grade, utilities, and existing construction before issue. No construction may begin until the authority having jurisdiction issues a permit and required professional documents are accepted.')}`);
@@ -219,6 +221,48 @@ function framingSheet(input: CanonicalPlanSetInput, issue: IssueMeta): PlanSheet
 
 function countLabel(count: number, singular: string): string {
   return `${count} ${singular}${count === 1 ? '' : 's'}`;
+}
+
+const CONNECTION_ROWS_PER_SHEET = 12;
+
+/** Every keyed connection is printable; continuation pages prevent hidden model-only work packages. */
+function connectionScheduleSheets(input: CanonicalPlanSetInput, issue: IssueMeta): PlanSheet[] {
+  const pageCount = Math.max(1, Math.ceil(input.framing.connections.length / CONNECTION_ROWS_PER_SHEET));
+  return Array.from({ length: pageCount }, (_, pageIndex) => {
+    const connections = input.framing.connections.slice(pageIndex * CONNECTION_ROWS_PER_SHEET, (pageIndex + 1) * CONNECTION_ROWS_PER_SHEET);
+    const number = `S2.${pageIndex + 1}`;
+    const id: PlanSheet['id'] = pageIndex === 0 ? 'connection-schedule' : `connection-schedule-${pageIndex + 1}`;
+    return makeSheet(id, 'Structural Connection Design Control Schedule', 'NTS · WRITTEN SCHEDULE GOVERNS', number, input, issue, `
+      <rect x="55" y="82" width="1575" height="800" class="panel"/><text class="section" x="80" y="118">KEYED STRUCTURAL CONNECTION DESIGN CONTROL · ${pageIndex + 1}/${pageCount}</text>
+      <text class="tiny" x="80" y="137">ALL ACTIONS ARE PRELIMINARY DEMANDS · CAPACITY, HARDWARE, FASTENERS, CORROSION RESISTANCE, BLOCKING, BEARING, SPLICES AND INSTALLATION REQUIRE REVIEW</text>
+      ${connectionControlTable(connections, 80, 152, 1525, 48)}
+      <text class="tiny" x="80" y="810">${input.framing.connections.length} TOTAL KEYED CONNECTION GROUP(S) · ROWS ${connections.length ? pageIndex * CONNECTION_ROWS_PER_SHEET + 1 : 0}–${pageIndex * CONNECTION_ROWS_PER_SHEET + connections.length} SHOWN · TAGS LOCATED ON S2.0</text>
+      <text class="title-warning" x="80" y="850">REVIEWER MUST RESOLVE EVERY LISTED CONNECTION FOR THIS DESIGN FINGERPRINT; SOFTWARE DOES NOT SELECT OR CERTIFY HARDWARE</text>`);
+  });
+}
+
+function connectionControlTable(connections: FramingDesign['connections'], x: number, y: number, width: number, rowHeight: number): string {
+  const headers = ['TAG', 'TYPE', 'PLATFORM', 'QTY', 'ACTION', 'MEMBER INTERFACE', 'REQUIRED PROFESSIONAL RESOLUTION'];
+  const columnWidths = [100, 180, 90, 60, 125, 260, width - 815];
+  const boundaries = columnWidths.reduce<number[]>((items, column) => [...items, items[items.length - 1] + column], [x]);
+  const header = `<rect x="${x}" y="${y}" width="${width}" height="${rowHeight}" class="schedule-head"/>${headers.map((value, index) => `<text class="schedule-label" x="${boundaries[index] + 6}" y="${y + rowHeight * .62}">${value}</text>`).join('')}`;
+  const source = connections.length ? connections : [null];
+  const rows = source.map((connection, rowIndex) => {
+    const yy = y + (rowIndex + 1) * rowHeight;
+    const values = connection ? [
+      connection.id,
+      connection.kind.replace(/-/g, ' '),
+      connection.platformId || 'SITE',
+      String(connection.quantity),
+      connection.designActionKn === null ? 'DESIGN' : `${connection.actionScope === 'group' ? 'Σ ' : ''}${connection.designActionKn.toFixed(2)} kN${connection.actionScope === 'each' ? ' ea.' : ''}`,
+      `${memberSummary(connection.fromMemberIds)} → ${memberSummary(connection.receivingMemberIds)}`,
+      connection.requirements.join(' · ') || 'Professional connection design required',
+    ] : ['—', 'No generated connections', '—', '0', '—', '—', 'Regenerate framing after drawing a supported platform.'];
+    return `<rect x="${x}" y="${yy}" width="${width}" height="${rowHeight}" class="schedule-row"/>${values.map((value, columnIndex) => columnIndex === values.length - 1 ? wrapped(value, boundaries[columnIndex] + 6, yy + 15, columnWidths[columnIndex] - 12, 7.3, 9, 4) : `<text class="schedule-text" x="${boundaries[columnIndex] + 6}" y="${yy + rowHeight * .58}">${esc(value)}</text>`).join('')}`;
+  }).join('');
+  const bottom = y + rowHeight * (source.length + 1);
+  const verticals = boundaries.slice(1, -1).map((boundary) => `<line x1="${boundary}" y1="${y}" x2="${boundary}" y2="${bottom}" class="thin"/>`).join('');
+  return `${header}${rows}${verticals}`;
 }
 
 function elevationSheet(input: CanonicalPlanSetInput, issue: IssueMeta): PlanSheet {

@@ -102,7 +102,7 @@ function validateInput(input: CanonicalPermitBundleInput): void {
   const fingerprint = input.issue.manifest.designFingerprint; const report = input.issue.reviewPackage.calculationReport; const cad = input.issue.reviewPackage.cadExchange;
   const sheets = input.issue.reviewPackage.planset;
   const numbers = sheets.map((sheet) => sheet.number);
-  const requiredNumbers = ['A0.0', 'C1.0', 'A1.0', 'A2.0', 'S1.0', 'S2.0', 'A3.0', 'S3.0', 'A4.0', 'A4.1', 'S4.0'];
+  const requiredNumbers = ['A0.0', 'C1.0', 'A1.0', 'A2.0', 'S1.0', 'S2.0', 'S2.1', 'A3.0', 'S3.0', 'A4.0', 'A4.1', 'S4.0'];
   if (!/^DP-[A-F0-9]{8}$/.test(fingerprint) || report?.designFingerprint !== fingerprint || cad?.designFingerprint !== fingerprint || sheets.length < requiredNumbers.length || requiredNumbers.some((number) => !numbers.includes(number)) || new Set(numbers).size !== numbers.length || sheets.some((sheet) => sheet.designFingerprint !== fingerprint)) throw new Error('Regenerate the coordinated canonical issue before assembling the permit package.');
   const missing = validateSidneyApplication(input.application); if (missing.length) throw new Error(`Complete the municipal application data before packaging: ${missing.join(', ')}.`);
 }

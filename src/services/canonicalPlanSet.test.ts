@@ -25,8 +25,10 @@ describe('canonical coordinated review set', () => {
     const planSet = generateCanonicalPlanSet({ property, site, design, framing, issuedAt: '2026-07-18T00:00:00.000Z' });
 
     expect(planSet.fingerprint).not.toBe(`DP-${framing.inputFingerprint.slice(-8).toUpperCase()}`);
-    expect(planSet.sheets).toHaveLength(11);
-    expect(planSet.sheets.map((sheet) => sheet.number)).toEqual(['A0.0', 'C1.0', 'A1.0', 'A2.0', 'S1.0', 'S2.0', 'A3.0', 'S3.0', 'A4.0', 'A4.1', 'S4.0']);
+    const connectionPageCount = Math.max(1, Math.ceil(framing.connections.length / 12));
+    const connectionNumbers = Array.from({ length: connectionPageCount }, (_, index) => `S2.${index + 1}`);
+    expect(planSet.sheets).toHaveLength(11 + connectionPageCount);
+    expect(planSet.sheets.map((sheet) => sheet.number)).toEqual(['A0.0', 'C1.0', 'A1.0', 'A2.0', 'S1.0', 'S2.0', ...connectionNumbers, 'A3.0', 'S3.0', 'A4.0', 'A4.1', 'S4.0']);
     expect(planSet.sheets.every((sheet) => sheet.designFingerprint === planSet.fingerprint)).toBe(true);
     for (const sheet of planSet.sheets) {
       const errors: string[] = [];
@@ -63,6 +65,11 @@ describe('canonical coordinated review set', () => {
     expect(planSet.sheets.find((sheet) => sheet.number === 'S2.0')?.svg).toContain('Stair framing');
     expect(planSet.sheets.find((sheet) => sheet.number === 'S2.0')?.svg).toContain('ST1-FROM-HDR');
     expect(planSet.sheets.find((sheet) => sheet.number === 'S2.0')?.svg).toContain('P1-C1');
+    const connectionSchedules = planSet.sheets.filter((sheet) => sheet.id === 'connection-schedule' || sheet.id.startsWith('connection-schedule-'));
+    expect(connectionSchedules).toHaveLength(connectionPageCount);
+    expect(connectionSchedules[0].svg).toContain('KEYED STRUCTURAL CONNECTION DESIGN CONTROL');
+    expect(connectionSchedules[0].svg).toContain('SOFTWARE DOES NOT SELECT OR CERTIFY HARDWARE');
+    for (const connection of framing.connections) expect(connectionSchedules.filter((sheet) => sheet.svg.includes(connection.id))).toHaveLength(1);
     const elevationSheet = planSet.sheets.find((sheet) => sheet.number === 'A3.0')?.svg || '';
     expect(elevationSheet).toContain('E1 · HOUSE → YARD BUILDING SECTION / ELEVATION');
     expect(elevationSheet).toContain('E2 · SELECTED HOUSE WALL ELEVATION');
@@ -115,5 +122,9 @@ describe('canonical coordinated review set', () => {
       expect(scheduleSheets.filter((sheet) => sheet.svg.includes(guard.id))).toHaveLength(1);
     }
     expect(planSet.sheets.find((sheet) => sheet.number === 'A0.0')?.svg).toContain('A4.1–A4.2');
+    const connectionSheets = planSet.sheets.filter((sheet) => sheet.id === 'connection-schedule' || sheet.id.startsWith('connection-schedule-'));
+    expect(connectionSheets.length).toBeGreaterThan(1);
+    for (const connection of framing.connections) expect(connectionSheets.filter((sheet) => sheet.svg.includes(connection.id))).toHaveLength(1);
+    expect(planSet.sheets.find((sheet) => sheet.number === 'A0.0')?.svg).toContain(`S2.1–S2.${connectionSheets.length}`);
   });
 });
