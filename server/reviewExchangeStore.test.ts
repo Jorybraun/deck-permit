@@ -69,7 +69,7 @@ describe('ReviewExchangeStore', () => {
       designBasis: { deadLoadKpa: 0.5, liveLoadKpa: 1.9, snowLoadKpa: 1, governingAreaLoadKpa: 1.9, assumedSoilBearingKpa: 75, lumber: 'SPF No. 2', treatment: 'exterior' },
       platformSystems: [{ platformId: 'P1' }],
       joistGroups: [{ spacingMm: 400, governingSpanMm: 3000, lineLoadKnM: 0.76, momentDemandKnM: 0.855, shearDemandKn: 1.14 }],
-      beams: [], postFootingChecks: [{ reactionKn: 4, requiredBearingAreaSqM: 0.053, providedBearingAreaSqM: 0.16, bearingPressureKpa: 25, footingDepth: 'unresolved', status: 'review-required' }],
+      beams: [{ lengthMm: 4000, tributaryWidthMm: 1500, lineLoadKnM: 2.85, governingBayMm: 1800, momentDemandKnM: 1.154, shearDemandKn: 2.565, governingPostReactionKn: 5.13 }], postFootingChecks: [{ reactionKn: 4, requiredBearingAreaSqM: 0.053, providedBearingAreaSqM: 0.16, bearingPressureKpa: 25, footingDepth: 'unresolved', status: 'review-required' }],
       stairs: [], connections: [{ id: 'C-P1-B1', status: 'design-required' }], checks: [{}], reviewGates: [], sources: [{}], limitations: ['Not for construction.'],
     };
     const created = await store.create({ ...reviewPackage, calculationReport });
@@ -78,6 +78,8 @@ describe('ReviewExchangeStore', () => {
       .rejects.toEqual(expect.objectContaining<Partial<ReviewExchangeError>>({ status: 409, code: 'calculation-revision-mismatch' }));
     await expect(store.create({ ...reviewPackage, calculationReport: { ...calculationReport, joistGroups: [{ spacingMm: -1 }] } }))
       .rejects.toEqual(expect.objectContaining<Partial<ReviewExchangeError>>({ status: 400, code: 'invalid-calculation-demand' }));
+    await expect(store.create({ ...reviewPackage, calculationReport: { ...calculationReport, beams: [{ lengthMm: -1 }] } }))
+      .rejects.toEqual(expect.objectContaining<Partial<ReviewExchangeError>>({ status: 400, code: 'invalid-calculation-beam-demand' }));
   });
 
   it('requires sheet-specific redlines for a change request and validates their revision', async () => {

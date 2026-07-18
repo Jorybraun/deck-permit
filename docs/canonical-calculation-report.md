@@ -9,7 +9,7 @@ The report records:
 - project issue control, code profile, loads, lumber basis, and assumed soil bearing;
 - platform area, elevation, support strategy, joist axis, and governing design span;
 - grouped joist line load and simple-span demand equations (`M = wL²/8`, `V = wL/2`);
-- beam geometry, support count, and governing generated post reaction;
+- beam tributary width, line load, governing post bay, simple-span moment/shear demand, support count, and governing generated post reaction;
 - post and footing reaction, required and provided bearing area, and bearing pressure;
 - stair endpoints, rise/run geometry, stringer count, and linked connection IDs;
 - every keyed structural connection work package and coordinated design action;

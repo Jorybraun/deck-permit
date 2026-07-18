@@ -35,6 +35,7 @@ describe('canonical structural calculation report', () => {
     expect(report.joistGroups[0]).toMatchObject({ lineLoadKnM: expect.any(Number), momentDemandKnM: expect.any(Number), shearDemandKn: expect.any(Number) });
     expect(report.joistGroups[0].momentDemandKnM).toBeGreaterThan(0);
     expect(report.beams.length).toBe(framing.beams.length);
+    expect(report.beams.every((beam) => beam.tributaryWidthMm > 0 && beam.lineLoadKnM > 0 && beam.governingBayMm > 0 && beam.momentDemandKnM > 0 && beam.shearDemandKn > 0)).toBe(true);
     expect(report.postFootingChecks).toHaveLength(framing.footings.length);
     expect(report.postFootingChecks.every((item) => item.requiredBearingAreaSqM > 0 && item.providedBearingAreaSqM > 0 && item.footingDepth === 'unresolved')).toBe(true);
     expect(report.stairs[0]).toMatchObject({ id: 'ST1', riserCount: 3, stringerCount: 3, status: 'review-required' });

@@ -151,6 +151,10 @@ function validateCalculationReport(value, expectedFingerprint) {
   if (value.joistGroups.some((group) => !group || typeof group !== 'object' || numericKeys.some((key) => !Number.isFinite(group[key]) || group[key] < 0 || group[key] > 10_000_000))) {
     throw new ReviewExchangeError(400, 'invalid-calculation-demand', 'The calculation report member demands are invalid.');
   }
+  const beamNumericKeys = ['lengthMm', 'tributaryWidthMm', 'lineLoadKnM', 'governingBayMm', 'momentDemandKnM', 'shearDemandKn', 'governingPostReactionKn'];
+  if (value.beams.some((beam) => !beam || typeof beam !== 'object' || beamNumericKeys.some((key) => !Number.isFinite(beam[key]) || beam[key] < 0 || beam[key] > 10_000_000))) {
+    throw new ReviewExchangeError(400, 'invalid-calculation-beam-demand', 'The calculation report beam demands are invalid.');
+  }
   if (value.postFootingChecks.some((item) => !item || typeof item !== 'object' || ![item.reactionKn, item.requiredBearingAreaSqM, item.providedBearingAreaSqM, item.bearingPressureKpa].every((number) => Number.isFinite(number) && number >= 0 && number <= 10_000_000) || item.footingDepth !== 'unresolved' || item.status !== 'review-required')) {
     throw new ReviewExchangeError(400, 'invalid-calculation-footing', 'The calculation report footing screens are invalid.');
   }

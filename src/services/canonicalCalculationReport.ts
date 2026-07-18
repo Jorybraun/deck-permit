@@ -53,6 +53,11 @@ export interface CanonicalCalculationReport {
     section: string;
     lengthMm: number;
     supportRole: string;
+    tributaryWidthMm: number;
+    lineLoadKnM: number;
+    governingBayMm: number;
+    momentDemandKnM: number;
+    shearDemandKn: number;
     supportingPostCount: number;
     governingPostReactionKn: number;
     status: string;
@@ -117,8 +122,15 @@ export function buildCanonicalCalculationReport(input: CalculationReportInput): 
   });
   const beams = framing.beams.map((beam) => {
     const posts = framing.posts.filter((post) => post.beamId === beam.id);
+    const system = framing.platformSystems.find((candidate) => candidate.platformId === beam.platformId);
+    const tributaryWidthMm = (system?.joistDesignSpanMm || 0) / 2;
+    const lineLoadKnM = q * tributaryWidthMm / 1000;
+    const governingBayMm = maximumBayLength(posts.map((post) => post.pointMm), beam.startMm, beam.endMm);
+    const governingBayM = governingBayMm / 1000;
     return {
       id: beam.id, platformId: beam.platformId, section: beam.section, lengthMm: beam.lengthMm, supportRole: beam.supportRole,
+      tributaryWidthMm: round(tributaryWidthMm, 0), lineLoadKnM: round(lineLoadKnM, 3), governingBayMm: round(governingBayMm, 0),
+      momentDemandKnM: round(lineLoadKnM * governingBayM ** 2 / 8, 3), shearDemandKn: round(lineLoadKnM * governingBayM / 2, 3),
       supportingPostCount: posts.length, governingPostReactionKn: round(maximum(posts.map((post) => post.estimatedReactionKn)), 2), status: beam.status, ruleId: beam.ruleId,
     };
   });
@@ -223,7 +235,7 @@ export async function buildCanonicalCalculationPdf(report: CanonicalCalculationR
   report.joistGroups.forEach((group) => { heading(`${group.platformId} - ${group.memberIds.length} joists - ${group.section}`, 11); keyValue('Members', summarizeIds(group.memberIds)); keyValue('Geometry', `${group.spacingMm} mm o.c. | governing span ${group.governingSpanMm} mm`); keyValue('Demand trace', `w = ${group.lineLoadKnM.toFixed(3)} kN/m | M = wL2/8 = ${group.momentDemandKnM.toFixed(3)} kN-m | V = wL/2 = ${group.shearDemandKn.toFixed(3)} kN`); keyValue('Rule / status', `${group.ruleId} | ${group.status.replace(/-/g, ' ')}`); rule(); });
 
   heading('3. Beam and post reactions', 17);
-  report.beams.forEach((beam) => { heading(`${beam.id} - ${beam.section}`, 11); keyValue('Geometry', `${beam.lengthMm} mm | ${beam.supportRole} | ${beam.supportingPostCount} post(s)`); keyValue('Governing generated reaction', `${beam.governingPostReactionKn.toFixed(2)} kN per post screen`); keyValue('Rule / status', `${beam.ruleId} | ${beam.status.replace(/-/g, ' ')}`); rule(); });
+  report.beams.forEach((beam) => { heading(`${beam.id} - ${beam.section}`, 11); keyValue('Geometry', `${beam.lengthMm} mm | ${beam.supportRole} | ${beam.supportingPostCount} post(s) | governing bay ${beam.governingBayMm} mm`); keyValue('Demand trace', `w = q x ${beam.tributaryWidthMm} mm / 1000 = ${beam.lineLoadKnM.toFixed(3)} kN/m | M = wL2/8 = ${beam.momentDemandKnM.toFixed(3)} kN-m | V = wL/2 = ${beam.shearDemandKn.toFixed(3)} kN`); keyValue('Governing generated reaction', `${beam.governingPostReactionKn.toFixed(2)} kN per post screen`); keyValue('Rule / status', `${beam.ruleId} | ${beam.status.replace(/-/g, ' ')}`); rule(); });
 
   heading('4. Footing bearing screen', 17);
   report.postFootingChecks.forEach((item) => { heading(`${item.footingId} / ${item.postId}`, 10.5); keyValue('Post', `${item.postSection} | height ${item.postHeightMm} mm | reaction ${item.reactionKn.toFixed(2)} kN`); keyValue('Bearing areas', `required ${item.requiredBearingAreaSqM.toFixed(4)} m2 | provided ${item.providedBearingAreaSqM.toFixed(4)} m2`); keyValue('Provided pressure', `${item.bearingPressureKpa.toFixed(2)} kPa vs assumed ${report.designBasis.assumedSoilBearingKpa.toFixed(0)} kPa`); keyValue('Footing', `${item.footingSizeMm} mm | depth ${item.footingDepth} | ${item.status.replace(/-/g, ' ')}`); rule(); });
@@ -273,5 +285,12 @@ function groupJoists(framing: FramingDesign): Array<Omit<CanonicalCalculationRep
 function endpointLabel(endpoint: DeckDesign['stairs'][number]['from']): string { return endpoint.kind === 'platform' ? endpoint.platformId : `GRADE EL ${endpoint.elevationMm}`; }
 function summarizeIds(ids: string[]): string { return ids.length ? ids.length <= 4 ? ids.join(', ') : `${ids.slice(0, 3).join(', ')} +${ids.length - 3}` : 'UNRESOLVED'; }
 function maximum(values: number[]): number { return values.length ? Math.max(...values) : 0; }
+function maximumBayLength(points: Array<readonly [number, number]>, start: readonly [number, number], end: readonly [number, number]): number {
+  const length = Math.hypot(end[0] - start[0], end[1] - start[1]);
+  if (points.length < 2 || length === 0) return length;
+  const ux = (end[0] - start[0]) / length; const uy = (end[1] - start[1]) / length;
+  const stations = points.map((point) => (point[0] - start[0]) * ux + (point[1] - start[1]) * uy).sort((a, b) => a - b);
+  return maximum(stations.slice(1).map((station, index) => station - stations[index]));
+}
 function polygonArea(points: Array<readonly [number, number]>): number { return Math.abs(points.reduce((sum, point, index) => { const next = points[(index + 1) % points.length]; return sum + point[0] * next[1] - next[0] * point[1]; }, 0) / 2); }
 function round(value: number, digits: number): number { const factor = 10 ** digits; return Math.round(value * factor) / factor; }

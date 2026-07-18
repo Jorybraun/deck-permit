@@ -260,7 +260,8 @@ function calculationSheet(input: CanonicalPlanSetInput, issue: IssueMeta): PlanS
     <text class="section" x="70" y="70">DESIGN BASIS</text>${table(loadRows, 70, 95, 650, 54, 220)}
     <text class="section" x="70" y="465">PLATFORM SYSTEM SCREENING</text>${input.framing.platformSystems.map((system, index) => statusBox(70, 490 + index * 100, 650, system.status.toUpperCase().replace(/-/g, ' '), `${system.platformId} · ${system.supportStrategy} · ${system.joistDesignSpanMm} mm span`, system.status === 'engineering-required' ? 'blocked' : 'review', system.explanation)).join('')}
     <text class="section" x="780" y="70">FRAMING CHECKS</text>${framing.checks.map((check, index) => statusBox(780, 95 + index * 90, 850, check.status.toUpperCase(), check.title, check.status, `${check.result} Basis: ${check.basis}`)).join('')}
-    <text class="section" x="780" y="680">PROFESSIONAL REVIEW GATES</text>${framing.reviewGates.slice(0, 4).map((gate, index) => statusBox(780, 705 + index * 56, 850, `${gate.discipline.toUpperCase()} · ${gate.status.toUpperCase()}`, gate.title, gate.status === 'required' ? 'blocked' : 'pass')).join('')}`);
+    <text class="section" x="780" y="680">PROFESSIONAL REVIEW GATES</text>${framing.reviewGates.slice(0, 4).map((gate, index) => statusBox(780, 705 + index * 56, 850, `${gate.discipline.toUpperCase()} · ${gate.status.toUpperCase()}`, gate.title, gate.status === 'required' ? 'blocked' : 'pass')).join('')}
+    <text class="tiny" x="70" y="946">COMPANION CALCULATION BOOKLET · permitly-canonical-calculation-report/v1 · ${issue.fingerprint} · MEMBER DEMANDS / REACTIONS / BEARING SCREENS / CONNECTION ACTIONS</text>`);
 }
 
 function makeSheet(id: PlanSheet['id'], title: string, scale: string, number: string, input: CanonicalPlanSetInput, issue: IssueMeta, body: string): PlanSheet {
