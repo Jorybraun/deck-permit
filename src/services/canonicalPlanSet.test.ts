@@ -45,6 +45,14 @@ describe('canonical nine-sheet review set', () => {
     expect(planSet.sheets.find((sheet) => sheet.number === 'S1.0')?.svg).toContain('FOUNDATION DESIGN GATE');
     expect(planSet.sheets.find((sheet) => sheet.number === 'S2.0')?.svg).toContain('Stair framing');
     expect(planSet.sheets.find((sheet) => sheet.number === 'S2.0')?.svg).toContain('ST1-FROM-HDR');
+    const elevationSheet = planSet.sheets.find((sheet) => sheet.number === 'A3.0')?.svg || '';
+    expect(elevationSheet).toContain('E1 · HOUSE → YARD BUILDING SECTION / ELEVATION');
+    expect(elevationSheet).toContain('E2 · SELECTED HOUSE WALL ELEVATION');
+    expect(elevationSheet).toContain('UPPER DECK · TOP EL. 900');
+    expect(elevationSheet).toContain('LOWER DECK · TOP EL. 450');
+    expect(elevationSheet).toContain('STAIR 1 · 3R @ 150 · B → LOWER DECK');
+    expect(elevationSheet).toContain('data-platform-id="P1"');
+    expect(elevationSheet).toContain('P1-B1-P1-F');
     expect(planSet.sheets.find((sheet) => sheet.number === 'A4.0')?.svg).toContain('3 STRINGERS');
     expect(planSet.sheets.find((sheet) => sheet.number === 'A4.0')?.svg).toContain('TOP: ST1-FROM-CONN');
     expect(planSet.sheets.find((sheet) => sheet.number === 'S4.0')?.svg).toContain('PROFESSIONAL REVIEW GATES');
