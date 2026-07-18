@@ -1,6 +1,6 @@
 # Canonical calculation report
 
-The professional-review package includes a structured calculation report and a downloadable portrait PDF booklet. It is compiled from the same property, site, deck, and framing graph as the ten-sheet drawing set and layered DXF. All three artifacts carry the same `DP-XXXXXXXX` design fingerprint.
+The professional-review package includes a structured calculation report and a downloadable portrait PDF booklet. It is compiled from the same property, site, deck, and framing graph as the eleven-sheet-minimum drawing set and layered DXF. A4.x continuation sheets schedule every modeled stair flight and generated guard run instead of clipping larger projects. All artifacts carry the same `DP-XXXXXXXX` design fingerprint.
 
 ## Recorded calculation trail
 

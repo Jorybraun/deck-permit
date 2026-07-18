@@ -14,7 +14,7 @@ const property: Property = {
   evidence: [{ id: 'parcel', label: 'Town parcel layer', url: 'https://example.test/parcel', authority: 'municipal', retrievedAt: '2026-07-18T00:00:00.000Z', status: 'reference' }],
 };
 
-describe('canonical ten-sheet review set', () => {
+describe('canonical coordinated review set', () => {
   it('derives coordinated, parseable 11×17 sheets from the current design and framing graph', () => {
     let design = addPlatform(createEmptyDesign(), { name: 'Upper deck', boundary: rectangularBoundary(0, 0, 4000, 3000), elevationMm: 900, houseEdgeIndex: 0 });
     design = addPlatform(design, { name: 'Lower deck', boundary: rectangularBoundary(4710, 0, 3500, 3000), elevationMm: 450 });
@@ -25,8 +25,8 @@ describe('canonical ten-sheet review set', () => {
     const planSet = generateCanonicalPlanSet({ property, site, design, framing, issuedAt: '2026-07-18T00:00:00.000Z' });
 
     expect(planSet.fingerprint).not.toBe(`DP-${framing.inputFingerprint.slice(-8).toUpperCase()}`);
-    expect(planSet.sheets).toHaveLength(10);
-    expect(planSet.sheets.map((sheet) => sheet.number)).toEqual(['A0.0', 'C1.0', 'A1.0', 'A2.0', 'S1.0', 'S2.0', 'A3.0', 'S3.0', 'A4.0', 'S4.0']);
+    expect(planSet.sheets).toHaveLength(11);
+    expect(planSet.sheets.map((sheet) => sheet.number)).toEqual(['A0.0', 'C1.0', 'A1.0', 'A2.0', 'S1.0', 'S2.0', 'A3.0', 'S3.0', 'A4.0', 'A4.1', 'S4.0']);
     expect(planSet.sheets.every((sheet) => sheet.designFingerprint === planSet.fingerprint)).toBe(true);
     for (const sheet of planSet.sheets) {
       const errors: string[] = [];
@@ -82,11 +82,38 @@ describe('canonical ten-sheet review set', () => {
     expect(planSet.sheets.find((sheet) => sheet.number === 'A4.0')?.svg).toContain('KEYED STRUCTURAL CONNECTION SCHEDULE');
     expect(planSet.sheets.find((sheet) => sheet.number === 'A4.0')?.svg).toContain('ledger to house');
     expect(planSet.sheets.find((sheet) => sheet.number === 'A4.0')?.svg).toContain('HARDWARE / FASTENERS / CORROSION CLASS UNRESOLVED');
+    const assemblySchedule = planSet.sheets.find((sheet) => sheet.number === 'A4.1')?.svg || '';
+    expect(assemblySchedule).toContain('STAIR FLIGHT DESIGN CONTROL');
+    expect(assemblySchedule).toContain('GUARD RUN DESIGN CONTROL');
+    expect(assemblySchedule).toContain('ST1');
+    expect(assemblySchedule).toContain('HEADROOM 1950 MIN');
+    expect(assemblySchedule).toContain('UNVERIFIED');
+    for (const guard of framing.guards) expect(assemblySchedule).toContain(guard.id);
+    expect(assemblySchedule).toContain('REVIEWER MUST RESOLVE EVERY LISTED FLIGHT AND GUARD RUN');
     expect(planSet.sheets.find((sheet) => sheet.number === 'S4.0')?.svg).toContain('PROFESSIONAL REVIEW GATES');
 
     const movedDoorSite = { ...site, designWall: { ...site.designWall, openings: [{ ...site.designWall.openings[0], offsetMm: 1200 }] } };
     expect(canonicalPlanFingerprint({ property, site: movedDoorSite, design, framing })).not.toBe(planSet.fingerprint);
     expect(canonicalPlanFingerprint({ property: { ...property, parcel: { ...property.parcel!, pid: '999-888-777' } }, site, design, framing })).not.toBe(planSet.fingerprint);
     expect(canonicalPlanFingerprint({ property, site: { ...site, updatedAt: '2099-01-01T00:00:00.000Z' }, design, framing: { ...framing, generatedAt: '2099-01-01T00:00:00.000Z' } })).toBe(planSet.fingerprint);
+  });
+
+  it('paginates every generated guard run instead of clipping a larger project', () => {
+    let design = createEmptyDesign();
+    for (let index = 0; index < 4; index += 1) {
+      design = addPlatform(design, { name: `Deck ${index + 1}`, boundary: rectangularBoundary(index * 5000, 0, 3000, 2400), elevationMm: 900 });
+    }
+    const site = selectHouseWall(createSiteModel(property), property, 'house', 0);
+    const framing = generateFramingDesign(design, site, { municipality: 'Town of Sidney', snowLoadKpa: 1 }, '2026-07-18T00:00:00.000Z');
+    expect(framing.guards.length).toBeGreaterThan(15);
+
+    const planSet = generateCanonicalPlanSet({ property, site, design, framing, issuedAt: '2026-07-18T00:00:00.000Z' });
+    const scheduleSheets = planSet.sheets.filter((sheet) => sheet.id === 'assembly-schedule' || sheet.id.startsWith('assembly-schedule-'));
+    expect(scheduleSheets.map((sheet) => sheet.number)).toEqual(['A4.1', 'A4.2']);
+    expect(new Set(planSet.sheets.map((sheet) => sheet.number)).size).toBe(planSet.sheets.length);
+    for (const guard of framing.guards) {
+      expect(scheduleSheets.filter((sheet) => sheet.svg.includes(guard.id))).toHaveLength(1);
+    }
+    expect(planSet.sheets.find((sheet) => sheet.number === 'A0.0')?.svg).toContain('A4.1–A4.2');
   });
 });

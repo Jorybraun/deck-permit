@@ -17,7 +17,7 @@ Accepted canonical review cycles also contribute separate machine-readable profe
 
 ## State and dependencies
 
-The module owns no durable state. Canonical project metadata, municipal application data, and evidence metadata are owned by the homeowner Zustand store and persisted in local storage. Private capture and evidence bytes are owned by separate IndexedDB stores. The module consumes the ten-sheet vector exporter, calculation booklet, official Sidney form filler, canonical DXF, SHA-256 digest service, and `fflate` ZIP codec.
+The module owns no durable state. Canonical project metadata, municipal application data, and evidence metadata are owned by the homeowner Zustand store and persisted in local storage. Private capture and evidence bytes are owned by separate IndexedDB stores. The module consumes the canonical vector exporter, calculation booklet, official Sidney form filler, canonical DXF, SHA-256 digest service, and `fflate` ZIP codec.
 
 Dependency direction is UI → permit bundle → artifact services/evidence read interface. The bundle service must not import React, mutate the project store, write the evidence vault, call the review-exchange server, send email, or contact a professional registry.
 
@@ -25,7 +25,7 @@ Dependency direction is UI → permit bundle → artifact services/evidence read
 
 - `README-FIRST.txt`: readiness, revision, limitations, outstanding gates, and submission contact.
 - `01-application/`: unsigned official prefill and current signed/checklist evidence when recorded.
-- `02-drawings/`: coordinated ten-sheet 11×17 vector PDF, calculation booklet, and layered millimetre DXF carrying one design fingerprint.
+- `02-drawings/`: coordinated eleven-sheet-minimum 11×17 vector PDF with paginated A4.x stair/guard schedules, calculation booklet, and layered millimetre DXF carrying one design fingerprint.
 - `03-evidence/`: integrity-checked site captures, owner-signed application evidence, and current professional evidence.
 - `04-records/`: canonical project, calculation report, canonical submission manifest, professional structural-resolution records, and a SHA-256 package index covering every preceding file.
 - `05-stale-evidence/`: integrity-checked evidence belonging to another design fingerprint. It is retained for audit and never satisfies current readiness.

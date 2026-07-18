@@ -6,7 +6,7 @@ import type { PlanSheet, Property } from '../types';
 import { renderOrthographicElevationSvg } from './orthographicElevationSvg';
 
 const CONTENT_BOTTOM = 970;
-export const CANONICAL_PLAN_SET_SCHEMA = 'permitly-canonical-plan-set/v4' as const;
+export const CANONICAL_PLAN_SET_SCHEMA = 'permitly-canonical-plan-set/v5' as const;
 
 interface CanonicalPlanSetInput {
   property: Property;
@@ -46,15 +46,16 @@ export function canonicalPlanFingerprint(input: CanonicalPlanSetInput): string {
 
 interface IssueMeta { fingerprint: string; revision: number; issuedAt: string }
 
-/** Generates ten coordinated 11×17 review sheets from one controlled project graph. */
+/** Generates a coordinated 11×17 review set, adding schedule continuations when the model needs them. */
 export function generateCanonicalPlanSet(input: CanonicalPlanSetInput): CanonicalPlanSet {
   const issue: IssueMeta = {
     fingerprint: canonicalPlanFingerprint(input),
     revision: input.revision || 1,
     issuedAt: input.issuedAt || new Date().toISOString(),
   };
+  const assemblySchedules = assemblyScheduleSheets(input, issue);
   const sheets = [
-    coverSheet(input, issue),
+    coverSheet(input, issue, assemblySchedules.length),
     existingConditionsSheet(input, issue),
     siteSheet(input, issue),
     deckPlanSheet(input, issue),
@@ -63,12 +64,13 @@ export function generateCanonicalPlanSet(input: CanonicalPlanSetInput): Canonica
     elevationSheet(input, issue),
     sectionSheet(input, issue),
     detailSheet(input, issue),
+    ...assemblySchedules,
     calculationSheet(input, issue),
   ];
   return { fingerprint: issue.fingerprint, sheets };
 }
 
-function coverSheet(input: CanonicalPlanSetInput, issue: IssueMeta): PlanSheet {
+function coverSheet(input: CanonicalPlanSetInput, issue: IssueMeta, assemblyScheduleCount: number): PlanSheet {
   const { property, site, design, framing } = input;
   const totalArea = design.platforms.reduce((sum, platform) => sum + polygonArea(platform.boundary.vertices.map((vertex): PointMm => [vertex.xMm, vertex.yMm])) / 1_000_000, 0);
   const projectRows = [
@@ -85,7 +87,7 @@ function coverSheet(input: CanonicalPlanSetInput, issue: IssueMeta): PlanSheet {
   const indexRows = [
     ['A0.0', 'Cover, project data, drawing index'], ['C1.0', 'Evidence and existing conditions'], ['A1.0', 'Site and property relationship'], ['A2.0', 'Dimensioned deck and landing plan'],
     ['S1.0', 'Foundation and post plan'], ['S2.0', 'Framing plan and member schedule'], ['A3.0', 'Platform and stair elevations'],
-    ['S3.0', 'Typical building sections'], ['A4.0', 'Stair, guard, footing, connection details'], ['S4.0', 'Design basis, checks, review gates'],
+    ['S3.0', 'Typical building sections'], ['A4.0', 'Stair, guard, footing, connection details'], [assemblyScheduleCount === 1 ? 'A4.1' : `A4.1–A4.${assemblyScheduleCount}`, 'All stair and guard design-control schedules'], ['S4.0', 'Design basis, checks, review gates'],
   ];
   const required = framing.reviewGates.filter((gate) => gate.status === 'required');
   return makeSheet('cover', 'Cover & Project Data', 'NTS', 'A0.0', input, issue, `
@@ -93,7 +95,7 @@ function coverSheet(input: CanonicalPlanSetInput, issue: IssueMeta): PlanSheet {
     <text class="subheading" x="70" y="128">${esc(property.address?.fullAddress || 'Address unconfirmed')}</text>
     ${notice(70, 160, 1560, 78, 'ISSUED FOR COORDINATED PROFESSIONAL REVIEW — NOT FOR CONSTRUCTION', 'Field geometry, structural capacity, footings, connections, guards, stairs, and municipal requirements remain subject to the review gates shown in this set.')}
     <text class="section" x="70" y="286">PROJECT DATA</text>${table(projectRows, 70, 310, 850, 48, 185)}
-    <text class="section" x="970" y="286">DRAWING INDEX</text>${table(indexRows, 970, 310, 660, 32, 100)}
+    <text class="section" x="970" y="286">DRAWING INDEX</text>${table(indexRows, 970, 310, 660, 29, 100)}
     <text class="section" x="970" y="648">REQUIRED REVIEW WORK PACKAGES</text>
     ${required.slice(0, 5).map((gate, index) => statusBox(970, 675 + index * 52, 660, gate.discipline.toUpperCase(), gate.title, 'review')).join('')}
     ${notice(70, 790, 850, 120, 'GENERAL NOTES', 'Do not scale drawings. Written dimensions govern. Verify property boundaries, house wall, openings, grade, utilities, and existing construction before issue. No construction may begin until the authority having jurisdiction issues a permit and required professional documents are accepted.')}`);
@@ -260,6 +262,53 @@ function detailSheet(input: CanonicalPlanSetInput, issue: IssueMeta): PlanSheet 
     ${table([['Work packages', `${input.framing.connections.length} keyed group(s)`], ['Resolved hardware', `0 of ${input.framing.connections.length}`], ['Capacity claim', 'None — professional or proprietary design required'], ['Plan reference', 'Connection tags are located on S2.0']], 1160, 540, 445, 44, 125)}
     <text class="section" x="1160" y="745">REVIEWER RESOLUTION REQUIREMENTS</text>${noteList(requirements.length ? requirements : ['No generated connection groups.'], 1160, 772, 29, 430)}
     <text class="title-warning" x="1160" y="862">HARDWARE / FASTENERS / CORROSION CLASS UNRESOLVED</text>`);
+}
+
+const ASSEMBLY_ROWS_PER_SHEET = 15;
+
+/** Every modeled flight and guard run receives a written review row; larger projects paginate instead of clipping. */
+function assemblyScheduleSheets(input: CanonicalPlanSetInput, issue: IssueMeta): PlanSheet[] {
+  const stairRows = input.design.stairs.map((stair) => {
+    const safety = input.framing.lifeSafety.stairs.find((item) => item.stairId === stair.id);
+    const from = stairEndpointLabel(stair.from, input.design);
+    const to = stairEndpointLabel(stair.to, input.design);
+    return [stair.id, `${stair.name} · A ${from} → B ${to} · ${stair.widthMm} W · ${stair.riserCount}R @ ${stair.riserHeightMm} · ${stair.treadDepthMm} RUN/GOING · TOP ${safety?.topLanding.planClearanceStatus.toUpperCase() || 'UNRESOLVED'} / BOTTOM ${safety?.bottomLanding.planClearanceStatus.toUpperCase() || 'UNRESOLVED'} · HEADROOM ${safety?.requiredHeadroomMm || 1950} MIN UNVERIFIED · ${stair.handrailSides.toUpperCase()} HANDRAIL INTENT · ${safety?.status.toUpperCase() || 'REVIEW'}`];
+  });
+  const guardRows = input.framing.guards.map((guard) => {
+    const edge = input.framing.lifeSafety.platformEdges.find((item) => item.platformId === guard.platformId && item.edgeId === guard.edgeId);
+    return [guard.id, `${guard.platformId} / ${guard.edgeId} · ${guard.requirement.toUpperCase()} · ${guard.heightMm} H · DROP ${guard.maximumDropMm} · OPENINGS ${guard.openingLimitMm} MAX · ${guard.system} · GRADE ${guard.gradeBasis.toUpperCase()} / ${edge?.gradeVerificationStatus.toUpperCase() || 'REFERENCE'} · CLIMBABILITY ${guard.climbabilityReviewRequired ? 'REQUIRED' : 'VERIFY'} · LOAD / POST / BLOCKING / ANCHORAGE REVIEW`];
+  });
+  const pageCount = Math.max(1, Math.ceil(stairRows.length / ASSEMBLY_ROWS_PER_SHEET), Math.ceil(guardRows.length / ASSEMBLY_ROWS_PER_SHEET));
+  return Array.from({ length: pageCount }, (_, pageIndex) => {
+    const stairs = stairRows.slice(pageIndex * ASSEMBLY_ROWS_PER_SHEET, (pageIndex + 1) * ASSEMBLY_ROWS_PER_SHEET);
+    const guards = guardRows.slice(pageIndex * ASSEMBLY_ROWS_PER_SHEET, (pageIndex + 1) * ASSEMBLY_ROWS_PER_SHEET);
+    const number = `A4.${pageIndex + 1}`;
+    const id: PlanSheet['id'] = pageIndex === 0 ? 'assembly-schedule' : `assembly-schedule-${pageIndex + 1}`;
+    return makeSheet(id, 'Stair & Guard Design Control Schedules', 'NTS · WRITTEN SCHEDULE GOVERNS', number, input, issue, `
+      <rect x="55" y="82" width="760" height="800" class="panel"/><text class="section" x="80" y="118">STAIR FLIGHT DESIGN CONTROL · ${pageIndex + 1}/${pageCount}</text>
+      <text class="tiny" x="80" y="137">ALL DIMENSIONS mm · PLAN GEOMETRY SCREEN ONLY · FIELD / STRUCTURAL / PRODUCT REVIEW REMAINS REQUIRED</text>
+      ${assemblyControlTable(stairs.length ? stairs : [['—', 'No stair flights in the current canonical design.']], 80, 152, 710, 45)}
+      <text class="tiny" x="80" y="860">${stairRows.length} TOTAL FLIGHT(S) · ROWS ${stairs.length ? pageIndex * ASSEMBLY_ROWS_PER_SHEET + 1 : 0}–${pageIndex * ASSEMBLY_ROWS_PER_SHEET + stairs.length} SHOWN</text>
+      <rect x="835" y="82" width="795" height="800" class="panel"/><text class="section" x="860" y="118">GUARD RUN DESIGN CONTROL · ${pageIndex + 1}/${pageCount}</text>
+      <text class="tiny" x="860" y="137">EACH ID IS LOCATED ON A2.0 / S2.0 · SYSTEM CAPACITY AND ATTACHMENT ARE NOT AUTOMATICALLY CERTIFIED</text>
+      ${assemblyControlTable(guards.length ? guards : [['—', 'No generated guard runs in the current canonical design.']], 860, 152, 745, 45)}
+      <text class="tiny" x="860" y="860">${guardRows.length} TOTAL GUARD RUN(S) · ROWS ${guards.length ? pageIndex * ASSEMBLY_ROWS_PER_SHEET + 1 : 0}–${pageIndex * ASSEMBLY_ROWS_PER_SHEET + guards.length} SHOWN</text>
+      <text class="title-warning" x="55" y="918">REVIEWER MUST RESOLVE EVERY LISTED FLIGHT AND GUARD RUN FOR THIS DESIGN FINGERPRINT BEFORE ACCEPTANCE</text>`);
+  });
+}
+
+function stairEndpointLabel(endpoint: DeckDesign['stairs'][number]['from'], design: DeckDesign): string {
+  if (endpoint.kind === 'terrain') return `GRADE EL.${endpoint.elevationMm}`;
+  const platform = design.platforms.find((candidate) => candidate.id === endpoint.platformId);
+  return `${platform?.name || endpoint.platformId} EL.${platform?.elevationMm ?? '—'}`;
+}
+
+function assemblyControlTable(rows: string[][], x: number, y: number, width: number, rowHeight: number): string {
+  const labelWidth = 90;
+  return rows.map((row, index) => {
+    const yy = y + index * rowHeight;
+    return `<rect x="${x}" y="${yy}" width="${width}" height="${rowHeight}" class="table-line"/><line x1="${x + labelWidth}" y1="${yy}" x2="${x + labelWidth}" y2="${yy + rowHeight}" class="thin"/><text class="label" x="${x + 8}" y="${yy + 25}">${esc(row[0])}</text>${wrapped(row[1] || '', x + labelWidth + 8, yy + 13, width - labelWidth - 16, 7.7, 10, 3)}`;
+  }).join('');
 }
 
 function calculationSheet(input: CanonicalPlanSetInput, issue: IssueMeta): PlanSheet {
