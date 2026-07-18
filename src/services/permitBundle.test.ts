@@ -67,13 +67,13 @@ describe('permit bundle boundary', () => {
       planset: [{ id: 'cover' }],
       application: { civicAddress: '12 Test St', ownerName: 'Owner', ownerAddress: '12 Test St', ownerCityProvince: 'Sidney, BC', ownerPostalCode: 'V8L 1A1', ownerPhone: '250', ownerEmail: 'owner@example.com', projectDescription: 'Deck', constructionValue: '1' },
     } as unknown as PermitBundleInput;
-    expect(() => validateBundleInput(input)).toThrow('Regenerate all nine canonical sheets');
+    expect(() => validateBundleInput(input)).toThrow('Regenerate all ten canonical sheets');
     input.manifest.designFingerprint = 'bad';
     expect(() => validateBundleInput(input)).toThrow('fingerprint is invalid');
   });
 
-  it('accepts a complete controlled nine-sheet issue boundary', () => {
-    const sheetIds = ['cover', 'site', 'deck-plan', 'foundations', 'framing', 'elevations', 'sections', 'details', 'calculations'] as const;
+  it('accepts a complete controlled ten-sheet issue boundary', () => {
+    const sheetIds = ['cover', 'existing-conditions', 'site', 'deck-plan', 'foundations', 'framing', 'elevations', 'sections', 'details', 'calculations'] as const;
     const generatedAt = '2026-07-18T12:00:00.000Z';
     const manifest = { issueId: 'ISSUE-01-DP-ABCDEF12', revision: 1, designFingerprint: 'DP-ABCDEF12', generatedAt, issuePurpose: 'professional-review', address: '12 Test St', pid: '001', sheetIds: [...sheetIds], status: 'professional-review' } as const;
     const input = {

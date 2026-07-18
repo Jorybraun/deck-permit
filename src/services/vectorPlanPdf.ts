@@ -97,6 +97,6 @@ export async function downloadVectorPlanPdf(property: Property, sheets: PlanShee
   anchor.click();
   anchor.remove();
   // Revoking in the same task can invalidate the blob before Chromium starts
-  // consuming it, especially for a large nine-sheet drawing set.
+  // consuming it, especially for a large multi-sheet drawing set.
   window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
 }

@@ -1,12 +1,12 @@
 import { createOrthographicProjection } from '../domain/architecturalViews';
 import type { DeckDesign, DeckPlatform, PointMm } from '../domain/deckDesign';
 import type { FramingDesign } from '../domain/framingDesign';
-import { projectPropertyToLocal, terrainElevationAt, type LocalPropertyGeometry, type SiteModel } from '../domain/siteModel';
+import { assessExistingConditionCapture, assessSiteModel, projectPropertyToLocal, terrainElevationAt, type LocalPropertyGeometry, type SiteModel } from '../domain/siteModel';
 import type { PlanSheet, Property } from '../types';
 import { renderOrthographicElevationSvg } from './orthographicElevationSvg';
 
 const CONTENT_BOTTOM = 970;
-export const CANONICAL_PLAN_SET_SCHEMA = 'permitly-canonical-plan-set/v3' as const;
+export const CANONICAL_PLAN_SET_SCHEMA = 'permitly-canonical-plan-set/v4' as const;
 
 interface CanonicalPlanSetInput {
   property: Property;
@@ -22,22 +22,40 @@ export interface CanonicalPlanSet {
   sheets: PlanSheet[];
 }
 
-/** Fingerprints both canonical structural input and the drawing contract that presents it. */
-export function canonicalPlanFingerprint(framing: FramingDesign): string {
-  return `DP-${fnv1a32(`${CANONICAL_PLAN_SET_SCHEMA}|${framing.inputFingerprint}`)}`;
+/** Fingerprints every controlled fact that can affect the coordinated review issue. */
+export function canonicalPlanFingerprint(input: CanonicalPlanSetInput): string {
+  const { generatedAt: _generatedAt, ...controlledFraming } = input.framing;
+  const { updatedAt: _updatedAt, ...controlledSite } = input.site;
+  const controlledIssue = {
+    schema: CANONICAL_PLAN_SET_SCHEMA,
+    property: {
+      address: input.property.address,
+      parcel: input.property.parcel,
+      buildings: input.property.buildings,
+      zoning: input.property.zoning,
+      buildableEnvelope: input.property.buildableEnvelope,
+      snowLoad: input.property.snowLoad,
+      evidence: input.property.evidence,
+    },
+    site: controlledSite,
+    design: input.design,
+    framing: controlledFraming,
+  };
+  return `DP-${fnv1a32(JSON.stringify(controlledIssue))}`;
 }
 
 interface IssueMeta { fingerprint: string; revision: number; issuedAt: string }
 
-/** Generates nine coordinated 11×17 review sheets from canonical v1 design/framing. */
+/** Generates ten coordinated 11×17 review sheets from one controlled project graph. */
 export function generateCanonicalPlanSet(input: CanonicalPlanSetInput): CanonicalPlanSet {
   const issue: IssueMeta = {
-    fingerprint: canonicalPlanFingerprint(input.framing),
+    fingerprint: canonicalPlanFingerprint(input),
     revision: input.revision || 1,
     issuedAt: input.issuedAt || new Date().toISOString(),
   };
   const sheets = [
     coverSheet(input, issue),
+    existingConditionsSheet(input, issue),
     siteSheet(input, issue),
     deckPlanSheet(input, issue),
     foundationSheet(input, issue),
@@ -65,7 +83,7 @@ function coverSheet(input: CanonicalPlanSetInput, issue: IssueMeta): PlanSheet {
     ['Issue', `Rev ${pad(issue.revision)} · ${issue.fingerprint}`],
   ];
   const indexRows = [
-    ['A0.0', 'Cover, project data, drawing index'], ['A1.0', 'Site and property relationship'], ['A2.0', 'Dimensioned deck and landing plan'],
+    ['A0.0', 'Cover, project data, drawing index'], ['C1.0', 'Evidence and existing conditions'], ['A1.0', 'Site and property relationship'], ['A2.0', 'Dimensioned deck and landing plan'],
     ['S1.0', 'Foundation and post plan'], ['S2.0', 'Framing plan and member schedule'], ['A3.0', 'Platform and stair elevations'],
     ['S3.0', 'Typical building sections'], ['A4.0', 'Stair, guard, footing, connection details'], ['S4.0', 'Design basis, checks, review gates'],
   ];
@@ -75,10 +93,42 @@ function coverSheet(input: CanonicalPlanSetInput, issue: IssueMeta): PlanSheet {
     <text class="subheading" x="70" y="128">${esc(property.address?.fullAddress || 'Address unconfirmed')}</text>
     ${notice(70, 160, 1560, 78, 'ISSUED FOR COORDINATED PROFESSIONAL REVIEW — NOT FOR CONSTRUCTION', 'Field geometry, structural capacity, footings, connections, guards, stairs, and municipal requirements remain subject to the review gates shown in this set.')}
     <text class="section" x="70" y="286">PROJECT DATA</text>${table(projectRows, 70, 310, 850, 48, 185)}
-    <text class="section" x="970" y="286">DRAWING INDEX</text>${table(indexRows, 970, 310, 660, 42, 100)}
+    <text class="section" x="970" y="286">DRAWING INDEX</text>${table(indexRows, 970, 310, 660, 32, 100)}
     <text class="section" x="970" y="648">REQUIRED REVIEW WORK PACKAGES</text>
     ${required.slice(0, 5).map((gate, index) => statusBox(970, 675 + index * 52, 660, gate.discipline.toUpperCase(), gate.title, 'review')).join('')}
     ${notice(70, 790, 850, 120, 'GENERAL NOTES', 'Do not scale drawings. Written dimensions govern. Verify property boundaries, house wall, openings, grade, utilities, and existing construction before issue. No construction may begin until the authority having jurisdiction issues a permit and required professional documents are accepted.')}`);
+}
+
+function existingConditionsSheet(input: CanonicalPlanSetInput, issue: IssueMeta): PlanSheet {
+  const { property, site } = input;
+  const capture = assessExistingConditionCapture(site.capture, { hasDoor: site.designWall.openings.some((opening) => opening.kind === 'door') });
+  const assessment = assessSiteModel(site);
+  const provenanceRows = [
+    ['House reference', `${site.referenceSource} · ${site.status}`],
+    ['Selected wall', `${site.designWall.label} · ${site.designWall.selectionStatus}`],
+    ['Wall / house depth', `${site.designWall.lengthMm} / ${site.houseDepthMm} mm`],
+    ['Wall orientation', `reverse ${site.designWall.reverseDirection ? 'yes' : 'no'} · outward inverted ${site.designWall.invertOutward ? 'yes' : 'no'}`],
+    ['Measured by / date', `${site.measuredBy || 'unrecorded'} · ${site.measuredAt || 'unrecorded'}`],
+    ['Project datum', `${site.terrain.datum.label} · EL. ${site.terrain.datum.elevationMm} · ${site.terrain.datum.source} · ${site.terrain.datum.verificationStatus}`],
+    ['Grade observations', `${site.terrain.gradePoints.length} point(s)`],
+    ['Photo coverage', `${capture.recordedRequiredCount}/${capture.requiredCount} required recorded · ${capture.confirmedRequiredCount}/${capture.requiredCount} confirmed`],
+  ];
+  const captureRows = capture.requirements.map((requirement) => [requirement.title, `${requirement.required ? 'required' : 'supplemental'} · ${requirement.status} · ${requirement.evidenceIds.join(', ') || 'no evidence id'}`]);
+  const evidenceNotes = [
+    ...property.evidence.map((source) => `${source.label} · ${source.authority} · ${source.status} · retrieved ${source.retrievedAt.slice(0, 10)}.`),
+    ...site.capture.evidence.map((record) => `${record.id} · ${record.category} · ${record.fileName} · SHA-256 ${record.sha256.slice(0, 16)}… · ${record.status}.`),
+  ];
+  const openConditions = [...assessment.errors.map((item) => `BLOCKED — ${item}`), ...assessment.warnings.map((item) => `VERIFY — ${item}`)];
+  const visibleEvidenceNotes = boundedNotes(evidenceNotes, 4, 'additional evidence record(s) are indexed in the review package.');
+  const visibleOpenConditions = boundedNotes(openConditions, 6, 'additional unresolved condition(s) remain in the project review gates.');
+  return makeSheet('existing-conditions', 'Evidence & Existing Conditions', 'MEASURED INPUTS · DO NOT SCALE', 'C1.0', input, issue, `
+    <text class="view-title" x="535" y="68" text-anchor="middle">EXISTING HOUSE WALL AND OPENING RECORD</text>
+    <rect x="55" y="82" width="960" height="385" class="panel"/>${existingWallRecordSvg(site, 85, 105, 900, 325)}
+    <rect x="1045" y="82" width="585" height="385" class="panel"/><text class="section" x="1075" y="118">MEASUREMENT / DATUM PROVENANCE</text>${table(provenanceRows, 1075, 142, 525, 36, 145)}
+    <rect x="55" y="495" width="760" height="387" class="panel"/><text class="section" x="85" y="532">CAPTURE COVERAGE</text>${table(captureRows, 85, 556, 700, 35, 180)}
+    <rect x="845" y="495" width="785" height="387" class="panel"/><text class="section" x="875" y="532">EXISTING-CONDITION EVIDENCE REGISTER</text>${noteList(visibleEvidenceNotes.length ? visibleEvidenceNotes : ['No municipal or homeowner evidence records are attached to this issue.'], 875, 558, 36, 720)}
+    <text class="section" x="875" y="700">UNRESOLVED CONDITIONS</text>${noteList(visibleOpenConditions.length ? visibleOpenConditions : ['No unresolved existing-condition items recorded.'], 875, 726, 28, 720)}
+    ${notice(55, 900, 1575, 52, 'EVIDENCE CONTROL', 'Photographs and municipal geometry corroborate visible conditions only. Legal boundaries, concealed construction, soil, utilities, and field dimensions remain governed by accepted survey, measurement, and professional evidence.')}`);
 }
 
 function siteSheet(input: CanonicalPlanSetInput, issue: IssueMeta): PlanSheet {
@@ -221,6 +271,23 @@ function titleBlock(number: string, title: string, scale: string, input: Canonic
 
 interface Tx { scale: number; x: (value: number) => number; y: (value: number) => number }
 function drawingTransform(points: PointMm[], frame: { x: number; y: number; width: number; height: number }): Tx { const source = points.length ? points : [[0, 0], [1000, 1000]]; const minX = Math.min(...source.map((point) => point[0])); const maxX = Math.max(...source.map((point) => point[0])); const minY = Math.min(...source.map((point) => point[1])); const maxY = Math.max(...source.map((point) => point[1])); const scale = Math.min(frame.width / Math.max(1000, maxX - minX), frame.height / Math.max(1000, maxY - minY)); const ox = frame.x + (frame.width - (maxX - minX) * scale) / 2 - minX * scale; const oy = frame.y + (frame.height - (maxY - minY) * scale) / 2 - minY * scale; return { scale, x: (value) => ox + value * scale, y: (value) => oy + value * scale }; }
+function existingWallRecordSvg(site: SiteModel, x: number, y: number, width: number, height: number): string {
+  const wall = site.designWall;
+  const scale = Math.min((width - 80) / Math.max(1, wall.lengthMm), (height - 85) / Math.max(1, wall.wallHeightMm));
+  const wallWidth = wall.lengthMm * scale;
+  const wallHeight = wall.wallHeightMm * scale;
+  const left = x + (width - wallWidth) / 2;
+  const gradeY = y + 35 + wallHeight;
+  const openings = wall.openings.map((opening) => {
+    const openingHeightMm = opening.kind === 'door' ? Math.min(2100, wall.wallHeightMm - opening.sillHeightMm) : Math.min(1200, wall.wallHeightMm - opening.sillHeightMm);
+    const openingX = left + opening.offsetMm * scale;
+    const openingWidth = opening.widthMm * scale;
+    const openingHeight = Math.max(8, openingHeightMm * scale);
+    const openingY = gradeY - (opening.sillHeightMm + openingHeightMm) * scale;
+    return `<rect x="${openingX}" y="${openingY}" width="${openingWidth}" height="${openingHeight}" class="evidence-opening"/><line x1="${openingX}" y1="${gradeY + 12}" x2="${openingX + openingWidth}" y2="${gradeY + 12}" class="dimension"/><line x1="${openingX}" y1="${gradeY + 6}" x2="${openingX}" y2="${gradeY + 18}" class="dimension"/><line x1="${openingX + openingWidth}" y1="${gradeY + 6}" x2="${openingX + openingWidth}" y2="${gradeY + 18}" class="dimension"/><text class="dimension-text" x="${openingX + openingWidth / 2}" y="${gradeY + 27}" text-anchor="middle">${esc(opening.id)} · ${opening.widthMm} W · SILL ${opening.sillHeightMm}</text>`;
+  }).join('');
+  return `<rect x="${left}" y="${gradeY - wallHeight}" width="${wallWidth}" height="${wallHeight}" class="evidence-wall"/>${openings}<line x1="${left}" y1="${gradeY + 48}" x2="${left + wallWidth}" y2="${gradeY + 48}" class="dimension"/><line x1="${left}" y1="${gradeY + 40}" x2="${left}" y2="${gradeY + 56}" class="dimension"/><line x1="${left + wallWidth}" y1="${gradeY + 40}" x2="${left + wallWidth}" y2="${gradeY + 56}" class="dimension"/><text class="dimension-text" x="${left + wallWidth / 2}" y="${gradeY + 64}" text-anchor="middle">SELECTED WALL · ${wall.lengthMm} mm</text>${dimV(gradeY - wallHeight, gradeY, left - 20, `${wall.wallHeightMm} mm`)}<text class="note" x="${left}" y="${gradeY - wallHeight - 14}">${esc(wall.label.toUpperCase())} · ${esc(wall.selectionStatus.toUpperCase())}</text><text class="tiny" x="${x + 10}" y="${y + height - 2}">OPENING WIDTH, OFFSET AND SILL ARE MODEL INPUTS. DRAWN OPENING HEIGHT IS DIAGRAMMATIC UNTIL FIELD RECORDED.</text>`;
+}
 function siteGeometrySvg(geometry: LocalPropertyGeometry, design: DeckDesign, site: SiteModel, tx: Tx): string { return `<polygon points="${pts(geometry.parcel, tx)}" class="parcel"/>${geometry.buildings.map((building) => `<polygon points="${pts(building.polygon, tx)}" class="${building.primary ? 'existing-primary' : 'existing'}"/>`).join('')}${design.platforms.map((platform) => `<polygon points="${pts(platform.boundary.vertices.map((vertex): PointMm => [vertex.xMm, vertex.yMm]), tx)}" class="deck-area"/>${edgeDimensions(platform, tx)}`).join('')}${site.terrain.gradePoints.map((point) => `<circle cx="${tx.x(point.xMm)}" cy="${tx.y(point.yMm)}" r="6" class="post"/><text class="tiny" x="${tx.x(point.xMm) + 9}" y="${tx.y(point.yMm) - 8}">${esc(point.id)} · EL. ${point.elevationMm}</text>`).join('')}<line x1="${tx.x(0)}" y1="${tx.y(0)}" x2="${tx.x(geometry.anchorLengthMm)}" y2="${tx.y(0)}" class="wall"/><text class="note" x="${tx.x(0)}" y="${tx.y(0) - 12}">SELECTED HOUSE WALL · ${geometry.anchorLengthMm} mm</text><text class="tiny" x="80" y="865">GREEN DASHED: MUNICIPAL PARCEL · GREY: MUNICIPAL BUILDING · OCHRE: PROPOSED DECK · DOTS: GRADE OBSERVATIONS</text>`; }
 function deckLayoutPlanSvg(design: DeckDesign, site: SiteModel, tx: Tx): string {
   const wall = `<line x1="${tx.x(0)}" y1="${tx.y(0)}" x2="${tx.x(site.designWall.lengthMm)}" y2="${tx.y(0)}" class="wall"/><text class="note" x="${tx.x(0)}" y="${tx.y(0) - 17}">EXISTING HOUSE / SELECTED WALL · ${site.designWall.lengthMm}</text>${site.designWall.openings.map((opening) => `<line x1="${tx.x(opening.offsetMm)}" y1="${tx.y(0)}" x2="${tx.x(opening.offsetMm + opening.widthMm)}" y2="${tx.y(0)}" class="opening"/><text class="tiny" x="${tx.x(opening.offsetMm + opening.widthMm / 2)}" y="${tx.y(0) - 8}" text-anchor="middle">${esc(opening.kind.toUpperCase())} ${opening.id} · ${opening.widthMm} · SILL EL. ${opening.sillHeightMm}</text>`).join('')}`;
@@ -272,8 +339,12 @@ function table(rows: string[][], x: number, y: number, width: number, rowHeight:
 function statusBox(x: number, y: number, width: number, label: string, title: string, status: 'pass' | 'review' | 'blocked' | 'engineering-required', detail = ''): string { const style = status === 'pass' ? 'status-pass' : status === 'review' ? 'status-review' : 'status-blocked'; return `<rect x="${x}" y="${y}" width="${width}" height="${detail ? 74 : 44}" rx="4" class="${style}"/><text class="tiny" x="${x + 12}" y="${y + 16}">${esc(label)}</text><text class="label" x="${x + 12}" y="${y + 34}">${esc(title)}</text>${detail ? wrapped(detail, x + 12, y + 51, width - 24, 8, 10, 2) : ''}`; }
 function notice(x: number, y: number, width: number, height: number, title: string, copy: string): string { return `<rect x="${x}" y="${y}" width="${width}" height="${height}" rx="4" class="notice"/><text class="notice-title" x="${x + 16}" y="${y + 25}">${esc(title)}</text>${wrapped(copy, x + 16, y + 46, width - 32, 10, 13, 4)}`; }
 function noteList(notes: string[], x: number, y: number, spacing: number, width: number): string { return notes.map((note, index) => `<text class="note" x="${x}" y="${y + index * spacing}">•</text>${wrapped(note, x + 18, y + index * spacing, width - 18, 10, 13, 3)}`).join(''); }
+function boundedNotes(notes: string[], maximumRows: number, overflowLabel: string): string[] {
+  if (notes.length <= maximumRows) return notes;
+  return [...notes.slice(0, Math.max(0, maximumRows - 1)), `${notes.length - maximumRows + 1} ${overflowLabel}`];
+}
 function wrapped(value: string, x: number, y: number, maxWidth: number, fontSize: number, lineHeight: number, maxLines: number): string { const maxChars = Math.max(16, Math.floor(maxWidth / (fontSize * .56))); const words = value.split(/\s+/); const lines: string[] = []; let line = ''; for (const word of words) { if (line && `${line} ${word}`.length > maxChars) { lines.push(line); line = word; } else line = line ? `${line} ${word}` : word; } if (line) lines.push(line); return `<text x="${x}" y="${y}" font-size="${fontSize}">${lines.slice(0, maxLines).map((item, index) => `<tspan x="${x}" dy="${index ? lineHeight : 0}">${esc(item)}</tspan>`).join('')}</text>`; }
-function styles(): string { return `<style>text{font-family:Arial,Helvetica,sans-serif;fill:#17231d}.sheet-border,.title-block,.panel{fill:#fff;stroke:#17231d;stroke-width:2}.thin{stroke:#68756e;stroke-width:1}.sheet-heading{font-size:36px;font-weight:700}.subheading{font-size:20px}.section,.view-title{font-size:16px;font-weight:700;letter-spacing:.5px}.note{font-size:11px}.small{font-size:11px}.tiny{font-size:8px}.label{font-size:10px;font-weight:700}.title-name{font-size:19px;font-weight:700}.title-drawing{font-size:13px;font-weight:700}.title-warning{font-size:10px;font-weight:700;fill:#a33b27}.sheet-no{font-size:29px;font-weight:700}.seal-box{fill:#f7f9f8;stroke:#68756e;stroke-dasharray:5 3}.seal-title{font-size:8px;font-weight:700}.seal-note{font-size:7px;fill:#56625c}.table-line{fill:#fff;stroke:#8c9891;stroke-width:1}.schedule-head{fill:#e8eee9;stroke:#68756e}.schedule-row{fill:#fff;stroke:#a2aca6}.schedule-label{font-size:6.5px;font-weight:700}.schedule-text{font-size:6.5px}.foundation-tag{font-size:8px;font-weight:700;paint-order:stroke;stroke:#fff;stroke-width:4}.notice{fill:#fff4da;stroke:#af6d00;stroke-width:1.5}.notice-title{font-size:12px;font-weight:700;fill:#7a4700}.status-pass{fill:#e8f5ed;stroke:#2c7652}.status-review{fill:#edf4ff;stroke:#476f9c}.status-blocked{fill:#ffe8e3;stroke:#b33e2b}.parcel{fill:#e6f4eb;stroke:#167252;stroke-width:4;stroke-dasharray:10 5}.existing-primary{fill:#d2dbd6;stroke:#263b31;stroke-width:3}.existing{fill:#e5eae7;stroke:#748078}.deck-area{fill:#dca66e;fill-opacity:.72;stroke:#7e4c22;stroke-width:3}.wall{stroke:#d35420;stroke-width:7}.opening{stroke:#16867d;stroke-width:13}.outline{fill:none;stroke:#17241d;stroke-width:4}.stair-flight{fill:#f0d4b8;stroke:#9b5e2d;stroke-width:3}.tread{stroke:#9b5e2d;stroke-width:2}.endpoint{fill:#fff;stroke:#9b5e2d;stroke-width:3}.member{stroke:#3d8a6c;stroke-width:2}.beam{stroke:#173f67;stroke-width:9}.support-grid{stroke:#173f67;stroke-width:5;stroke-dasharray:10 4;opacity:.72}.ledger{stroke:#d35420;stroke-width:7;stroke-dasharray:12 4}.post{fill:#173f67;stroke:#fff}.datum{fill:#fff;stroke:#175ec7;stroke-width:3}.footing{fill:none;stroke:#b27b1e;stroke-width:2;stroke-dasharray:5 3}.footing-fill{fill:#fff4da;stroke:#b27b1e;stroke-width:3}.guard{stroke:#754c9b;stroke-width:6;stroke-dasharray:5 4}.stringer{stroke:#9b5e2d;stroke-width:4;stroke-dasharray:7 3}.stair-header{stroke:#b43f2d;stroke-width:10}.stair-trimmer{stroke:#b43f2d;stroke-width:6;stroke-dasharray:4 2}.dim-bg{fill:#fff;stroke:#7a8b82}.dimension-text{font-size:8px;font-weight:700;fill:#175ec7}.dimension{stroke:#175ec7;stroke-width:1}.grade{stroke:#425149;stroke-width:2;stroke-dasharray:12 5}.deck-line{stroke:#17241d;stroke-width:8}.post-line{stroke:#6d4325;stroke-width:7}.rail{stroke:#17241d;stroke-width:4}.stair{stroke:#b56a15;stroke-width:4}.existing{fill:#d9dfdb;stroke:#5b6861}.ledger-fill{fill:#c97a59;stroke:#793a28}.flashing{stroke:#c2462d;stroke-width:4;fill:none}.decking{fill:#c79562;stroke:#5b3b21}.member-fill{fill:#d9b78f;stroke:#5b3b21}.beam-fill{fill:#bd8954;stroke:#5b3b21}.post-fill{fill:#9b6639;stroke:#5b3b21}.concrete{fill:#d5d8d6;stroke:#59645e}.callout{font-size:11px;font-weight:700;paint-order:stroke;stroke:#fff;stroke-width:5}.elevation-house{fill:#e1e6e3;stroke:#485750;stroke-width:2}.elevation-house-label{font-size:8px;font-weight:700;fill:#485750}.elevation-opening{fill:#a7d0cc;stroke:#2d625b;stroke-width:1.5}.elevation-grade{fill:none;stroke:#415149;stroke-width:2.5;stroke-dasharray:10 4}.grade-point{fill:#fff;stroke:#087553;stroke-width:2}.elevation-footing{fill:#d7dad8;stroke:#58645e;stroke-width:1.5}.elevation-post{stroke:#84542c;stroke-width:6}.elevation-decking{fill:#c88e51;stroke:#67401f;stroke-width:1.5}.elevation-joist{fill:#e2bc8e;stroke:#76512f;stroke-width:1.5}.elevation-beam{stroke:#34473d;stroke-width:7}.elevation-guard{fill:none;stroke:#17241d;stroke-width:3}.guard-cap{fill:#17241d}.elevation-stair{fill:none;stroke:#a95318;stroke-width:3}.stair-endpoint{fill:#fff;stroke:#a95318;stroke-width:2}.elevation-platform-label{font-size:9px;font-weight:700;fill:#174f3a;paint-order:stroke;stroke:#fff;stroke-width:3}.elevation-tag{font-size:7px;font-weight:700;fill:#7d4014;paint-order:stroke;stroke:#fff;stroke-width:3}.elevation-id{font-size:6.5px;fill:#445249;paint-order:stroke;stroke:#fff;stroke-width:2}.scale-bar{stroke:#17231d;stroke-width:3}</style>`; }
+function styles(): string { return `<style>text{font-family:Arial,Helvetica,sans-serif;fill:#17231d}.sheet-border,.title-block,.panel{fill:#fff;stroke:#17231d;stroke-width:2}.thin{stroke:#68756e;stroke-width:1}.sheet-heading{font-size:36px;font-weight:700}.subheading{font-size:20px}.section,.view-title{font-size:16px;font-weight:700;letter-spacing:.5px}.note{font-size:11px}.small{font-size:11px}.tiny{font-size:8px}.label{font-size:10px;font-weight:700}.title-name{font-size:19px;font-weight:700}.title-drawing{font-size:13px;font-weight:700}.title-warning{font-size:10px;font-weight:700;fill:#a33b27}.sheet-no{font-size:29px;font-weight:700}.seal-box{fill:#f7f9f8;stroke:#68756e;stroke-dasharray:5 3}.seal-title{font-size:8px;font-weight:700}.seal-note{font-size:7px;fill:#56625c}.table-line{fill:#fff;stroke:#8c9891;stroke-width:1}.schedule-head{fill:#e8eee9;stroke:#68756e}.schedule-row{fill:#fff;stroke:#a2aca6}.schedule-label{font-size:6.5px;font-weight:700}.schedule-text{font-size:6.5px}.foundation-tag{font-size:8px;font-weight:700;paint-order:stroke;stroke:#fff;stroke-width:4}.notice{fill:#fff4da;stroke:#af6d00;stroke-width:1.5}.notice-title{font-size:12px;font-weight:700;fill:#7a4700}.status-pass{fill:#e8f5ed;stroke:#2c7652}.status-review{fill:#edf4ff;stroke:#476f9c}.status-blocked{fill:#ffe8e3;stroke:#b33e2b}.parcel{fill:#e6f4eb;stroke:#167252;stroke-width:4;stroke-dasharray:10 5}.existing-primary{fill:#d2dbd6;stroke:#263b31;stroke-width:3}.existing{fill:#e5eae7;stroke:#748078}.evidence-wall{fill:#e1e6e3;stroke:#485750;stroke-width:3}.evidence-opening{fill:#a7d0cc;stroke:#2d625b;stroke-width:2}.deck-area{fill:#dca66e;fill-opacity:.72;stroke:#7e4c22;stroke-width:3}.wall{stroke:#d35420;stroke-width:7}.opening{stroke:#16867d;stroke-width:13}.outline{fill:none;stroke:#17241d;stroke-width:4}.stair-flight{fill:#f0d4b8;stroke:#9b5e2d;stroke-width:3}.tread{stroke:#9b5e2d;stroke-width:2}.endpoint{fill:#fff;stroke:#9b5e2d;stroke-width:3}.member{stroke:#3d8a6c;stroke-width:2}.beam{stroke:#173f67;stroke-width:9}.support-grid{stroke:#173f67;stroke-width:5;stroke-dasharray:10 4;opacity:.72}.ledger{stroke:#d35420;stroke-width:7;stroke-dasharray:12 4}.post{fill:#173f67;stroke:#fff}.datum{fill:#fff;stroke:#175ec7;stroke-width:3}.footing{fill:none;stroke:#b27b1e;stroke-width:2;stroke-dasharray:5 3}.footing-fill{fill:#fff4da;stroke:#b27b1e;stroke-width:3}.guard{stroke:#754c9b;stroke-width:6;stroke-dasharray:5 4}.stringer{stroke:#9b5e2d;stroke-width:4;stroke-dasharray:7 3}.stair-header{stroke:#b43f2d;stroke-width:10}.stair-trimmer{stroke:#b43f2d;stroke-width:6;stroke-dasharray:4 2}.dim-bg{fill:#fff;stroke:#7a8b82}.dimension-text{font-size:8px;font-weight:700;fill:#175ec7}.dimension{stroke:#175ec7;stroke-width:1}.grade{stroke:#425149;stroke-width:2;stroke-dasharray:12 5}.deck-line{stroke:#17241d;stroke-width:8}.post-line{stroke:#6d4325;stroke-width:7}.rail{stroke:#17241d;stroke-width:4}.stair{stroke:#b56a15;stroke-width:4}.existing{fill:#d9dfdb;stroke:#5b6861}.ledger-fill{fill:#c97a59;stroke:#793a28}.flashing{stroke:#c2462d;stroke-width:4;fill:none}.decking{fill:#c79562;stroke:#5b3b21}.member-fill{fill:#d9b78f;stroke:#5b3b21}.beam-fill{fill:#bd8954;stroke:#5b3b21}.post-fill{fill:#9b6639;stroke:#5b3b21}.concrete{fill:#d5d8d6;stroke:#59645e}.callout{font-size:11px;font-weight:700;paint-order:stroke;stroke:#fff;stroke-width:5}.elevation-house{fill:#e1e6e3;stroke:#485750;stroke-width:2}.elevation-house-label{font-size:8px;font-weight:700;fill:#485750}.elevation-opening{fill:#a7d0cc;stroke:#2d625b;stroke-width:1.5}.elevation-grade{fill:none;stroke:#415149;stroke-width:2.5;stroke-dasharray:10 4}.grade-point{fill:#fff;stroke:#087553;stroke-width:2}.elevation-footing{fill:#d7dad8;stroke:#58645e;stroke-width:1.5}.elevation-post{stroke:#84542c;stroke-width:6}.elevation-decking{fill:#c88e51;stroke:#67401f;stroke-width:1.5}.elevation-joist{fill:#e2bc8e;stroke:#76512f;stroke-width:1.5}.elevation-beam{stroke:#34473d;stroke-width:7}.elevation-guard{fill:none;stroke:#17241d;stroke-width:3}.guard-cap{fill:#17241d}.elevation-stair{fill:none;stroke:#a95318;stroke-width:3}.stair-endpoint{fill:#fff;stroke:#a95318;stroke-width:2}.elevation-platform-label{font-size:9px;font-weight:700;fill:#174f3a;paint-order:stroke;stroke:#fff;stroke-width:3}.elevation-tag{font-size:7px;font-weight:700;fill:#7d4014;paint-order:stroke;stroke:#fff;stroke-width:3}.elevation-id{font-size:6.5px;fill:#445249;paint-order:stroke;stroke:#fff;stroke-width:2}.scale-bar{stroke:#17231d;stroke-width:3}</style>`; }
 function line(first: PointMm, second: PointMm, tx: Tx, className: string): string { return `<line x1="${tx.x(first[0])}" y1="${tx.y(first[1])}" x2="${tx.x(second[0])}" y2="${tx.y(second[1])}" class="${className}"/>`; }
 function dimV(y1: number, y2: number, x: number, label: string): string { return `<line x1="${x}" y1="${y1}" x2="${x}" y2="${y2}" class="dimension"/><line x1="${x - 8}" y1="${y1}" x2="${x + 8}" y2="${y1}" class="dimension"/><line x1="${x - 8}" y1="${y2}" x2="${x + 8}" y2="${y2}" class="dimension"/><text class="dimension-text" x="${x - 10}" y="${(y1 + y2) / 2}" text-anchor="middle" transform="rotate(-90 ${x - 10} ${(y1 + y2) / 2})">${esc(label)}</text>`; }
 function pts(points: PointMm[], tx: Tx): string { return points.map((point) => `${tx.x(point[0])},${tx.y(point[1])}`).join(' '); }
