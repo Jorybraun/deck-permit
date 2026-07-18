@@ -44,7 +44,9 @@ describe('canonical ten-sheet review set', () => {
     expect(siteSheet).toContain('SITE / COVERAGE SCHEDULE');
     expect(siteSheet).toContain('REFERENCE SETBACK SCREEN');
     expect(siteSheet).toContain('FRONT · PL-1');
-    expect(siteSheet).toContain('GIS REF PL-');
+    expect(siteSheet).toContain('PL-1 · P1');
+    expect(siteSheet).toContain('site-stair');
+    expect(siteSheet).toContain('site-footing');
     expect(siteSheet).toContain('Municipal GIS is reference evidence, not a legal survey.');
     const existingSheet = planSet.sheets.find((sheet) => sheet.number === 'C1.0')?.svg || '';
     expect(existingSheet).toContain('EXISTING HOUSE WALL AND OPENING RECORD');

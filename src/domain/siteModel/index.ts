@@ -5,3 +5,4 @@ export * from './terrain';
 export * from './existingConditionCapture';
 export * from './siteClearance';
 export * from './siteCompliance';
+export * from './proposedSiteComponents';

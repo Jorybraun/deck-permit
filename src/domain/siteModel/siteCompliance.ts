@@ -1,28 +1,34 @@
 import type { DeckDesign, PointMm } from '../deckDesign';
+import type { FramingDesign } from '../framingDesign';
 import type { Property } from '../../types';
 import { calculateSiteClearances } from './siteClearance';
 import type { LocalPropertyGeometry } from './propertyGeometry';
+import { deriveProposedSiteComponents, type ProposedSiteComponentKind } from './proposedSiteComponents';
 import type { SiteModel } from './types';
 
-export const SITE_COMPLIANCE_SCHEMA = 'site-compliance/v1' as const;
+export const SITE_COMPLIANCE_SCHEMA = 'site-compliance/v2' as const;
 
 export interface ReferenceSetbackCheck {
   parcelEdgeIndex: number;
   yard: 'front' | 'rear' | 'interior-side' | 'exterior-side';
   requiredMm: number;
   referenceDistanceMm: number;
+  governingComponentId: string;
+  governingComponentKind: ProposedSiteComponentKind;
   status: 'reference-pass' | 'reference-fail';
 }
 
 export interface SiteComplianceAssessment {
   schema: typeof SITE_COMPLIANCE_SCHEMA;
   authority: 'municipal-gis-and-proposed-model-reference';
-  scope: 'platform-footprints-only';
+  scope: 'modeled-platform-stair-landing-and-footing-extents';
   setbackStatus: 'reference-pass' | 'reference-fail' | 'orientation-required' | 'unavailable';
   setbackChecks: ReferenceSetbackCheck[];
   coverage: {
     existingBuildingFootprintSqM: number | null;
     proposedPlatformFootprintSqM: number | null;
+    proposedStairAndLandingFootprintSqM: number | null;
+    proposedReferenceFootprintSqM: number | null;
     combinedReferenceFootprintSqM: number | null;
     lotAreaSqM: number | null;
     referenceCoveragePercent: number | null;
@@ -33,39 +39,44 @@ export interface SiteComplianceAssessment {
 }
 
 /** Produces a traceable zoning screen without claiming a planning interpretation. */
-export function assessSiteCompliance(property: Property, geometry: LocalPropertyGeometry | null, site: SiteModel, design: DeckDesign): SiteComplianceAssessment {
+export function assessSiteCompliance(property: Property, geometry: LocalPropertyGeometry | null, site: SiteModel, design: DeckDesign, framing?: FramingDesign | null): SiteComplianceAssessment {
   const zoning = property.zoning;
-  const clearance = calculateSiteClearances(geometry, design);
+  const clearance = calculateSiteClearances(geometry, design, framing);
+  const proposedComponents = deriveProposedSiteComponents(design, framing);
   const limitations = [
     'Municipal parcel and building polygons are GIS reference evidence, not a legal survey or foundation measurement.',
-    'Setback checks cover platform polygons only. Stairs, landings, guards, eaves, projections, easements, rights-of-way, and permitted encroachments require municipal interpretation.',
-    'Coverage uses the union of municipal building reference polygons and proposed platform polygons; the authority must confirm which deck components count as lot coverage.',
+    `Setback checks cover modeled platform, stair, grade-landing${framing ? ', and generated footing' : ''} polygons. Guards, eaves, projections, excavation, utilities, easements, rights-of-way, and permitted encroachments require municipal interpretation.`,
+    'Reference coverage includes the union of municipal building polygons plus modeled platforms, stair flights, and grade landings. Footing pads are setback-screened but excluded from that coverage sum; the authority must confirm what counts as lot coverage.',
   ];
-  const emptyCoverage: SiteComplianceAssessment['coverage'] = { existingBuildingFootprintSqM: null, proposedPlatformFootprintSqM: null, combinedReferenceFootprintSqM: null, lotAreaSqM: property.parcel?.areaSqm || null, referenceCoveragePercent: null, maximumCoveragePercent: zoning?.maxLotCoverage ?? null, status: 'unavailable' };
-  if (!geometry || !property.parcel) return { schema: SITE_COMPLIANCE_SCHEMA, authority: 'municipal-gis-and-proposed-model-reference', scope: 'platform-footprints-only', setbackStatus: 'unavailable', setbackChecks: [], coverage: emptyCoverage, limitations };
+  const emptyCoverage: SiteComplianceAssessment['coverage'] = { existingBuildingFootprintSqM: null, proposedPlatformFootprintSqM: null, proposedStairAndLandingFootprintSqM: null, proposedReferenceFootprintSqM: null, combinedReferenceFootprintSqM: null, lotAreaSqM: property.parcel?.areaSqm || null, referenceCoveragePercent: null, maximumCoveragePercent: zoning?.maxLotCoverage ?? null, status: 'unavailable' };
+  if (!geometry || !property.parcel) return { schema: SITE_COMPLIANCE_SCHEMA, authority: 'municipal-gis-and-proposed-model-reference', scope: 'modeled-platform-stair-landing-and-footing-extents', setbackStatus: 'unavailable', setbackChecks: [], coverage: emptyCoverage, limitations };
 
-  const platformPolygons = design.platforms.map((platform) => platform.boundary.vertices.map((vertex): PointMm => [vertex.xMm, vertex.yMm]));
+  const platformPolygons = proposedComponents.filter((component) => component.kind === 'platform').map((component) => component.polygon);
+  const stairAndLandingPolygons = proposedComponents.filter((component) => component.kind === 'stair-flight' || component.kind === 'grade-landing').map((component) => component.polygon);
+  const referenceCoveragePolygons = proposedComponents.filter((component) => component.countsTowardReferenceCoverage).map((component) => component.polygon);
   const buildingPolygons = geometry.buildings.map((building) => building.polygon);
   const existingBuildingFootprintSqM = round(polygonUnionAreaMm2(buildingPolygons) / 1_000_000, 2);
   const proposedPlatformFootprintSqM = round(polygonUnionAreaMm2(platformPolygons) / 1_000_000, 2);
-  const combinedReferenceFootprintSqM = round(polygonUnionAreaMm2([...buildingPolygons, ...platformPolygons]) / 1_000_000, 2);
+  const proposedStairAndLandingFootprintSqM = round(polygonUnionAreaMm2(stairAndLandingPolygons) / 1_000_000, 2);
+  const proposedReferenceFootprintSqM = round(polygonUnionAreaMm2(referenceCoveragePolygons) / 1_000_000, 2);
+  const combinedReferenceFootprintSqM = round(polygonUnionAreaMm2([...buildingPolygons, ...referenceCoveragePolygons]) / 1_000_000, 2);
   const lotAreaSqM = property.parcel.areaSqm || polygonUnionAreaMm2([geometry.parcel]) / 1_000_000;
   const referenceCoveragePercent = lotAreaSqM > 0 ? round(combinedReferenceFootprintSqM / lotAreaSqM * 100, 2) : null;
   const maximumCoveragePercent = zoning?.maxLotCoverage ?? null;
   const coverageStatus = referenceCoveragePercent === null ? 'unavailable' : maximumCoveragePercent === null ? 'interpretation-required' : referenceCoveragePercent > maximumCoveragePercent ? 'reference-exceeds-limit' : 'reference-within-limit';
-  const coverage = { existingBuildingFootprintSqM, proposedPlatformFootprintSqM, combinedReferenceFootprintSqM, lotAreaSqM: round(lotAreaSqM, 2), referenceCoveragePercent, maximumCoveragePercent, status: coverageStatus } satisfies SiteComplianceAssessment['coverage'];
+  const coverage = { existingBuildingFootprintSqM, proposedPlatformFootprintSqM, proposedStairAndLandingFootprintSqM, proposedReferenceFootprintSqM, combinedReferenceFootprintSqM, lotAreaSqM: round(lotAreaSqM, 2), referenceCoveragePercent, maximumCoveragePercent, status: coverageStatus } satisfies SiteComplianceAssessment['coverage'];
 
-  if (!zoning || clearance.status === 'unavailable') return { schema: SITE_COMPLIANCE_SCHEMA, authority: 'municipal-gis-and-proposed-model-reference', scope: 'platform-footprints-only', setbackStatus: 'unavailable', setbackChecks: [], coverage, limitations };
+  if (!zoning || clearance.status === 'unavailable') return { schema: SITE_COMPLIANCE_SCHEMA, authority: 'municipal-gis-and-proposed-model-reference', scope: 'modeled-platform-stair-landing-and-footing-extents', setbackStatus: 'unavailable', setbackChecks: [], coverage, limitations };
   const frontEdgeIndex = site.yardReference.frontEdgeIndex;
   const rearEdgeIndex = site.yardReference.rearEdgeIndex;
-  if (site.yardReference.status === 'unselected' || frontEdgeIndex === null || rearEdgeIndex === null || frontEdgeIndex === rearEdgeIndex || frontEdgeIndex >= clearance.dimensions.length || rearEdgeIndex >= clearance.dimensions.length) return { schema: SITE_COMPLIANCE_SCHEMA, authority: 'municipal-gis-and-proposed-model-reference', scope: 'platform-footprints-only', setbackStatus: 'orientation-required', setbackChecks: [], coverage, limitations };
+  if (site.yardReference.status === 'unselected' || frontEdgeIndex === null || rearEdgeIndex === null || frontEdgeIndex === rearEdgeIndex || frontEdgeIndex >= clearance.dimensions.length || rearEdgeIndex >= clearance.dimensions.length) return { schema: SITE_COMPLIANCE_SCHEMA, authority: 'municipal-gis-and-proposed-model-reference', scope: 'modeled-platform-stair-landing-and-footing-extents', setbackStatus: 'orientation-required', setbackChecks: [], coverage, limitations };
   const setbackChecks = clearance.dimensions.map((dimension): ReferenceSetbackCheck => {
     const yard = dimension.parcelEdgeIndex === frontEdgeIndex ? 'front' : dimension.parcelEdgeIndex === site.yardReference.exteriorSideEdgeIndex ? 'exterior-side' : dimension.parcelEdgeIndex === rearEdgeIndex ? 'rear' : 'interior-side';
     const requiredM = yard === 'front' ? zoning.setbacks.front : yard === 'rear' ? zoning.setbacks.rear : yard === 'exterior-side' ? zoning.setbacks.exteriorSide : zoning.setbacks.side;
     const requiredMm = Math.round(requiredM * 1000);
-    return { parcelEdgeIndex: dimension.parcelEdgeIndex, yard, requiredMm, referenceDistanceMm: dimension.distanceMm, status: dimension.distanceMm >= requiredMm ? 'reference-pass' : 'reference-fail' };
+    return { parcelEdgeIndex: dimension.parcelEdgeIndex, yard, requiredMm, referenceDistanceMm: dimension.distanceMm, governingComponentId: dimension.componentId, governingComponentKind: dimension.componentKind, status: dimension.distanceMm >= requiredMm ? 'reference-pass' : 'reference-fail' };
   });
-  return { schema: SITE_COMPLIANCE_SCHEMA, authority: 'municipal-gis-and-proposed-model-reference', scope: 'platform-footprints-only', setbackStatus: setbackChecks.every((check) => check.status === 'reference-pass') ? 'reference-pass' : 'reference-fail', setbackChecks, coverage, limitations };
+  return { schema: SITE_COMPLIANCE_SCHEMA, authority: 'municipal-gis-and-proposed-model-reference', scope: 'modeled-platform-stair-landing-and-footing-extents', setbackStatus: setbackChecks.every((check) => check.status === 'reference-pass') ? 'reference-pass' : 'reference-fail', setbackChecks, coverage, limitations };
 }
 
 /** Exact scanline union area for simple straight-edged polygons in model millimetres. */

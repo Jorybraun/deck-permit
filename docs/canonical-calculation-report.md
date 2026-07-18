@@ -7,6 +7,7 @@ The professional-review package includes a structured calculation report and a d
 The report records:
 
 - project issue control, code profile, loads, lumber basis, and assumed soil bearing;
+- governing GIS-reference clearance from every parcel edge to modeled platform, stair, grade-landing, and generated footing polygons, plus the named-yard setback and reference lot-coverage screen;
 - platform area, elevation, support strategy, joist axis, and governing design span;
 - grouped joist line load and simple-span demand equations (`M = wL²/8`, `V = wL/2`);
 - beam tributary width, line load, governing post bay, simple-span moment/shear demand, support count, and governing generated post reaction;

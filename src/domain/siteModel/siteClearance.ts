@@ -1,11 +1,14 @@
 import type { DeckDesign, PointMm } from '../deckDesign';
+import type { FramingDesign } from '../framingDesign';
 import type { LocalPropertyGeometry } from './propertyGeometry';
+import { deriveProposedSiteComponents, type ProposedSiteComponentKind } from './proposedSiteComponents';
 
-export const SITE_CLEARANCE_SCHEMA = 'site-clearance/v1' as const;
+export const SITE_CLEARANCE_SCHEMA = 'site-clearance/v2' as const;
 
 export interface SiteClearanceDimension {
   id: string;
-  platformId: string;
+  componentId: string;
+  componentKind: ProposedSiteComponentKind;
   parcelEdgeIndex: number;
   distanceMm: number;
   deckPointMm: PointMm;
@@ -18,30 +21,31 @@ export interface SiteClearanceAssessment {
   status: 'reference-only' | 'outside-or-crossing' | 'unavailable';
   dimensions: SiteClearanceDimension[];
   minimumDistanceMm: number | null;
-  allDeckVerticesInsideReferenceParcel: boolean | null;
+  allProposedWorkVerticesInsideReferenceParcel: boolean | null;
   limitation: string;
 }
 
 /** Derives written reference offsets without upgrading municipal GIS into a legal survey. */
-export function calculateSiteClearances(geometry: LocalPropertyGeometry | null, design: DeckDesign): SiteClearanceAssessment {
-  const limitation = 'Municipal parcel geometry is reference evidence only. Confirm property-line and footing offsets by accepted survey or field measurement before submission.';
-  if (!geometry || geometry.parcel.length < 3 || !design.platforms.length) return { schema: SITE_CLEARANCE_SCHEMA, authority: 'municipal-gis-reference', status: 'unavailable', dimensions: [], minimumDistanceMm: null, allDeckVerticesInsideReferenceParcel: null, limitation };
+export function calculateSiteClearances(geometry: LocalPropertyGeometry | null, design: DeckDesign, framing?: FramingDesign | null): SiteClearanceAssessment {
+  const limitation = 'Municipal parcel geometry is reference evidence only. Dimensions screen modeled platforms, stair flights, grade landings, and generated footing pads. Confirm every property-line and footing offset by accepted survey or field measurement before submission.';
+  const components = deriveProposedSiteComponents(design, framing);
+  if (!geometry || geometry.parcel.length < 3 || !components.length) return { schema: SITE_CLEARANCE_SCHEMA, authority: 'municipal-gis-reference', status: 'unavailable', dimensions: [], minimumDistanceMm: null, allProposedWorkVerticesInsideReferenceParcel: null, limitation };
   const parcel = openRing(geometry.parcel);
-  const allDeckVerticesInsideReferenceParcel = design.platforms.every((platform) => platform.boundary.vertices.every((vertex) => pointInPolygon([vertex.xMm, vertex.yMm], parcel)));
+  const allProposedWorkVerticesInsideReferenceParcel = components.every((component) => component.polygon.every((point) => pointInPolygon(point, parcel)));
   const candidates = parcel.map((start, parcelEdgeIndex) => {
     const end = parcel[(parcelEdgeIndex + 1) % parcel.length];
     let closest: SiteClearanceDimension | null = null;
-    design.platforms.forEach((platform) => platform.boundary.vertices.forEach((vertex, deckEdgeIndex, vertices) => {
-      const next = vertices[(deckEdgeIndex + 1) % vertices.length];
-      const pair = closestSegmentPair([vertex.xMm, vertex.yMm], [next.xMm, next.yMm], start, end);
-      if (!closest || pair.distanceMm < closest.distanceMm) closest = { id: `${platform.id}-PL${parcelEdgeIndex + 1}`, platformId: platform.id, parcelEdgeIndex, distanceMm: pair.distanceMm, deckPointMm: pair.first, propertyPointMm: pair.second };
+    components.forEach((component) => component.polygon.forEach((point, componentEdgeIndex, points) => {
+      const next = points[(componentEdgeIndex + 1) % points.length];
+      const pair = closestSegmentPair(point, next, start, end);
+      if (!closest || pair.distanceMm < closest.distanceMm) closest = { id: `${component.id}-PL${parcelEdgeIndex + 1}`, componentId: component.id, componentKind: component.kind, parcelEdgeIndex, distanceMm: pair.distanceMm, deckPointMm: pair.first, propertyPointMm: pair.second };
     }));
     return closest!;
   });
   const selected = [...candidates].sort((a, b) => a.parcelEdgeIndex - b.parcelEdgeIndex);
   const minimumDistanceMm = selected.length ? Math.min(...selected.map((item) => item.distanceMm)) : null;
-  const crosses = !allDeckVerticesInsideReferenceParcel || candidates.some((item) => item.distanceMm === 0);
-  return { schema: SITE_CLEARANCE_SCHEMA, authority: 'municipal-gis-reference', status: crosses ? 'outside-or-crossing' : 'reference-only', dimensions: selected, minimumDistanceMm, allDeckVerticesInsideReferenceParcel, limitation };
+  const crosses = !allProposedWorkVerticesInsideReferenceParcel || candidates.some((item) => item.distanceMm === 0);
+  return { schema: SITE_CLEARANCE_SCHEMA, authority: 'municipal-gis-reference', status: crosses ? 'outside-or-crossing' : 'reference-only', dimensions: selected, minimumDistanceMm, allProposedWorkVerticesInsideReferenceParcel, limitation };
 }
 
 function openRing(points: PointMm[]): PointMm[] {

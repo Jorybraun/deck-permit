@@ -111,8 +111,8 @@ interface CalculationReportInput {
 /** Builds a traceable demand booklet without claiming member or connector capacity. */
 export function buildCanonicalCalculationReport(input: CalculationReportInput): CanonicalCalculationReport {
   const { property, design, framing } = input;
-  const siteClearance = calculateSiteClearances(projectPropertyToLocal(property, input.site), design);
-  const siteCompliance = assessSiteCompliance(property, projectPropertyToLocal(property, input.site), input.site, design);
+  const siteClearance = calculateSiteClearances(projectPropertyToLocal(property, input.site), design, framing);
+  const siteCompliance = assessSiteCompliance(property, projectPropertyToLocal(property, input.site), input.site, design, framing);
   const q = framing.assumptions.governingAreaLoadKpa;
   const joistGroups = groupJoists(framing).map((group) => {
     const spanM = group.governingSpanMm / 1000;
@@ -237,12 +237,13 @@ export async function buildCanonicalCalculationPdf(report: CanonicalCalculationR
   keyValue('Authority', report.siteClearance.authority.replace(/-/g, ' '));
   keyValue('Reference status', report.siteClearance.status.replace(/-/g, ' '));
   keyValue('Closest written offset', report.siteClearance.minimumDistanceMm === null ? 'unavailable' : `${(report.siteClearance.minimumDistanceMm / 1000).toFixed(2)} m`);
-  report.siteClearance.dimensions.forEach((dimension) => keyValue(`PL-${dimension.parcelEdgeIndex + 1} / ${dimension.platformId}`, `${(dimension.distanceMm / 1000).toFixed(2)} m municipal GIS reference`));
+  report.siteClearance.dimensions.forEach((dimension) => keyValue(`PL-${dimension.parcelEdgeIndex + 1} / ${dimension.componentId}`, `${dimension.componentKind.replace(/-/g, ' ')} / ${(dimension.distanceMm / 1000).toFixed(2)} m municipal GIS reference`));
   paragraph(report.siteClearance.limitation, 8.5);
   heading('Zoning and coverage screen', 12);
   keyValue('Setback screen', report.siteCompliance.setbackStatus.replace(/-/g, ' '));
-  report.siteCompliance.setbackChecks.forEach((check) => keyValue(`${check.yard.replace(/-/g, ' ')} / PL-${check.parcelEdgeIndex + 1}`, `${(check.referenceDistanceMm / 1000).toFixed(2)} m reference / ${(check.requiredMm / 1000).toFixed(2)} m required / ${check.status.replace(/-/g, ' ')}`));
+  report.siteCompliance.setbackChecks.forEach((check) => keyValue(`${check.yard.replace(/-/g, ' ')} / PL-${check.parcelEdgeIndex + 1}`, `${check.governingComponentId} ${check.governingComponentKind.replace(/-/g, ' ')} / ${(check.referenceDistanceMm / 1000).toFixed(2)} m reference / ${(check.requiredMm / 1000).toFixed(2)} m required / ${check.status.replace(/-/g, ' ')}`));
   keyValue('Reference lot coverage', report.siteCompliance.coverage.referenceCoveragePercent === null ? 'unavailable' : `${report.siteCompliance.coverage.referenceCoveragePercent.toFixed(2)}% / ${report.siteCompliance.coverage.maximumCoveragePercent?.toFixed(2) || 'unconfirmed'}% maximum`);
+  keyValue('Proposed modeled footprint', report.siteCompliance.coverage.proposedReferenceFootprintSqM === null ? 'unavailable' : `${report.siteCompliance.coverage.proposedReferenceFootprintSqM.toFixed(2)} m2 total / ${report.siteCompliance.coverage.proposedPlatformFootprintSqM?.toFixed(2) || '0.00'} m2 platforms / ${report.siteCompliance.coverage.proposedStairAndLandingFootprintSqM?.toFixed(2) || '0.00'} m2 stair and landing polygons`);
   keyValue('Coverage footprint', report.siteCompliance.coverage.combinedReferenceFootprintSqM === null ? 'unavailable' : `${report.siteCompliance.coverage.combinedReferenceFootprintSqM.toFixed(2)} m2 combined reference footprint`);
   report.siteCompliance.limitations.forEach((item) => paragraph(`- ${item}`, 8, 10));
 
