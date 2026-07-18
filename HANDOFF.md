@@ -134,7 +134,7 @@ Implemented:
 - Design undo/redo history.
 - New local persistence schema `homeowner-project/v1`.
 
-`src/App.tsx` and normal-project startup in `src/main.tsx` now use this store and `homeowner-project/v1` persistence. `src/state/store.ts` and `src/services/projectPersistence.ts` remain only as legacy migration residue used by old, currently unreachable modules.
+`src/App.tsx` and normal-project startup in `src/main.tsx` use this store and `homeowner-project/v1` persistence. The old monolithic store, parallel persistence layer, wizard, 3D-first editor, agent chat, and obsolete permit-bundle path were removed after the canonical journey passed full automated and browser verification.
 
 ## 7. New plan editor implemented and integrated
 
@@ -178,32 +178,9 @@ The product architecture is hybrid: deterministic CAD/rule/calculation code owns
 
 ## 8. Runtime truth at handoff
 
-The application currently contains two parallel worlds:
+The browser has one homeowner runtime: canonical site, platform/stair, framing, review, and permit-package state owned by `homeownerProjectStore`. `main.tsx` also exposes the intentionally separate tokenized `ReviewerPortal`, which consumes immutable canonical review issues. Retired wizard, 3D-first design, AI chat, monolithic store, old server, and duplicate permit-generation modules are no longer shipped.
 
-### New reset code
-
-- Canonical platform/stair design graph.
-- Site/house reference model.
-- Homeowner project store/persistence.
-- Plan-first deck editor.
-
-### Legacy code still present but not active in the homeowner application
-
-- `src/main.tsx` still imports `ReviewerPortal` for tokenized review links; that route must be deliberately migrated or isolated before deleting its dependencies.
-- `src/state/store.ts` — old monolithic `Deck` state.
-- `src/types/index.ts` — old shape/placement/layout types mixed with reusable property/permit types.
-- `src/components/DeckModel3D.tsx` and old 3D-first design surfaces.
-- `src/components/FootprintSketchEditor.tsx`.
-- `src/components/SitePlacementPanel.tsx`.
-- `src/components/DesignControls.tsx`.
-- `src/components/ModelProperties.tsx`.
-- `src/components/FramingLayoutPanel.tsx`.
-- `src/components/steps/*` old wizard steps.
-- Legacy sizing/layout/placement services and tests.
-
-Do not delete shared permit/property/review services blindly. First move them to inputs derived from the new domain, then delete only obsolete design/wizard code.
-
-There is no useful Git status baseline in this workspace; it may not be a Git repository. Treat every existing file as user work and use narrow patches.
+Some reusable property and review contracts still live in `src/types/index.ts`; migrate them by bounded domain ownership rather than removing shared contracts blindly.
 
 ## 9. Verification baseline
 
@@ -316,28 +293,17 @@ Every drawing dimension and schedule should be generated from the canonical grap
 5. Present why each builder is suggested and distinguish verified facts from self-reported claims.
 6. Do not fabricate live builder availability or endorsements when no provider is integrated.
 
-## 11. Legacy deletion plan
+## 11. Legacy deletion status
 
-Delete obsolete code only after its replacement path is active and verified.
+Completed after the replacement journey was active and verified:
 
-Likely deletion candidates after the new shell works:
+- removed old shape/placement/layout UI, wizard steps, 3D-first editor, and AI chat;
+- removed the monolithic deck store and its parallel persistence layer;
+- removed old shape presets, placement/layout engines, canvas renderers, and duplicate compliance/plan/bundle services;
+- removed tests that asserted only retired behaviour;
+- removed unused Three.js, React Three Fiber, Drei, and OpenAI client dependencies.
 
-- old shape/placement/layout UI and step components
-- `DeckModel3D.tsx` if no longer used; otherwise move it to an optional preview boundary
-- old deck shape presets as durable state
-- old site placement calculations
-- old rectangle/L-shape/wrap deck layout services
-- old monolithic deck store fields/actions
-- tests that only assert removed legacy behaviour
-- unused Three.js dependencies after confirming no optional preview remains
-
-Potentially reusable and requiring migration rather than deletion:
-
-- property lookup/provider registry
-- zoning/research/evidence services
-- existing conditions verification
-- CWC span table data
-- compliance and structural review concepts
+The property provider registry, canonical existing-condition capture, zoning evidence, review exchange, drawing/calculation exporters, and professional-resolution contracts remain active.
 - PDF/plan-set generation infrastructure
 - permit bundle/application/submission services
 - professional redline/review exchange services

@@ -2,7 +2,7 @@
 
 ## Responsibility
 
-`src/services/canonicalPermitBundle.ts` assembles one revision-bound Town of Sidney deck-permit ZIP directly from the active canonical review issue. It does not create design decisions, validate professional standing, sign an application, upload files, or submit to the municipality. `src/services/permitBundle.ts` remains only for migration compatibility with the retired project shape.
+`src/services/canonicalPermitBundle.ts` assembles one revision-bound Town of Sidney deck-permit ZIP directly from the active canonical review issue. It does not create design decisions, validate professional standing, sign an application, upload files, or submit to the municipality. The retired parallel bundle service has been deleted.
 
 ## Public API and version
 
