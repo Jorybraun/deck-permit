@@ -8,8 +8,8 @@ import { assessVerificationEvidence } from './verificationEvidence';
 import { sha256Blob, sha256Bytes } from './fileDigest';
 import { buildReviewResponseLog } from './reviewRedlines';
 
-export const PERMIT_BUNDLE_SCHEMA = 'deck-permit-bundle/v1' as const;
-const REQUIRED_SHEET_IDS: PlanSheet['id'][] = ['cover', 'site', 'framing', 'elevations', 'sections', 'details', 'calculations'];
+export const PERMIT_BUNDLE_SCHEMA = 'deck-permit-bundle/v2' as const;
+export const REQUIRED_PERMIT_SHEET_IDS: PlanSheet['id'][] = ['cover', 'site', 'deck-plan', 'foundations', 'framing', 'elevations', 'sections', 'details', 'calculations'];
 
 export interface PermitBundleInput {
   property: Property;
@@ -102,11 +102,11 @@ export function validateBundleInput(input: PermitBundleInput): void {
     throw new Error('The project address or parcel no longer matches the drawing manifest. Regenerate the drawing package.');
   }
   const sheetIds = input.planset.map((sheet) => sheet.id);
-  if (sheetIds.length !== REQUIRED_SHEET_IDS.length || sheetIds.some((id, index) => id !== REQUIRED_SHEET_IDS[index]) || input.manifest.sheetIds.join('|') !== sheetIds.join('|')) {
-    throw new Error('The drawing set is incomplete or no longer matches the manifest. Regenerate all seven sheets.');
+  if (sheetIds.length !== REQUIRED_PERMIT_SHEET_IDS.length || sheetIds.some((id, index) => id !== REQUIRED_PERMIT_SHEET_IDS[index]) || input.manifest.sheetIds.join('|') !== sheetIds.join('|')) {
+    throw new Error('The drawing set is incomplete or no longer matches the manifest. Regenerate all nine canonical sheets.');
   }
   if (input.planset.some((sheet) => sheet.revision !== input.manifest.revision || sheet.designFingerprint !== input.manifest.designFingerprint || sheet.issuedAt !== input.manifest.generatedAt)) {
-    throw new Error('One or more drawing sheets do not match the controlled issue manifest. Regenerate all seven sheets.');
+    throw new Error('One or more drawing sheets do not match the controlled issue manifest. Regenerate all nine canonical sheets.');
   }
   const currentIssue = input.drawingIssueHistory?.find((issue) => issue.id === input.manifest.issueId);
   if (!currentIssue || currentIssue.designFingerprint !== input.manifest.designFingerprint || currentIssue.revision !== input.manifest.revision || currentIssue.sheetIds.join('|') !== sheetIds.join('|')) {
@@ -159,7 +159,7 @@ export function buildBundleReadme(input: PermitBundleInput): string {
     '',
     'CONTENTS',
     '01-application/ — official Sidney prefill plus any signed application evidence',
-    '02-drawings/ — coordinated seven-sheet 11×17 vector PDF',
+    '02-drawings/ — coordinated nine-sheet 11×17 vector PDF (PDF paths and searchable text; no sheet rasterization)',
     '03-professional-and-site-evidence/ — locally stored survey, field, engineering, and municipal PDFs',
     '04-records/ — submission manifest, drawing issue register, design-basis report, and professional redline response log',
     '05-rejected-or-stale-evidence/ — evidence retained for audit but not valid for the current submission state',

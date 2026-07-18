@@ -64,7 +64,11 @@ export function App() {
 
   const downloadReviewSet = async () => {
     try { await downloadVectorPlanPdf(project.property, currentReviewSheets()); }
-    catch (reason) { project.setError(reason instanceof Error ? reason.message : 'The review PDF could not be downloaded.'); }
+    catch (reason) {
+      const error = reason instanceof Error ? reason : new Error('The review PDF could not be downloaded.');
+      project.setError(error.message);
+      throw error;
+    }
   };
 
   const researchProperty = async (addressText: string, candidate?: Address) => {

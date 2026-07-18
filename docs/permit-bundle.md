@@ -6,7 +6,7 @@
 
 ## Public API and version
 
-- Schema: `deck-permit-bundle/v1`
+- Schema: `deck-permit-bundle/v2`
 - `buildPermitBundle(input) -> PermitBundleArtifact`
 - `downloadPermitBundle(input) -> PermitBundleArtifact`
 - Boundary helpers: `collectEvidenceEntries`, `validateBundleInput`, `validateBundleArchive`, and `buildBundleReadme`
@@ -23,14 +23,14 @@ Dependency direction is UI → permit bundle → artifact services/evidence read
 
 - `README-FIRST.txt`: readiness, revision, limitations, outstanding gates, and submission contact.
 - `01-application/`: unsigned official prefill and current signed/checklist evidence when recorded.
-- `02-drawings/`: coordinated seven-sheet 11×17 vector PDF.
+- `02-drawings/`: coordinated nine-sheet 11×17 vector PDF. Canonical SVG paths and text are written directly as PDF vector/text operators rather than flattened into page images.
 - `03-professional-and-site-evidence/`: evidence accepted by the app for the current project state.
 - `04-records/`: submission manifest, structural design-basis report, professional redline response log, and a SHA-256 package index covering every other file.
 - `05-rejected-or-stale-evidence/`: retained audit records that do not satisfy the current revision.
 
 ## Failure and recovery
 
-Assembly fails closed when the address, PID, seven sheets, or design fingerprint no longer match the manifest; required application fields are incomplete; the official form or drawing conversion fails; evidence bytes are missing; evidence metadata, MIME type, byte count, filename, or SHA-256 digest does not match; or the generated ZIP does not contain the exact expected non-empty paths and bytes. The UI preserves the project and provides a retryable error. Recovery is to regenerate stale drawings, complete the form, reattach evidence, or retry the official form download.
+Assembly fails closed when the address, PID, nine canonical sheets, or design fingerprint no longer match the manifest; required application fields are incomplete; the official form or drawing conversion fails; evidence bytes are missing; evidence metadata, MIME type, byte count, filename, or SHA-256 digest does not match; or the generated ZIP does not contain the exact expected non-empty paths and bytes. The UI preserves the project and provides a retryable error. Recovery is to regenerate stale drawings, complete the form, reattach evidence, or retry the official form download.
 
 ## Security and privacy
 
@@ -39,6 +39,6 @@ ZIP generation occurs in the browser. It does not upload owner PII, plans, or ev
 ## Verification
 
 - Unit: safe names, missing/tampered evidence, rejected-evidence isolation, exact ZIP paths, empty-entry rejection, and readiness disclosures.
-- Integration: official PDF fill and seven-page vector drawing tests.
+- Integration: official PDF fill and nine-page vector drawing tests, including fixed 17×11 media boxes and an image-XObject regression guard.
 - Journey: complete application fields on Submit, assemble the appropriate package kind, observe a validated file count, and confirm reload persistence.
 - Release: TypeScript, Vitest, Vite production build, and production dependency audit.
