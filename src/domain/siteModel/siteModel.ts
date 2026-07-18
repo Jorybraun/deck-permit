@@ -2,13 +2,14 @@ import type { Property } from '../../types';
 import { deriveHouseReference } from '../../services/existingConditions';
 import type { SiteAssessment, SiteModel } from './types';
 import { createTerrainSurface } from './terrain';
+import { assessExistingConditionCapture, createExistingConditionCapture } from './existingConditionCapture';
 
 /** Owns the editable house/terrain reference used by deck construction coordinates. */
 export function createSiteModel(property: Property, now = new Date()): SiteModel {
   const reference = deriveHouseReference(property);
   const lengthMm = Math.round(reference.widthM * 1000);
   return {
-    schema: 'site-model/v2',
+    schema: 'site-model/v3',
     units: 'mm',
     status: 'reference-unverified',
     referenceSource: reference.source,
@@ -28,6 +29,7 @@ export function createSiteModel(property: Property, now = new Date()): SiteModel
       openings: [],
     },
     terrain: createTerrainSurface(),
+    capture: createExistingConditionCapture(),
     measuredBy: '',
     measuredAt: now.toISOString().slice(0, 10),
     notes: '',
@@ -62,6 +64,9 @@ export function assessSiteModel(site: SiteModel): SiteAssessment {
   if (site.designWall.flashingFeasible === 'unknown') warnings.push('Continuous ledger flashing feasibility is unconfirmed.');
   if (!site.terrain.gradePoints.length) warnings.push('No grade observations are recorded; stairs, post heights, guards, and footing elevations use an assumed project datum.');
   else if (site.terrain.gradePoints.some((point) => point.verificationStatus === 'reference')) warnings.push('At least one grade point is reference-only and must be field-verified.');
+  const capture = assessExistingConditionCapture(site.capture, { hasDoor: site.designWall.openings.some((opening) => opening.kind === 'door') });
+  if (!capture.readyForAiDraft) warnings.push(`Existing-condition photo set is incomplete: ${capture.recordedRequiredCount} of ${capture.requiredCount} required views recorded.`);
+  else if (!capture.readyForProfessionalReview) warnings.push('Required existing-condition photos are recorded but have not all been confirmed by the homeowner.');
   return { errors, warnings };
 }
 

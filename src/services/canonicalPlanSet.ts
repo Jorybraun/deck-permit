@@ -51,7 +51,7 @@ function coverSheet(input: CanonicalPlanSetInput, issue: IssueMeta): PlanSheet {
     ['Deck design', `${design.platforms.length} platform(s) · ${totalArea.toFixed(1)} m² · ${design.stairs.length} stair(s)`],
     ['Code profile', `${framing.codeProfile.label} · effective ${framing.codeProfile.effectiveDate}`],
     ['Design loads', `${framing.assumptions.deadLoadKpa.toFixed(2)} kPa dead + max(${framing.assumptions.liveLoadKpa.toFixed(2)} live, ${framing.assumptions.snowLoadKpa.toFixed(2)} snow)`],
-    ['Existing wall', `${site.designWall.label} · ${site.designWall.lengthMm} mm · ${site.designWall.selectionStatus}`],
+    ['Existing wall', `${site.designWall.label} · ${site.designWall.lengthMm} mm · ${site.designWall.selectionStatus} · ${site.capture.evidence.length} capture file(s)`],
     ['Issue', `Rev ${pad(issue.revision)} · ${issue.fingerprint}`],
   ];
   const indexRows = [
@@ -86,7 +86,7 @@ function siteSheet(input: CanonicalPlanSetInput, issue: IssueMeta): PlanSheet {
     <text class="view-title" x="625" y="68" text-anchor="middle">SITE AND DECK LOCATION PLAN</text>
     <rect x="55" y="78" width="1140" height="810" class="panel"/>${siteDrawing}
     <rect x="1230" y="78" width="400" height="810" class="panel"/><text class="section" x="1260" y="118">SITE / ZONING SCHEDULE</text>${table(rows, 1260, 142, 340, 46, 145)}
-    <text class="section" x="1260" y="600">EVIDENCE BASIS</text>${noteList(input.property.evidence.slice(0, 5).map((source) => `${source.label}: ${source.status}; retrieved ${source.retrievedAt.slice(0, 10)}.`), 1260, 628, 50, 330)}
+    <text class="section" x="1260" y="600">EVIDENCE BASIS</text>${noteList([...input.property.evidence.slice(0, 3).map((source) => `${source.label}: ${source.status}; retrieved ${source.retrievedAt.slice(0, 10)}.`), ...input.site.capture.evidence.slice(0, 3).map((record) => `${record.category}: ${record.fileName}; SHA ${record.sha256.slice(0, 10)}…; ${record.status}.`)], 1260, 628, 42, 330)}
     ${notice(1230, 825, 400, 64, 'SURVEY / SETBACK GATE', 'Municipal GIS is reference evidence, not a legal survey. Confirm deck and footing offsets before permit submission.')}`);
 }
 

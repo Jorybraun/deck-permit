@@ -29,4 +29,13 @@ describe('ProjectRepository', () => {
     expect(await repository.listEvidenceFileIds()).toEqual(['keep']);
     expect(await repository.getEvidenceFile('remove')).toBeNull();
   });
+
+  it('keeps private house captures in a separate object store', async () => {
+    const repository = new ProjectRepository(indexedDB, 'deck-permit-test-captures');
+    const image = new Blob(['photo'], { type: 'image/jpeg' });
+    await repository.putCaptureFile('capture-1', image, 'wall.jpg');
+    expect(await repository.getCaptureFile('capture-1')).toMatchObject({ id: 'capture-1', fileName: 'wall.jpg', mimeType: 'image/jpeg', byteSize: 5 });
+    await repository.deleteCaptureFile('capture-1');
+    expect(await repository.getCaptureFile('capture-1')).toBeNull();
+  });
 });

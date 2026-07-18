@@ -1,8 +1,8 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Check, FileCheck2, FileText, Hammer, Home, Lightbulb, MapPin, Menu, PencilRuler, Save, X } from 'lucide-react';
 import { assessDesign } from './domain/deckDesign';
 import { generateFramingDesign, isFramingStale, type GenerateFramingInput } from './domain/framingDesign';
-import { addTerrainGradePoint, assessSiteModel, createSiteModel, flipHouseWallDirection, removeTerrainGradePoint, rotateHouseWallAlignment, selectHouseWall, updateSiteModel, updateTerrainGradePoint } from './domain/siteModel';
+import { addCaptureEvidence, addTerrainGradePoint, assessExistingConditionCapture, assessSiteModel, createExistingConditionCapture, createSiteModel, flipHouseWallDirection, removeCaptureEvidence, removeTerrainGradePoint, rotateHouseWallAlignment, selectHouseWall, updateCaptureEvidence, updateSiteModel, updateTerrainGradePoint, type CaptureCategory, type CaptureEvidence } from './domain/siteModel';
 import { lookupProperty, lookupPropertyFromAddress, PropertyLookupError, suggestAddresses } from './services/propertyLookup';
 import { computeBuildableEnvelope, lookupSnowLoad, lookupZoning } from './services/zoning';
 import { generateCanonicalPlanSet } from './services/canonicalPlanSet';
@@ -14,6 +14,7 @@ import { DesignStage } from './components/homeowner/DesignStage';
 import { PermitStage } from './components/homeowner/PermitStage';
 import { BuildersStage } from './components/homeowner/BuildersStage';
 import type { Address } from './types';
+import { captureEvidenceFromFile, deleteCaptureFile, loadCaptureFile, saveCaptureFile } from './services/captureFileStorage';
 
 const STAGES: Array<{ id: ProjectStage; label: string; description: string; icon: ReactNode }> = [
   { id: 'idea', label: 'Idea', description: 'Goals & inspiration', icon: <Lightbulb size={15} /> },
@@ -28,11 +29,27 @@ export function App() {
   const project = useHomeownerProject();
   const [navOpen, setNavOpen] = useState(false);
   const [research, setResearch] = useState<PropertyResearchState>(() => project.property.parcel ? { status: 'success' } : { status: 'idle' });
+  const [capturePreviewUrls, setCapturePreviewUrls] = useState<Record<string, string>>({});
   const designAssessment = assessDesign(project.design);
   const siteAssessment = project.site ? assessSiteModel(project.site) : { errors: ['Confirm the existing house reference.'], warnings: [] };
   const activeStage = normalizeStage(project.stage, Boolean(project.site), project.design.platforms.length > 0);
   const framingInput: GenerateFramingInput = { municipality: project.property.parcel?.municipality || project.property.address?.locality || 'British Columbia', snowLoadKpa: project.property.snowLoad };
   const framingStale = project.site ? isFramingStale(project.framing, project.design, project.site, framingInput) : true;
+  const captureAssessment = assessExistingConditionCapture(project.site?.capture || createExistingConditionCapture(), { hasDoor: Boolean(project.site?.designWall.openings.some((opening) => opening.kind === 'door')) });
+
+  useEffect(() => {
+    const records = project.site?.capture.evidence || [];
+    let active = true;
+    const allocatedUrls: string[] = [];
+    void Promise.all(records.map(async (record) => {
+      const stored = await loadCaptureFile(record.id);
+      if (!stored) return null;
+      const url = URL.createObjectURL(stored.blob);
+      allocatedUrls.push(url);
+      return [record.id, url] as const;
+    })).then((entries) => { if (active) setCapturePreviewUrls(Object.fromEntries(entries.filter((entry): entry is readonly [string, string] => Boolean(entry)))); }).catch(() => { if (active) setCapturePreviewUrls({}); });
+    return () => { active = false; allocatedUrls.forEach((url) => URL.revokeObjectURL(url)); };
+  }, [project.site?.capture.evidence]);
 
   const generateFraming = () => {
     if (!project.site) return;
@@ -75,6 +92,35 @@ export function App() {
     }
   };
 
+  const addCaptureFiles = async (category: CaptureCategory, files: File[]) => {
+    const admitted: Array<{ record: CaptureEvidence; file: File }> = [];
+    try {
+      for (const file of files) {
+        const record = await captureEvidenceFromFile(file, category);
+        await saveCaptureFile(record, file);
+        admitted.push({ record, file });
+      }
+      const current = useHomeownerProject.getState();
+      if (!current.site) throw new Error('Research a property before adding house photos.');
+      const capture = admitted.reduce((next, item) => addCaptureEvidence(next, item.record), current.site.capture);
+      current.setSite(updateSiteModel(current.site, { capture }));
+    } catch (reason) {
+      await Promise.all(admitted.map((item) => deleteCaptureFile(item.record.id).catch(() => undefined)));
+      throw reason;
+    }
+  };
+
+  const removeCapture = async (evidenceId: string) => {
+    await deleteCaptureFile(evidenceId);
+    const current = useHomeownerProject.getState();
+    if (current.site) current.setSite(updateSiteModel(current.site, { capture: removeCaptureEvidence(current.site.capture, evidenceId) }));
+  };
+
+  const reviseCapture = (evidenceId: string, changes: Partial<Pick<CaptureEvidence, 'category' | 'label' | 'notes' | 'status'>>) => {
+    const current = useHomeownerProject.getState();
+    if (current.site) current.setSite(updateSiteModel(current.site, { capture: updateCaptureEvidence(current.site.capture, evidenceId, changes) }));
+  };
+
   const navigate = (stage: ProjectStage) => {
     if (!stageAvailable(stage, Boolean(project.site), project.design.platforms.length > 0)) return;
     if (stage === 'permit' && framingStale) generateFraming();
@@ -110,7 +156,7 @@ export function App() {
 
       <div className="min-w-0 flex-1">
         {activeStage === 'idea' && <IdeaStage intent={project.intent} onChange={project.updateIntent} onContinue={() => navigate('property')} />}
-        {activeStage === 'property' && <PropertyStage property={project.property} site={project.site} research={research} onResearch={(address) => void researchProperty(address)} onResearchAddress={(address) => void researchProperty(address.fullAddress, address)} onSuggestAddresses={suggestAddresses} onSelectWall={(buildingId, edgeIndex) => { if (project.site) { try { project.setSite(selectHouseWall(project.site, project.property, buildingId, edgeIndex)); } catch (reason) { project.setError(reason instanceof Error ? reason.message : 'The house wall could not be selected.'); } } }} onUpdateSite={(changes, wallChanges) => { if (project.site) project.setSite(updateSiteModel(project.site, changes, wallChanges)); }} onUpdateTerrainDatum={(changes) => { if (project.site) project.setSite(updateSiteModel(project.site, { terrain: { ...project.site.terrain, datum: { ...project.site.terrain.datum, ...changes } } })); }} onAddTerrainPoint={(point) => { if (project.site) project.setSite(updateSiteModel(project.site, { terrain: addTerrainGradePoint(project.site.terrain, point) })); }} onUpdateTerrainPoint={(pointId, changes) => { if (project.site) project.setSite(updateSiteModel(project.site, { terrain: updateTerrainGradePoint(project.site.terrain, pointId, changes) })); }} onRemoveTerrainPoint={(pointId) => { if (project.site) project.setSite(updateSiteModel(project.site, { terrain: removeTerrainGradePoint(project.site.terrain, pointId) })); }} onContinue={() => navigate('design')} />}
+        {activeStage === 'property' && <PropertyStage property={project.property} site={project.site} research={research} onResearch={(address) => void researchProperty(address)} onResearchAddress={(address) => void researchProperty(address.fullAddress, address)} onSuggestAddresses={suggestAddresses} onSelectWall={(buildingId, edgeIndex) => { if (project.site) { try { project.setSite(selectHouseWall(project.site, project.property, buildingId, edgeIndex)); } catch (reason) { project.setError(reason instanceof Error ? reason.message : 'The house wall could not be selected.'); } } }} onUpdateSite={(changes, wallChanges) => { if (project.site) project.setSite(updateSiteModel(project.site, changes, wallChanges)); }} onUpdateTerrainDatum={(changes) => { if (project.site) project.setSite(updateSiteModel(project.site, { terrain: { ...project.site.terrain, datum: { ...project.site.terrain.datum, ...changes } } })); }} onAddTerrainPoint={(point) => { if (project.site) project.setSite(updateSiteModel(project.site, { terrain: addTerrainGradePoint(project.site.terrain, point) })); }} onUpdateTerrainPoint={(pointId, changes) => { if (project.site) project.setSite(updateSiteModel(project.site, { terrain: updateTerrainGradePoint(project.site.terrain, pointId, changes) })); }} onRemoveTerrainPoint={(pointId) => { if (project.site) project.setSite(updateSiteModel(project.site, { terrain: removeTerrainGradePoint(project.site.terrain, pointId) })); }} captureAssessment={captureAssessment} capturePreviewUrls={capturePreviewUrls} onAddCaptureFiles={addCaptureFiles} onUpdateCaptureEvidence={reviseCapture} onRemoveCaptureEvidence={removeCapture} onContinue={() => navigate('design')} />}
         {activeStage === 'design' && project.site && <DesignStage design={project.design} site={project.site} property={project.property} assessment={designAssessment} canUndo={project.designHistory.length > 0} canRedo={project.designFuture.length > 0} onAddPlatform={project.addPlatform} onUpdatePlatformBoundary={project.updatePlatformBoundary} onRotatePlatform={project.rotatePlatform} onSelectObject={project.selectObject} onRenamePlatform={project.renamePlatform} onSetElevation={project.setPlatformElevation} onSetPurpose={project.setPlatformPurpose} onSetFinish={project.setPlatformFinish} onSetFramingIntent={project.setPlatformFramingIntent} onSetEdgeRole={project.setPlatformEdgeRole} onSetEdgeLength={project.setPlatformEdgeLength} onInsertVertex={project.insertPlatformVertex} onAddStair={project.addStair} onMovePlatformLayer={project.movePlatformLayer} onRemovePlatform={project.removePlatform} onRemoveStair={project.removeStair} onMoveStair={project.moveStair} onResizeStairSide={project.resizeStairSide} onSetStairConstruction={project.setStairConstruction} onUndo={project.undoDesign} onRedo={project.redoDesign} onOpenProperty={() => navigate('property')} onMirrorProperty={() => project.setSite(flipHouseWallDirection(project.site!))} onRotateProperty={() => project.setSite(rotateHouseWallAlignment(project.site!))} onContinue={() => navigate('permit')} />}
         {activeStage === 'permit' && project.site && <PermitStage property={project.property} site={project.site} design={project.design} framing={project.framing} framingStale={framingStale} designErrors={designAssessment.errors.map((issue) => issue.message)} siteErrors={siteAssessment.errors} siteWarnings={siteAssessment.warnings} onGenerateFraming={generateFraming} onDownloadReviewSet={downloadReviewSet} onBackToDesign={() => navigate('design')} onContinue={() => navigate('builders')} />}
         {activeStage === 'builders' && <BuildersStage property={project.property} design={project.design} intent={project.intent} onBack={() => navigate('permit')} />}

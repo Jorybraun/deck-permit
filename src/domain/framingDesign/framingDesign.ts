@@ -1,5 +1,5 @@
 import type { DeckDesign, DeckPlatform, PointMm } from '../deckDesign';
-import { terrainElevationAt, type SiteModel } from '../siteModel';
+import { assessExistingConditionCapture, terrainElevationAt, type SiteModel } from '../siteModel';
 import { boundaryBounds, clipAxisLine, isAxisAlignedRectangle, isHorizontal, lineLength, platformEdgePoints, stationsAlong } from './geometry';
 import { codeProfileForMunicipality, CWC_DECK_GUIDE, selectPreliminarySections } from './rules';
 import type { BeamMember, FramingCheck, FramingDesign, FramingReviewGate, FramingStatus, GenerateFramingInput, GuardAssembly, JoistMember, LedgerMember, PlatformFramingSystem, StairStringerMember } from './types';
@@ -135,7 +135,7 @@ export function framingInputFingerprint(design: DeckDesign, site: SiteModel, inp
   const structuralInput = {
     platforms: design.platforms.map((platform) => ({ id: platform.id, boundary: platform.boundary.vertices.map(({ xMm, yMm }) => [xMm, yMm]), elevationMm: platform.elevationMm, edges: platform.edges.map(({ id, role, hostId }) => ({ id, role, hostId })), framingIntent: platform.framingIntent, finish: { decking: platform.finish.decking, deckingThicknessMm: platform.finish.deckingThicknessMm, guardSystem: platform.finish.guardSystem } })),
     stairs: design.stairs.map((stair) => ({ id: stair.id, from: stair.from, to: stair.to, fromEdgeId: stair.fromEdgeId, toEdgeId: stair.toEdgeId, startMm: stair.startMm, endMm: stair.endMm, directionDeg: stair.directionDeg, widthMm: stair.widthMm, riserCount: stair.riserCount, riserHeightMm: stair.riserHeightMm, treadDepthMm: stair.treadDepthMm, totalRunMm: stair.totalRunMm, stringerCount: stair.stringerCount, handrailSides: stair.handrailSides })),
-    site: { terrain: site.terrain, wall: { selectionStatus: site.designWall.selectionStatus, sourceBuildingId: site.designWall.sourceBuildingId, sourceEdgeIndex: site.designWall.sourceEdgeIndex, lengthMm: site.designWall.lengthMm, rimMaterial: site.designWall.rimMaterial, rimDepthMm: site.designWall.rimDepthMm, cladding: site.designWall.cladding, flashingFeasible: site.designWall.flashingFeasible } },
+    site: { terrain: site.terrain, capture: site.capture.evidence.map(({ id, category, sha256, status }) => ({ id, category, sha256, status })), wall: { selectionStatus: site.designWall.selectionStatus, sourceBuildingId: site.designWall.sourceBuildingId, sourceEdgeIndex: site.designWall.sourceEdgeIndex, lengthMm: site.designWall.lengthMm, rimMaterial: site.designWall.rimMaterial, rimDepthMm: site.designWall.rimDepthMm, cladding: site.designWall.cladding, flashingFeasible: site.designWall.flashingFeasible } },
     input: { municipality: input.municipality, snowLoadKpa: input.snowLoadKpa, treatment: input.treatment || 'incised', soilBearingKpa: input.soilBearingKpa || DEFAULT_SOIL_BEARING_KPA },
   };
   return `fd1-${fnv1a(JSON.stringify(structuralInput))}`;
@@ -211,8 +211,10 @@ function globalChecks(site: SiteModel, footingCount: number, ledgerCount: number
 }
 
 function buildReviewGates(site: SiteModel, engineering: boolean, ledgerCount: number, guardCount: number, stringerCount: number): FramingReviewGate[] {
+  const capture = assessExistingConditionCapture(site.capture, { hasDoor: site.designWall.openings.some((opening) => opening.kind === 'door') });
   return [
     { id: 'field-geometry', discipline: 'site', title: 'Field-verify house, grade, and property offsets', status: site.designWall.selectionStatus === 'field-measured' && site.terrain.gradePoints.length >= 3 && site.terrain.gradePoints.every((point) => point.verificationStatus !== 'reference') ? 'not-required' : 'required', reason: 'Municipal GIS, provisional alignment, and an assumed grade datum are not construction measurements.' },
+    { id: 'existing-condition-capture', discipline: 'site', title: 'Complete and confirm existing-condition photo set', status: capture.readyForProfessionalReview ? 'not-required' : 'required', reason: capture.readyForAiDraft ? 'Required views are recorded but still need homeowner confirmation and reviewer acceptance.' : `${capture.recordedRequiredCount} of ${capture.requiredCount} required photo views are recorded.` },
     { id: 'structural-design', discipline: 'structural', title: 'Structural member and load-path review', status: engineering ? 'required' : 'not-required', reason: engineering ? 'At least one platform lies outside the encoded prescriptive table slice.' : 'Gravity member sizes are table-screened, subject to all remaining gates.' },
     { id: 'footing-design', discipline: 'structural', title: 'Footing, frost, soil, uplift, and lateral design', status: 'required', reason: 'The CWC span guide explicitly excludes footings and lateral bracing.' },
     { id: 'connection-design', discipline: 'structural', title: 'Beam, post, joist, and lateral connections', status: 'required', reason: 'Connector types, fastener schedules, splices, bearing, and lateral ties are not automatically certified.' },

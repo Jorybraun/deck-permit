@@ -34,6 +34,14 @@ export interface StoredEvidenceFile {
   blob: Blob;
 }
 
+export interface StoredCaptureFile {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  byteSize: number;
+  blob: Blob;
+}
+
 export function createProjectSnapshot(state: AppState): ProjectSnapshot {
   return {
     schema: PROJECT_SNAPSHOT_SCHEMA,
@@ -118,15 +126,30 @@ export class ProjectRepository {
     await Promise.all(ids.filter((id) => !keptIds.has(id)).map((id) => this.deleteEvidenceFile(id)));
   }
 
+  async putCaptureFile(id: string, file: Blob, fileName: string): Promise<void> {
+    const record: StoredCaptureFile = { id, fileName, mimeType: file.type || 'application/octet-stream', byteSize: file.size, blob: file };
+    await this.request('capture-files', 'readwrite', (store) => store.put(record, id));
+  }
+
+  async getCaptureFile(id: string): Promise<StoredCaptureFile | null> {
+    const value = await this.request('capture-files', 'readonly', (store) => store.get(id));
+    return value && typeof value === 'object' ? value as StoredCaptureFile : null;
+  }
+
+  async deleteCaptureFile(id: string): Promise<void> {
+    await this.request('capture-files', 'readwrite', (store) => store.delete(id));
+  }
+
   private async open(): Promise<IDBDatabase> {
     if (this.database) return this.database;
     const databaseFactory = this.databaseFactory || globalThis.indexedDB;
     if (!databaseFactory) throw new Error('IndexedDB is unavailable in this browser.');
     this.database = new Promise((resolve, reject) => {
-      const request = databaseFactory.open(this.databaseName, 1);
+      const request = databaseFactory.open(this.databaseName, 2);
       request.onupgradeneeded = () => {
         if (!request.result.objectStoreNames.contains('project-snapshots')) request.result.createObjectStore('project-snapshots');
         if (!request.result.objectStoreNames.contains('evidence-files')) request.result.createObjectStore('evidence-files');
+        if (!request.result.objectStoreNames.contains('capture-files')) request.result.createObjectStore('capture-files');
       };
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error || new Error('Could not open the project database.'));
@@ -135,7 +158,7 @@ export class ProjectRepository {
     return this.database;
   }
 
-  private async request(storeName: 'project-snapshots' | 'evidence-files', mode: IDBTransactionMode, operation: (store: IDBObjectStore) => IDBRequest): Promise<unknown> {
+  private async request(storeName: 'project-snapshots' | 'evidence-files' | 'capture-files', mode: IDBTransactionMode, operation: (store: IDBObjectStore) => IDBRequest): Promise<unknown> {
     const database = await this.open();
     return new Promise((resolve, reject) => {
       const transaction = database.transaction(storeName, mode);

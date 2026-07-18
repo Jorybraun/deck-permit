@@ -2,7 +2,7 @@ import { useHomeownerProject } from '../state/homeownerProjectStore';
 import type { HomeownerIntent, ProjectStage } from '../state/homeownerProjectStore';
 import type { ProfessionalReviewCycle, Property, ReviewExchangePublication, VerificationEvidence } from '../types';
 import type { DeckDesign } from '../domain/deckDesign';
-import { createTerrainSurface, type SiteModel } from '../domain/siteModel';
+import { createExistingConditionCapture, createTerrainSurface, type SiteModel } from '../domain/siteModel';
 import type { FramingDesign } from '../domain/framingDesign';
 
 const STORAGE_KEY = 'permitly-homeowner-project-v1';
@@ -78,8 +78,9 @@ function normalizeSite(site: SiteModel): SiteModel {
     && wall.openings[0].sillHeightMm === 675;
   return {
     ...site,
-    schema: 'site-model/v2',
+    schema: 'site-model/v3',
     terrain: site.terrain?.schema === 'terrain-surface/v1' ? site.terrain : createTerrainSurface(legacySite.terrainElevationMm || 0),
+    capture: site.capture?.schema === 'existing-condition-capture/v1' ? site.capture : createExistingConditionCapture(),
     designWall: {
       ...wall,
       label: wall.label || 'Unconfirmed house side',

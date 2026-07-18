@@ -54,13 +54,14 @@ export interface TerrainSurface {
 }
 
 export interface SiteModel {
-  schema: 'site-model/v2';
+  schema: 'site-model/v3';
   units: 'mm';
   status: 'reference-unverified' | 'field-input-unverified';
   referenceSource: 'municipal-roofline' | 'estimated' | 'field-measurement';
   houseDepthMm: number;
   designWall: HouseWallReference;
   terrain: TerrainSurface;
+  capture: ExistingConditionCapture;
   measuredBy: string;
   measuredAt: string;
   notes: string;
@@ -78,4 +79,44 @@ export interface TerrainElevationResult {
   sourcePointIds: string[];
   nearestDistanceMm: number | null;
   verificationStatus: TerrainVerificationStatus;
+}
+
+export type CaptureCategory = 'house-overview' | 'design-wall' | 'door-threshold' | 'grade-context' | 'wall-assembly' | 'obstruction' | 'survey-or-sketch';
+export type CaptureEvidenceStatus = 'recorded-unverified' | 'homeowner-confirmed' | 'professional-verified';
+
+export interface CaptureEvidence {
+  id: string;
+  category: CaptureCategory;
+  label: string;
+  fileName: string;
+  mimeType: string;
+  byteSize: number;
+  sha256: string;
+  recordedAt: string;
+  status: CaptureEvidenceStatus;
+  notes: string;
+}
+
+/** Metadata for locally stored private capture files; bytes are owned by capture-file storage. */
+export interface ExistingConditionCapture {
+  schema: 'existing-condition-capture/v1';
+  evidence: CaptureEvidence[];
+}
+
+export interface CaptureRequirement {
+  category: CaptureCategory;
+  title: string;
+  reason: string;
+  required: boolean;
+  status: 'missing' | 'recorded' | 'confirmed';
+  evidenceIds: string[];
+}
+
+export interface ExistingConditionCaptureAssessment {
+  requirements: CaptureRequirement[];
+  requiredCount: number;
+  recordedRequiredCount: number;
+  confirmedRequiredCount: number;
+  readyForAiDraft: boolean;
+  readyForProfessionalReview: boolean;
 }
