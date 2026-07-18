@@ -310,11 +310,9 @@ export function DeckPlanEditor({ design, site, property, canUndo, canRedo, onAdd
     } catch (reason) { setMessage(reason instanceof Error ? reason.message : 'That corner cannot be removed without creating invalid geometry.'); }
   };
 
-  const connectStairEdge = (event: ReactPointerEvent<SVGLineElement>, platform: DeckPlatform, edgeIndex: number) => {
-    event.preventDefault(); event.stopPropagation();
+  const connectStairAtEdgePoint = (platform: DeckPlatform, edgeIndex: number, pointMm: PointMm) => {
     const edgeId = platform.edges[edgeIndex]?.id;
     if (!edgeId) return;
-    const pointMm = pointOnEdge(platform, edgeIndex, worldPointFromClient(event.clientX, event.clientY));
     if (!stairSource) {
       setStairSource({ platformId: platform.id, edgeId, pointMm });
       onSelectObject(platform.id);
@@ -328,6 +326,18 @@ export function DeckPlanEditor({ design, site, property, canUndo, canRedo, onAdd
       setStairSource(null); setHoverPoint(null); setMode('select');
       setMessage(`Point-to-point stairs added to ${platform.name}. Select the stair callout to inspect the complete assembly.`);
     } catch (reason) { setMessage(reason instanceof Error ? reason.message : 'The stairs could not be placed between these levels.'); }
+  };
+
+  const connectStairEdge = (event: ReactPointerEvent<SVGLineElement>, platform: DeckPlatform, edgeIndex: number) => {
+    event.preventDefault(); event.stopPropagation();
+    connectStairAtEdgePoint(platform, edgeIndex, pointOnEdge(platform, edgeIndex, worldPointFromClient(event.clientX, event.clientY)));
+  };
+
+  const connectStairMarker = (platform: DeckPlatform, edgeIndex: number) => {
+    const start = platform.boundary.vertices[edgeIndex];
+    const end = platform.boundary.vertices[(edgeIndex + 1) % platform.boundary.vertices.length];
+    if (!start || !end) return;
+    connectStairAtEdgePoint(platform, edgeIndex, [Math.round((start.xMm + end.xMm) / 2), Math.round((start.yMm + end.yMm) / 2)]);
   };
 
   const connectStairPlatform = (event: ReactPointerEvent<SVGPolygonElement>, clickedPlatform: DeckPlatform) => {
@@ -476,6 +486,13 @@ export function DeckPlanEditor({ design, site, property, canUndo, canRedo, onAdd
         {draft.length > 0 && <DraftBoundary points={draft} hoverPoint={hoverPoint} transform={transform} onClose={finishDrawing} />}
         {mode === 'stairs' && stairSource && hoverPoint && <StairDraft startMm={stairSource.pointMm} endMm={hoverPoint} riseMm={stairPreviewRiseMm} directionDeg={stairPreviewDirectionDeg} targetLabel={detectedLanding ? `${detectedLanding.name} · EL. ${detectedLanding.elevationMm} mm` : `LOCAL GRADE · EL. ${hoverGrade?.elevationMm ?? site.terrain.datum.elevationMm} mm${hoverGrade?.method === 'interpolated' ? ' · interpolated' : ''}`} transform={transform} />}
       </svg>
+      {mode === 'stairs' && <div className="pointer-events-none absolute inset-0" aria-label="Stair edge targets">{design.platforms.flatMap((platform) => platform.boundary.vertices.map((start, index, vertices) => {
+        const end = vertices[(index + 1) % vertices.length];
+        const x = transform.x((start.xMm + end.xMm) / 2);
+        const y = transform.y((start.yMm + end.yMm) / 2) - 22;
+        const source = stairSource?.platformId === platform.id && stairSource.edgeId === platform.edges[index]?.id;
+        return <button key={`${platform.id}-stair-target-${index}`} type="button" aria-label={`Start or connect stairs at ${platform.name} edge ${index + 1}`} onClick={(event) => { event.preventDefault(); event.stopPropagation(); connectStairMarker(platform, index); }} style={{ left: `${x / VIEW_WIDTH * 100}%`, top: `${y / VIEW_HEIGHT * 100}%` }} className={`pointer-events-auto absolute z-20 grid h-[30px] w-[30px] -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-4 border-white text-[8px] font-extrabold text-white shadow-sm ${source ? 'bg-amber-500' : 'bg-emerald-700'}`}>ST</button>;
+      }))}</div>}
       {propertyGeometry && (propertyGeometry.alignmentStatus === 'provisional' ? <button type="button" onClick={onOpenProperty} className="absolute left-4 top-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-left text-[10px] font-bold uppercase tracking-[.08em] text-amber-900 shadow-sm">Property visible · alignment provisional<br /><span className="text-[9px] underline">Choose the correct house edge →</span></button> : <div className="absolute left-4 top-4 rounded-md border border-emerald-300 bg-white/95 px-3 py-2 text-[10px] font-bold uppercase tracking-[.08em] text-emerald-800 shadow-sm">Property visible · {propertyGeometry.alignmentStatus === 'field-measured' ? 'field-measured wall' : 'homeowner-selected house edge'}</div>)}
       {propertyGeometry && <div className="absolute right-4 top-4 flex overflow-hidden rounded-lg border border-slate-300 bg-white/95 shadow-lg"><button type="button" onClick={onRotateProperty} className="flex min-h-10 items-center gap-1.5 border-r border-slate-200 px-3 text-[10px] font-bold text-slate-700" title="Use when the municipal house and yard appear on the opposite side"><RotateCw size={14} /> Rotate site 180°</button><button type="button" onClick={onMirrorProperty} className="flex min-h-10 items-center gap-1.5 px-3 text-[10px] font-bold text-slate-700" title="Reverse the start and end of the selected house wall"><FlipHorizontal2 size={14} /> Reverse wall direction</button></div>}
       {mode === 'draw' && <div role="status" className="pointer-events-none absolute left-1/2 top-4 w-[min(390px,calc(100%-32px))] -translate-x-1/2 rounded-lg border border-emerald-300 bg-white/95 px-4 py-2 text-center shadow-lg"><strong className="block text-[10px] uppercase tracking-[.12em] text-emerald-800">Drawing a new platform layer</strong><span className="mt-0.5 block text-[10px] leading-4 text-slate-600">Place corners anywhere, including over an existing platform. Elevation is set separately.</span></div>}
@@ -584,7 +601,6 @@ function PlatformShape({ platform, boundary, selected, detectedLanding, transfor
         <rect x={(x1 + x2) / 2 - 39} y={(y1 + y2) / 2 - 9} width="78" height="18" rx="4" fill="white" stroke="#aebdb5" pointerEvents="none" />
         <text x={(x1 + x2) / 2} y={(y1 + y2) / 2 + 3} textAnchor="middle" fontSize="8.5" fontWeight="700" fill="#315e57" pointerEvents="none">{formatM(Math.hypot(end.xMm - start.xMm, end.yMm - start.yMm))} · {formatAngle(lineAngleDeg([start.xMm, start.yMm], [end.xMm, end.yMm]))}</text>
         {interactionMode === 'insert' && <g pointerEvents="none"><circle cx={(x1 + x2) / 2} cy={(y1 + y2) / 2 - 22} r="9" fill="#087553" /><text x={(x1 + x2) / 2} y={(y1 + y2) / 2 - 18.5} textAnchor="middle" fontSize="12" fontWeight="800" fill="white">+</text></g>}
-        {interactionMode === 'stairs' && <g pointerEvents="none"><circle cx={(x1 + x2) / 2} cy={(y1 + y2) / 2 - 22} r="9" fill={source ? '#f59e0b' : '#087553'} /><text x={(x1 + x2) / 2} y={(y1 + y2) / 2 - 18.5} textAnchor="middle" fontSize="8" fontWeight="800" fill="white">ST</text></g>}
       </g>;
     })}
     {(selected || interactionMode === 'remove') && boundary.vertices.map((vertex, index) => {
