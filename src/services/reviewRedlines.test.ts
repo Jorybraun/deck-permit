@@ -10,7 +10,7 @@ const requiredRedline: ReviewRedline = {
 };
 const cycle: ProfessionalReviewCycle = {
   id: 'cycle-1', exchangeProjectId: 'rvw_123', sourceDesignFingerprint: fingerprint, decision: 'changes-requested', issuerName: 'A. Engineer',
-  issuerRole: 'engineer', licenseNumber: '12345', importedAt: '2026-07-18T13:00:00.000Z', evidenceId: 'evidence-1', redlines: [requiredRedline], resolutions: [],
+  issuerRole: 'engineer', licenseNumber: '12345', importedAt: '2026-07-18T13:00:00.000Z', evidenceId: 'evidence-1', redlines: [requiredRedline], resolutions: [], structuralResolutions: [],
 };
 
 describe('professional redline workflow', () => {

@@ -7,6 +7,8 @@ import { validateReviewRedlines } from '../services/reviewRedlines';
 import type { ReviewRedline, ReviewRedlineCategory } from '../types';
 import { downloadCadExchangeArtifact } from '../services/projectCadExchange';
 import { downloadCanonicalCalculationPdf } from '../services/canonicalCalculationReport';
+import { validateProfessionalWorkResolutions, type ProfessionalWorkResolution } from '../services/professionalWorkResolution';
+import { StructuralResolutionEditor } from './StructuralResolutionEditor';
 
 export function ReviewerPortal({ projectId, reviewerToken }: { projectId: string; reviewerToken: string }) {
   const [exchange, setExchange] = useState<ReviewerExchangeResult | null>(null);
@@ -28,6 +30,7 @@ export function ReviewerPortal({ projectId, reviewerToken }: { projectId: string
   const [redlineComment, setRedlineComment] = useState('');
   const [redlineCategory, setRedlineCategory] = useState<ReviewRedlineCategory>('coordination');
   const [redlineSeverity, setRedlineSeverity] = useState<ReviewRedline['severity']>('required');
+  const [structuralResolutions, setStructuralResolutions] = useState<ProfessionalWorkResolution[]>([]);
   const registry = registryForRole(issuerRole)!;
 
   useEffect(() => {
@@ -35,6 +38,7 @@ export function ReviewerPortal({ projectId, reviewerToken }: { projectId: string
       setExchange(result);
       if (result.review) {
         setRedlines(result.review.redlines || []);
+        setStructuralResolutions(result.review.structuralResolutions || []);
         if (result.review.decision) setDecision(result.review.decision);
       }
     }).catch((reason) => setLoadError(reason instanceof Error ? reason.message : 'The private review package could not be loaded.'));
@@ -71,6 +75,10 @@ export function ReviewerPortal({ projectId, reviewerToken }: { projectId: string
     if (file.type !== 'application/pdf' || file.size > 10_000_000) return setError('Attach a PDF no larger than 10 MB.');
     try { validateReviewRedlines(redlines, exchange.reviewPackage.manifest.designFingerprint, exchange.reviewPackage.manifest.sheetIds, decision); }
     catch (reason) { return setError(reason instanceof Error ? reason.message : 'The sheet redlines are invalid.'); }
+    if (exchange.reviewPackage.calculationReport) {
+      try { validateProfessionalWorkResolutions(structuralResolutions, exchange.reviewPackage.calculationReport, decision); }
+      catch (reason) { return setError(reason instanceof Error ? reason.message : 'The structural work-package resolutions are invalid.'); }
+    }
     setBusy(true); setError('');
     try {
       const recordedAt = new Date().toISOString();
@@ -78,7 +86,7 @@ export function ReviewerPortal({ projectId, reviewerToken }: { projectId: string
         id: crypto.randomUUID(), gateId: 'structural-review', kind: 'sealed-structural-review', fileName: file.name, mimeType: file.type, byteSize: file.size,
         pdfBase64: await fileToBase64(file), sha256: await sha256File(file), issuerName: issuerName.trim(), issuerRole, licenseNumber: licenseNumber.trim(), decision,
         designFingerprint: exchange.reviewPackage.manifest.designFingerprint, professionalRegistry: registry, registryUrl: PROFESSIONAL_REGISTRIES[registry].url,
-        registryCheckedAt: recordedAt, registryStatus: 'directory-confirmed-by-user', recordedAt, status: 'recorded-unverified', redlines,
+        registryCheckedAt: recordedAt, registryStatus: 'directory-confirmed-by-user', recordedAt, status: 'recorded-unverified', redlines, structuralResolutions,
       };
       await submitReviewerDecision(projectId, reviewerToken, review);
       setSubmitted(true);
@@ -107,6 +115,7 @@ export function ReviewerPortal({ projectId, reviewerToken }: { projectId: string
         <aside className="space-y-4">
           {reviewPackage.cadExchange && <div className="rounded-lg border border-border bg-white p-4"><div className="flex items-start gap-3"><Layers3 size={18} className="mt-0.5 shrink-0 text-primary" /><div><h2 className="text-sm font-semibold">Canonical CAD handoff</h2><p className="mt-1 text-xs leading-5 text-text-secondary">{reviewPackage.cadExchange.layers.length} named layers · millimetres · local house-wall coordinates · IDs match the drawing schedules.</p></div></div><button type="button" onClick={() => downloadCadExchangeArtifact(reviewPackage.cadExchange!, `permitly-review-${reviewPackage.property.address.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase()}`)} className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2.5 text-xs font-semibold text-primary"><Download size={14} /> Download layered DXF</button><p className="mt-2 text-[10px] leading-4 text-text-secondary">Professional review — not for construction. Validate field geometry and resolve every open structural work package before issue.</p></div>}
           {reviewPackage.calculationReport && <div className="rounded-lg border border-border bg-white p-4"><div className="flex items-start gap-3"><FileCheck2 size={18} className="mt-0.5 shrink-0 text-primary" /><div><h2 className="text-sm font-semibold">Calculation booklet</h2><p className="mt-1 text-xs leading-5 text-text-secondary">Transparent member demands, post reactions, footing bearing screens, stair geometry, connection actions, assumptions, and unresolved review gates.</p></div></div><button type="button" onClick={() => void downloadCanonicalCalculationPdf(reviewPackage.calculationReport!).catch((reason) => setError(reason instanceof Error ? reason.message : 'The calculation booklet could not be downloaded.'))} className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg border border-primary/25 bg-primary/5 px-3 py-2.5 text-xs font-semibold text-primary"><Download size={14} /> Download calculation PDF</button><p className="mt-2 text-[10px] leading-4 text-text-secondary">Fingerprint {reviewPackage.calculationReport.designFingerprint} · professional review — not for construction.</p></div>}
+          {reviewPackage.calculationReport && <StructuralResolutionEditor report={reviewPackage.calculationReport} resolutions={structuralResolutions} onChange={setStructuralResolutions} />}
           {(reviewPackage.priorReviewCycles || []).length > 0 && <div className="rounded-lg border border-border bg-white p-4 space-y-3"><div><h2 className="text-sm font-semibold">Prior review responses</h2><p className="mt-1 text-xs text-text-secondary">Coordination history supplied by the owner for comparison with this revision.</p></div>{[...(reviewPackage.priorReviewCycles || [])].reverse().slice(0, 3).map((cycle) => <div key={cycle.id} className="rounded-md bg-surface p-2.5 text-xs"><div className="flex justify-between gap-2"><strong>{cycle.sourceDesignFingerprint}</strong><span className="uppercase text-text-secondary">{cycle.decision.replace('-', ' ')}</span></div>{cycle.redlines.map((redline) => { const responses = cycle.resolutions.filter((resolution) => resolution.redlineId === redline.id); const response = responses[responses.length - 1]; return <div key={redline.id} className="mt-2 border-l-2 border-warning pl-2"><div className="font-semibold">{redline.sheetId}: {redline.title}</div><div className="mt-0.5 text-text-secondary">{redline.comment}</div><div className={`mt-1 ${response ? 'text-success' : 'text-danger'}`}>{response ? `${response.disposition.replace(/-/g, ' ')} — ${response.response}` : 'No owner/designer response recorded'}</div></div>; })}</div>)}</div>}
           <div className="rounded-lg border border-border bg-white p-4"><h2 className="text-sm font-semibold">Design-basis review</h2><div className="mt-3 space-y-2">{reviewPackage.report.checks.map((check) => <div key={check.id} className="rounded-md bg-surface p-2.5"><div className="flex justify-between gap-2 text-xs font-semibold"><span>{check.title}</span><span className={check.status === 'pass' ? 'text-success' : 'text-warning'}>{check.status}</span></div><p className="mt-1 text-xs text-text-secondary">{check.result}</p></div>)}</div></div>
           <div className="rounded-lg border border-border bg-white p-4 space-y-3"><div className="flex items-start justify-between gap-3"><div><h2 className="text-sm font-semibold">Sheet redlines</h2><p className="mt-1 text-xs text-text-secondary">Place numbered comments directly on {activeSheet?.title || 'the active sheet'}.</p></div><span className="rounded-full bg-surface px-2 py-1 text-[10px] font-semibold">{redlines.length} total</span></div>

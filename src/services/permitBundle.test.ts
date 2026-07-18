@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { VerificationEvidence } from '../types';
-import { buildBundleReadme, buildPackageIndex, collectEvidenceEntries, safeFileName, validateBundleArchive, validateBundleInput, type PermitBundleInput } from './permitBundle';
+import { buildBundleReadme, buildPackageIndex, buildProfessionalResolutionEntries, collectEvidenceEntries, safeFileName, validateBundleArchive, validateBundleInput, type PermitBundleInput } from './permitBundle';
 import { sha256Blob } from './fileDigest';
 
 const evidence: VerificationEvidence = {
@@ -58,6 +58,13 @@ describe('permit bundle boundary', () => {
     expect(readme).toContain('Survey: Attach survey.');
     expect(readme).toContain('deliberately unsigned');
     expect(readme).toContain('professional redline response log');
+  });
+
+  it('adds revision-bound professional structural resolution records to the permit package', () => {
+    const entries = buildProfessionalResolutionEntries([{ id: 'rvw-1', exchangeProjectId: 'rvw-1', sourceDesignFingerprint: 'DP-ABCDEF12', decision: 'accepted', issuerName: 'Engineer', issuerRole: 'engineer', licenseNumber: '123', importedAt: new Date().toISOString(), evidenceId: 'sealed-1', redlines: [], resolutions: [], structuralResolutions: [{ schema: 'permitly-professional-work-resolution/v1', id: 'resolution_123', designFingerprint: 'DP-ABCDEF12', workPackageId: 'SYS:P1', kind: 'platform-system', disposition: 'specified', specification: 'Selected assembly', capacityBasis: 'Sealed calculation', documentReference: 'SK-01', notes: '', recordedAt: new Date().toISOString() }] }]);
+    const [path] = Object.keys(entries);
+    expect(path).toBe('04-records/professional-resolution-DP-ABCDEF12-rvw-1.json');
+    expect(JSON.parse(new TextDecoder().decode(entries[path]))).toMatchObject({ schema: 'permitly-professional-resolution-record/v1', designFingerprint: 'DP-ABCDEF12', resolutionCount: 1 });
   });
 
   it('rejects stale or incomplete drawing manifests before ZIP assembly', () => {

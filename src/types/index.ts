@@ -460,6 +460,7 @@ export interface ProfessionalReviewCycle {
   evidenceId: string;
   redlines: ReviewRedline[];
   resolutions: ReviewRedlineResolution[];
+  structuralResolutions: import('../services/professionalWorkResolution').ProfessionalWorkResolution[];
 }
 
 export interface SidneyApplicationData {

@@ -14,7 +14,7 @@ const pdf = Buffer.from('%PDF-1.4\nreview\n%%EOF');
 const review = {
   id: 'evidence-1', gateId: 'structural-review', kind: 'sealed-structural-review', fileName: 'sealed.pdf', mimeType: 'application/pdf', byteSize: pdf.length,
   pdfBase64: pdf.toString('base64'), sha256: createHash('sha256').update(pdf).digest('hex'), issuerName: 'Test Engineer', issuerRole: 'engineer', licenseNumber: '12345',
-  decision: 'accepted', designFingerprint: fingerprint, professionalRegistry: 'egbc', registryUrl: 'https://www.egbc.ca/registrant-directory', registryCheckedAt: new Date().toISOString(), registryStatus: 'directory-confirmed-by-user', recordedAt: new Date().toISOString(), status: 'recorded-unverified',
+  decision: 'accepted', designFingerprint: fingerprint, professionalRegistry: 'egbc', registryUrl: 'https://www.egbc.ca/registrant-directory', registryCheckedAt: new Date().toISOString(), registryStatus: 'directory-confirmed-by-user', recordedAt: new Date().toISOString(), status: 'recorded-unverified', structuralResolutions: [],
 };
 
 describe('ReviewExchangeStore', () => {
@@ -49,7 +49,7 @@ describe('ReviewExchangeStore', () => {
     const cadExchange = {
       schema: 'permitly-project-cad-exchange/v1', units: 'mm', coordinateSystem: 'local-house-wall', designFingerprint: fingerprint,
       generatedAt: new Date().toISOString(), notForConstruction: true, layers: [{ id: 'A-DECK-EDGE', entityCount: 4 }], entityCounts: {}, warnings: [],
-      dxf: `0\nSECTION\n2\nHEADER\n${'9\n$INSUNITS\n70\n4\n'.repeat(4)}0\nENDSEC\n0\nEOF\n`,
+      dxf: `0\r\nSECTION\r\n2\r\nHEADER\r\n${'9\r\n$INSUNITS\r\n70\r\n4\r\n'.repeat(4)}0\r\nENDSEC\r\n0\r\nEOF\r\n`,
     };
     const created = await store.create({ ...reviewPackage, cadExchange });
     expect((await store.getForReviewer(created.id, created.reviewerToken)).reviewPackage.cadExchange.designFingerprint).toBe(fingerprint);
@@ -69,11 +69,16 @@ describe('ReviewExchangeStore', () => {
       designBasis: { deadLoadKpa: 0.5, liveLoadKpa: 1.9, snowLoadKpa: 1, governingAreaLoadKpa: 1.9, assumedSoilBearingKpa: 75, lumber: 'SPF No. 2', treatment: 'exterior' },
       platformSystems: [{ platformId: 'P1' }],
       joistGroups: [{ spacingMm: 400, governingSpanMm: 3000, lineLoadKnM: 0.76, momentDemandKnM: 0.855, shearDemandKn: 1.14 }],
-      beams: [{ lengthMm: 4000, tributaryWidthMm: 1500, lineLoadKnM: 2.85, governingBayMm: 1800, momentDemandKnM: 1.154, shearDemandKn: 2.565, governingPostReactionKn: 5.13 }], postFootingChecks: [{ reactionKn: 4, requiredBearingAreaSqM: 0.053, providedBearingAreaSqM: 0.16, bearingPressureKpa: 25, footingDepth: 'unresolved', status: 'review-required' }],
+      beams: [{ lengthMm: 4000, tributaryWidthMm: 1500, lineLoadKnM: 2.85, governingBayMm: 1800, momentDemandKnM: 1.154, shearDemandKn: 2.565, governingPostReactionKn: 5.13 }], postFootingChecks: [{ platformId: 'P1', reactionKn: 4, requiredBearingAreaSqM: 0.053, providedBearingAreaSqM: 0.16, bearingPressureKpa: 25, footingDepth: 'unresolved', status: 'review-required' }],
       stairs: [], connections: [{ id: 'C-P1-B1', status: 'design-required' }], checks: [{}], reviewGates: [], sources: [{}], limitations: ['Not for construction.'],
     };
     const created = await store.create({ ...reviewPackage, calculationReport });
     expect((await store.getForReviewer(created.id, created.reviewerToken)).reviewPackage.calculationReport.designFingerprint).toBe(fingerprint);
+    await expect(store.submitReview(created.id, created.reviewerToken, review))
+      .rejects.toEqual(expect.objectContaining<Partial<ReviewExchangeError>>({ status: 400, code: 'unresolved-structural-work-packages' }));
+    const structuredResolution = (id: string, workPackageId: string, kind: string) => ({ schema: 'permitly-professional-work-resolution/v1', id, designFingerprint: fingerprint, workPackageId, kind, disposition: 'specified', specification: 'Professionally selected assembly', capacityBasis: 'Sealed calculation section 4', documentReference: 'SK-01 / Calc 4', notes: '', recordedAt: new Date().toISOString() });
+    const structuralResolutions = [structuredResolution('resolution_sys_p1', 'SYS:P1', 'platform-system'), structuredResolution('resolution_fnd_p1', 'FND:P1', 'foundation-system'), structuredResolution('resolution_conn_p1', 'C-P1-B1', 'connection')];
+    expect((await store.submitReview(created.id, created.reviewerToken, { ...review, structuralResolutions })).structuralResolutions).toHaveLength(3);
     await expect(store.create({ ...reviewPackage, calculationReport: { ...calculationReport, designFingerprint: 'DP-00000000' } }))
       .rejects.toEqual(expect.objectContaining<Partial<ReviewExchangeError>>({ status: 409, code: 'calculation-revision-mismatch' }));
     await expect(store.create({ ...reviewPackage, calculationReport: { ...calculationReport, joistGroups: [{ spacingMm: -1 }] } }))

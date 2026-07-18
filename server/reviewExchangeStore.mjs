@@ -50,7 +50,7 @@ export class ReviewExchangeStore {
   async submitReview(id, token, review) {
     return this.#withLock(id, async () => {
       const record = await this.#readAuthorized(id, token, 'reviewer');
-      validateReview(review, record.reviewPackage.manifest.designFingerprint, record.reviewPackage.planset.map((sheet) => sheet.id));
+      validateReview(review, record.reviewPackage.manifest.designFingerprint, record.reviewPackage.planset.map((sheet) => sheet.id), record.reviewPackage.calculationReport);
       const updated = { ...record, updatedAt: new Date().toISOString(), review };
       await this.#write(updated);
       return publicReview(review);
@@ -120,7 +120,7 @@ function validateCadExchange(value, expectedFingerprint) {
     throw new ReviewExchangeError(400, 'invalid-cad-exchange', 'The CAD exchange contract is invalid.');
   }
   if (value.designFingerprint !== expectedFingerprint) throw new ReviewExchangeError(409, 'cad-revision-mismatch', 'The CAD exchange does not match the published drawing revision.');
-  if (typeof value.dxf !== 'string' || value.dxf.length < 100 || value.dxf.length > 5_000_000 || !value.dxf.startsWith('0\nSECTION\n') || !value.dxf.endsWith('0\nEOF\n')) {
+  if (typeof value.dxf !== 'string' || value.dxf.length < 100 || value.dxf.length > 5_000_000 || !/^(?:\uFEFF)?0\r?\nSECTION\r?\n/.test(value.dxf) || !/0\r?\nEOF\r?\n?$/.test(value.dxf)) {
     throw new ReviewExchangeError(400, 'invalid-cad-payload', 'The CAD exchange must contain a bounded ASCII DXF document.');
   }
   if (!Array.isArray(value.layers) || value.layers.length < 1 || value.layers.length > 50 || value.layers.some((layer) => typeof layer?.id !== 'string' || !/^[A-Z0-9-]{2,40}$/.test(layer.id) || !Number.isInteger(layer.entityCount) || layer.entityCount < 1 || layer.entityCount > 100_000)) {
@@ -163,7 +163,7 @@ function validateCalculationReport(value, expectedFingerprint) {
   }
 }
 
-function validateReview(review, expectedFingerprint, publishedSheetIds) {
+function validateReview(review, expectedFingerprint, publishedSheetIds, calculationReport) {
   if (!review || typeof review !== 'object') throw new ReviewExchangeError(400, 'invalid-review', 'A review decision is required.');
   if (review.designFingerprint !== expectedFingerprint) throw new ReviewExchangeError(409, 'revision-mismatch', 'The review does not match the published design revision.');
   if (!['accepted', 'changes-requested'].includes(review.decision)) throw new ReviewExchangeError(400, 'invalid-decision', 'The review decision is invalid.');
@@ -180,7 +180,38 @@ function validateReview(review, expectedFingerprint, publishedSheetIds) {
   if (review.byteSize !== pdf.length) throw new ReviewExchangeError(400, 'size-mismatch', 'The PDF byte size does not match its metadata.');
   if (tokenHashBytes(pdf) !== review.sha256.toLowerCase()) throw new ReviewExchangeError(400, 'digest-mismatch', 'The PDF digest does not match its bytes.');
   validateRedlines(review.redlines || [], expectedFingerprint, review.decision, publishedSheetIds);
+  validateStructuralResolutions(review.structuralResolutions || [], calculationReport, expectedFingerprint, review.decision);
 }
+
+function validateStructuralResolutions(resolutions, report, expectedFingerprint, decision) {
+  if (!Array.isArray(resolutions) || resolutions.length > 2_000) throw new ReviewExchangeError(400, 'invalid-structural-resolutions', 'A review may contain up to 2,000 structural work-package resolutions.');
+  if (!report) {
+    if (resolutions.length) throw new ReviewExchangeError(400, 'unexpected-structural-resolutions', 'This legacy review package has no structural work-package contract.');
+    return;
+  }
+  const expected = new Map();
+  report.platformSystems.forEach((system) => expected.set(`SYS:${system.platformId}`, 'platform-system'));
+  [...new Set(report.postFootingChecks.map((item) => item.platformId))].forEach((platformId) => expected.set(`FND:${platformId}`, 'foundation-system'));
+  report.stairs.forEach((stair) => expected.set(`STAIR:${stair.id}`, 'stair-system'));
+  report.connections.forEach((connection) => expected.set(connection.id, 'connection'));
+  const ids = new Set(); const workPackageIds = new Set();
+  for (const resolution of resolutions) {
+    if (!resolution || resolution.schema !== 'permitly-professional-work-resolution/v1' || typeof resolution.id !== 'string' || !/^[a-zA-Z0-9_-]{8,100}$/.test(resolution.id) || ids.has(resolution.id)) throw new ReviewExchangeError(400, 'invalid-structural-resolution-id', 'Every structural resolution requires a unique valid identifier.');
+    ids.add(resolution.id);
+    if (!expected.has(resolution.workPackageId) || expected.get(resolution.workPackageId) !== resolution.kind || workPackageIds.has(resolution.workPackageId)) throw new ReviewExchangeError(400, 'invalid-structural-work-package', 'Every structural resolution must target one unique work package in this review issue.');
+    workPackageIds.add(resolution.workPackageId);
+    if (resolution.designFingerprint !== expectedFingerprint) throw new ReviewExchangeError(409, 'structural-resolution-revision-mismatch', 'A structural resolution does not match the published design revision.');
+    if (!['specified', 'covered-by-sealed-document', 'not-applicable'].includes(resolution.disposition)) throw new ReviewExchangeError(400, 'invalid-structural-disposition', 'A structural resolution disposition is invalid.');
+    if (!boundedText(resolution.documentReference, 3, 200)) throw new ReviewExchangeError(400, 'missing-structural-reference', 'Each structural resolution needs a drawing, calculation, or sealed-document reference.');
+    if (resolution.disposition === 'specified' && (!boundedText(resolution.specification, 5, 2_000) || !boundedText(resolution.capacityBasis, 5, 2_000))) throw new ReviewExchangeError(400, 'incomplete-structural-specification', 'A specified resolution needs both a specification and capacity basis.');
+    if (resolution.disposition !== 'specified' && !boundedText(resolution.notes, 5, 2_000)) throw new ReviewExchangeError(400, 'incomplete-structural-note', 'A deferred or not-applicable resolution needs an explanatory note.');
+    const recordedAt = Date.parse(resolution.recordedAt);
+    if (!Number.isFinite(recordedAt) || recordedAt > Date.now() + 60_000) throw new ReviewExchangeError(400, 'invalid-structural-resolution-date', 'A structural resolution timestamp is invalid.');
+  }
+  if (decision === 'accepted' && workPackageIds.size !== expected.size) throw new ReviewExchangeError(400, 'unresolved-structural-work-packages', `An accepted review must resolve all ${expected.size} structural work packages; ${expected.size - workPackageIds.size} remain unanswered.`);
+}
+
+function boundedText(value, minimum, maximum) { return typeof value === 'string' && value.trim().length >= minimum && value.trim().length <= maximum; }
 
 function validateRedlines(redlines, expectedFingerprint, decision, publishedSheetIds) {
   if (!Array.isArray(redlines) || redlines.length > 100) throw new ReviewExchangeError(400, 'invalid-redlines', 'A review may contain up to 100 sheet redlines.');

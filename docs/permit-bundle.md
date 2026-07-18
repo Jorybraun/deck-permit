@@ -13,6 +13,8 @@
 
 The artifact reports its package kind, exact file list, and byte size. The user-visible package kind is derived from `SubmissionReadiness`; an incomplete project is always labelled a professional review package.
 
+Accepted canonical review cycles also contribute separate machine-readable professional resolution records. Each record is tied to the reviewed design fingerprint and lists the member, foundation, stair, and connection work packages resolved by the professional. The sealed PDF remains the authenticated evidence; the JSON record supports coordination, manifest validation, and municipal package assembly.
+
 ## State and dependencies
 
 The module owns no durable state. Project metadata is owned by Zustand and persisted as a versioned IndexedDB snapshot. Evidence PDF bytes are owned by the IndexedDB evidence vault and are read through `loadEvidenceFile`. The module consumes the vector drawing exporter, official Sidney form filler, submission-manifest serializer, evidence assessor, SHA-256 digest service, and `fflate` ZIP codec.

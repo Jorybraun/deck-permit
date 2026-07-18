@@ -1,4 +1,5 @@
 import type { PlanSheet, ProfessionalReviewCycle, ReviewRedline, ReviewRedlineResolution } from '../types';
+import type { ProfessionalWorkResolution } from './professionalWorkResolution';
 
 export const REVIEW_REDLINE_SCHEMA = 'deck-permit-review-redlines/v1' as const;
 export const REVIEW_RESPONSE_LOG_SCHEMA = 'deck-permit-review-response-log/v1' as const;
@@ -45,6 +46,7 @@ export function createProfessionalReviewCycle(input: {
     licenseNumber?: string;
     recordedAt: string;
     redlines?: ReviewRedline[];
+    structuralResolutions?: ProfessionalWorkResolution[];
   };
 }): ProfessionalReviewCycle {
   if (!input.review.designFingerprint || !input.review.decision || !input.review.licenseNumber) throw new Error('The imported review is missing revision or professional metadata.');
@@ -60,6 +62,7 @@ export function createProfessionalReviewCycle(input: {
     evidenceId: input.review.id,
     redlines: input.review.redlines || [],
     resolutions: [],
+    structuralResolutions: input.review.structuralResolutions || [],
   };
 }
 
@@ -121,5 +124,5 @@ export function buildReviewResponseLog(cycles: ProfessionalReviewCycle[], curren
 }
 
 export function reviewCyclesForPublication(cycles: ProfessionalReviewCycle[]): ProfessionalReviewCycle[] {
-  return cycles.slice(-10).map((cycle) => ({ ...cycle, redlines: cycle.redlines.slice(0, 100), resolutions: cycle.resolutions.slice(-200) }));
+  return cycles.slice(-10).map((cycle) => ({ ...cycle, redlines: cycle.redlines.slice(0, 100), resolutions: cycle.resolutions.slice(-200), structuralResolutions: (cycle.structuralResolutions || []).slice(0, 2_000) }));
 }

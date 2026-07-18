@@ -2,6 +2,7 @@ import type { Deck, DesignCheck, PermitManifest, PlanSheet, ProfessionalReviewCy
 import { reviewCyclesForPublication } from './reviewRedlines';
 import type { ProjectCadExchange } from './projectCadExchange';
 import type { CanonicalCalculationReport } from './canonicalCalculationReport';
+import type { ProfessionalWorkResolution } from './professionalWorkResolution';
 
 export interface ReviewPackagePayload {
   manifest: PermitManifest;
@@ -40,6 +41,7 @@ export interface ReviewSubmission extends Omit<VerificationEvidence, 'issuerRole
   designFingerprint: string;
   pdfBase64: string;
   redlines: ReviewRedline[];
+  structuralResolutions: ProfessionalWorkResolution[];
 }
 
 export interface ReviewerExchangeResult {

@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { CheckCircle2, Clipboard, ExternalLink, FileCheck2, RefreshCw, Send, ShieldCheck, TriangleAlert } from 'lucide-react';
+import { CheckCircle2, Clipboard, Download, ExternalLink, FileCheck2, RefreshCw, Send, ShieldCheck, TriangleAlert } from 'lucide-react';
 import type { CanonicalReviewIssue } from '../../services/canonicalReviewIssue';
 import { getOwnerExchange, publishReviewExchange, reviewPdfFile } from '../../services/reviewExchange';
 import { saveReviewEvidenceFile } from '../../services/reviewEvidenceStorage';
 import { createProfessionalReviewCycle, currentResolution, unansweredRequiredRedlines } from '../../services/reviewRedlines';
 import type { ProfessionalReviewCycle, ReviewExchangePublication, ReviewRedlineResolution, VerificationEvidence } from '../../types';
+import { downloadProfessionalResolutionRecord } from '../../services/professionalWorkResolution';
 
 interface CanonicalReviewPanelProps {
   issue: CanonicalReviewIssue;
@@ -25,6 +26,7 @@ export function CanonicalReviewPanel({ issue, publication, reviewCycles, verific
   const currentPublication = publication?.designFingerprint === fingerprint ? publication : null;
   const acceptedReview = verificationEvidence.find((item) => item.kind === 'sealed-structural-review' && item.decision === 'accepted' && item.designFingerprint === fingerprint);
   const currentChangeRequest = reviewCycles.find((cycle) => cycle.sourceDesignFingerprint === fingerprint && cycle.decision === 'changes-requested');
+  const acceptedCycle = reviewCycles.find((cycle) => cycle.sourceDesignFingerprint === fingerprint && cycle.decision === 'accepted');
   const unanswered = unansweredRequiredRedlines(reviewCycles);
 
   const publish = async () => {
@@ -74,7 +76,7 @@ export function CanonicalReviewPanel({ issue, publication, reviewCycles, verific
       <ReviewStep number="3" label="Import sealed decision" complete={Boolean(acceptedReview)} />
     </ol>
 
-    {acceptedReview ? <div className="mt-4 flex items-start gap-3 rounded-xl border border-emerald-300 bg-emerald-50 p-4 text-emerald-950"><CheckCircle2 size={20} className="mt-0.5 shrink-0" /><div><strong className="text-sm">Accepted review recorded for this exact revision</strong><p className="mt-1 text-xs leading-5">{acceptedReview.issuerName} · {acceptedReview.issuerRole} {acceptedReview.licenseNumber || ''} · recorded {new Date(acceptedReview.recordedAt).toLocaleDateString()}. This records professional evidence; municipal acceptance and required field reviews remain separate.</p></div></div>
+    {acceptedReview ? <div className="mt-4 rounded-xl border border-emerald-300 bg-emerald-50 p-4 text-emerald-950"><div className="flex items-start gap-3"><CheckCircle2 size={20} className="mt-0.5 shrink-0" /><div className="flex-1"><strong className="text-sm">Accepted review recorded for this exact revision</strong><p className="mt-1 text-xs leading-5">{acceptedReview.issuerName} · {acceptedReview.issuerRole} {acceptedReview.licenseNumber || ''} · recorded {new Date(acceptedReview.recordedAt).toLocaleDateString()}. {acceptedCycle?.structuralResolutions?.length || 0} structured member, foundation, stair, and connection work package(s) accompany the sealed PDF. Municipal acceptance and required field reviews remain separate.</p>{acceptedCycle && (acceptedCycle.structuralResolutions || []).length > 0 && <button type="button" onClick={() => downloadProfessionalResolutionRecord(acceptedCycle)} className="mt-3 flex min-h-9 items-center gap-2 rounded-lg border border-emerald-300 bg-white px-3 text-xs font-bold text-emerald-900"><Download size={14} /> Download professional resolution record</button>}</div></div></div>
       : currentChangeRequest ? <div className="mt-4 flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-950"><TriangleAlert size={20} className="mt-0.5 shrink-0" /><div><strong className="text-sm">Changes requested for this revision</strong><p className="mt-1 text-xs leading-5">Respond to every required sheet redline below, update the model where necessary, regenerate framing, and publish a new fingerprint for review.</p></div></div>
         : null}
 

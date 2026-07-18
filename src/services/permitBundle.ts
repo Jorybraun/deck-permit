@@ -7,6 +7,7 @@ import type { StoredEvidenceFile } from './projectRepository';
 import { assessVerificationEvidence } from './verificationEvidence';
 import { sha256Blob, sha256Bytes } from './fileDigest';
 import { buildReviewResponseLog } from './reviewRedlines';
+import { buildProfessionalResolutionRecord } from './professionalWorkResolution';
 
 export const PERMIT_BUNDLE_SCHEMA = 'deck-permit-bundle/v3' as const;
 export const REQUIRED_PERMIT_SHEET_IDS: PlanSheet['id'][] = ['cover', 'existing-conditions', 'site', 'deck-plan', 'foundations', 'framing', 'elevations', 'sections', 'details', 'calculations'];
@@ -52,6 +53,7 @@ export async function buildPermitBundle(input: PermitBundleInput): Promise<Permi
     [`04-records/drawing-issue-register-${input.manifest.designFingerprint}.json`]: new TextEncoder().encode(JSON.stringify({ schema: 'deck-permit-drawing-issue-register/v1', currentIssueId: input.manifest.issueId, issues: input.drawingIssueHistory || [] }, null, 2)),
     ...evidenceFiles,
   };
+  Object.assign(files, buildProfessionalResolutionEntries(input.professionalReviewCycles || []));
   const packageIndexPath = `04-records/package-index-${input.manifest.designFingerprint}.json`;
   files[packageIndexPath] = new TextEncoder().encode(await buildPackageIndex(files, input));
   const bytes = await new Promise<Uint8Array>((resolve, reject) => zip(files, { level: 6 }, (error, result) => error ? reject(error) : resolve(result)));
@@ -161,7 +163,7 @@ export function buildBundleReadme(input: PermitBundleInput): string {
     '01-application/ — official Sidney prefill plus any signed application evidence',
     '02-drawings/ — coordinated ten-sheet 11×17 vector PDF (PDF paths and searchable text; no sheet rasterization)',
     '03-professional-and-site-evidence/ — locally stored survey, field, engineering, and municipal PDFs',
-    '04-records/ — submission manifest, drawing issue register, design-basis report, and professional redline response log',
+    '04-records/ — submission manifest, drawing issue register, design-basis report, professional redline response log, and revision-bound structural resolution records',
     '05-rejected-or-stale-evidence/ — evidence retained for audit but not valid for the current submission state',
     '',
     'OWNER ACTION REQUIRED',
@@ -176,6 +178,13 @@ export function buildBundleReadme(input: PermitBundleInput): string {
     'Town of Sidney Development Services',
     'developmentservices@sidney.ca · 250-656-1725',
   ].join('\n');
+}
+
+export function buildProfessionalResolutionEntries(cycles: ProfessionalReviewCycle[]): Record<string, Uint8Array> {
+  return Object.fromEntries(cycles.filter((cycle) => (cycle.structuralResolutions || []).length > 0).map((cycle) => [
+    `04-records/professional-resolution-${cycle.sourceDesignFingerprint}-${safeFileName(cycle.id)}.json`,
+    new TextEncoder().encode(buildProfessionalResolutionRecord(cycle)),
+  ]));
 }
 
 export function safeFileName(value: string): string {

@@ -17,7 +17,7 @@ describe('submission manifest evidence assessment', () => {
       evidence: [evidence], sources: [],
       professionalReviewCycles: [{
         id: 'rvw-1', exchangeProjectId: 'rvw-1', sourceDesignFingerprint: 'DP-OLD00000', decision: 'changes-requested', issuerName: 'Engineer', issuerRole: 'engineer', licenseNumber: '123',
-        importedAt: new Date().toISOString(), evidenceId: 'sealed-1', redlines: [{ id: 'redline_12345678', designFingerprint: 'DP-OLD00000', sheetId: 'framing', category: 'structure', severity: 'required', title: 'Ledger detail', comment: 'Clarify the ledger connection.', anchor: { xPercent: 50, yPercent: 50 }, createdAt: new Date().toISOString() }], resolutions: [],
+        importedAt: new Date().toISOString(), evidenceId: 'sealed-1', redlines: [{ id: 'redline_12345678', designFingerprint: 'DP-OLD00000', sheetId: 'framing', category: 'structure', severity: 'required', title: 'Ledger detail', comment: 'Clarify the ledger connection.', anchor: { xPercent: 50, yPercent: 50 }, createdAt: new Date().toISOString() }], resolutions: [], structuralResolutions: [],
       }],
     }));
     expect(result.evidenceLedger[0].currentStateAssessment).toEqual({ acceptedForCurrentState: false, reason: 'The sealed review applies to a different design revision.' });
