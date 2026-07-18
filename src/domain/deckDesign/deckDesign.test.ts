@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addPlatform, addStair, assessDesign, createEmptyDesign, findHighestPlatformBelowPoint, insertPlatformVertex, movePlatform, movePlatformLayer, moveStair, nearestPlatformEdgePoint, rectangularBoundary, removePlatform, removeStair, resizeStairSide, rotatePlatform, setPlatformEdgeLength, setPlatformElevation, setPlatformEdgeRole, setPlatformPurpose, setStairConstruction, suggestPointToPointStair, suggestStairAtEdge, suggestStairBetweenEdges } from './deckDesign';
+import { addPlatform, addStair, assessDesign, connectStairLanding, createEmptyDesign, findHighestPlatformBelowPoint, insertPlatformVertex, movePlatform, movePlatformLayer, moveStair, nearestPlatformEdgePoint, rectangularBoundary, removePlatform, removeStair, resizeStairSide, rotatePlatform, setPlatformEdgeLength, setPlatformElevation, setPlatformEdgeRole, setPlatformPurpose, setStairConstruction, stairLandingCandidates, suggestedPlatformElevationForBoundary, suggestPointToPointStair, suggestStairAtEdge, suggestStairBetweenEdges } from './deckDesign';
 
 describe('multi-platform deck design contract', () => {
   it('owns arbitrary connected platform geometry without shape categories', () => {
@@ -112,6 +112,42 @@ describe('multi-platform deck design contract', () => {
     expect(design.stairs[0]).toMatchObject({ widthMm: 1200, landingDepthMm: 1200, stringerCount: 4, handrailSides: 'left' });
   });
 
+  it('recognizes a new platform drawn at a yard stair landing and hosts Point B', () => {
+    let design = addPlatform(createEmptyDesign(), { name: 'Upper deck', boundary: rectangularBoundary(0, 0, 4000, 3000), elevationMm: 600 });
+    design = addStair(design, suggestPointToPointStair(design, 'P1', 'P1-E2', { kind: 'terrain', elevationMm: 0 }, [4000, 1500], [4600, 1500]));
+    const landingBoundary = rectangularBoundary(4600, 0, 3000, 3000);
+
+    expect(suggestedPlatformElevationForBoundary(design, landingBoundary)).toBe(0);
+    design = addPlatform(design, { name: 'Lower platform', purpose: 'landing', boundary: landingBoundary, elevationMm: 0 });
+
+    expect(design.stairs[0]).toMatchObject({ to: { kind: 'platform', platformId: 'P2' }, toEdgeId: 'P2-E4', endMm: [4600, 1500] });
+    expect(design.platforms[1].edges[3].role).toBe('stair');
+  });
+
+  it('explains an aligned same-level platform and connects it once its elevation is lowered', () => {
+    let design = addPlatform(createEmptyDesign(), { name: 'Upper deck', boundary: rectangularBoundary(0, 0, 4000, 3000), elevationMm: 600 });
+    design = addStair(design, suggestPointToPointStair(design, 'P1', 'P1-E2', { kind: 'terrain', elevationMm: 0 }, [4000, 1500], [4600, 1500]));
+    design = addPlatform(design, { name: 'Lower platform', boundary: rectangularBoundary(4600, 0, 3000, 3000), elevationMm: 600 });
+
+    expect(design.stairs[0].to).toEqual({ kind: 'terrain', elevationMm: 0 });
+    expect(assessDesign(design).warnings).toContainEqual({ objectId: 'ST1', message: expect.stringContaining('both platforms are at 600 mm') });
+
+    design = setPlatformElevation(design, 'P2', 0);
+    expect(design.stairs[0]).toMatchObject({ to: { kind: 'platform', platformId: 'P2' }, toEdgeId: 'P2-E4' });
+  });
+
+  it('lets the homeowner explicitly replace a grade endpoint with an aligned landing platform', () => {
+    let design = addPlatform(createEmptyDesign(), { name: 'Upper deck', boundary: rectangularBoundary(0, 0, 4000, 3000), elevationMm: 900 });
+    design = addPlatform(design, { name: 'Landing pad', boundary: rectangularBoundary(5200, 0, 2400, 3000), elevationMm: 450 });
+    design = addStair(design, suggestPointToPointStair(design, 'P1', 'P1-E2', { kind: 'terrain', elevationMm: 0 }, [4000, 1500], [5200, 1500]));
+
+    expect(stairLandingCandidates(design, 'ST1')).toContainEqual(expect.objectContaining({ platformId: 'P2', edgeId: 'P2-E4', pointMm: [5200, 1500] }));
+    design = connectStairLanding(design, 'ST1', 'P2');
+
+    expect(design.stairs[0]).toMatchObject({ to: { kind: 'platform', platformId: 'P2' }, toEdgeId: 'P2-E4', endMm: [5200, 1500] });
+    expect(design.platforms[1].edges[3].role).toBe('stair');
+  });
+
   it('widens and rotates a yard stair as one assembly', () => {
     let design = addPlatform(createEmptyDesign(), { boundary: rectangularBoundary(0, 0, 4000, 3000), elevationMm: 600 });
     design = addStair(design, suggestPointToPointStair(design, 'P1', 'P1-E2', { kind: 'terrain', elevationMm: 0 }, [4000, 1500], [4600, 1500]));
@@ -145,7 +181,7 @@ describe('multi-platform deck design contract', () => {
 
   it('connects chosen platform edges with a requested legal riser count', () => {
     let design = addPlatform(createEmptyDesign(), { name: 'Upper', boundary: rectangularBoundary(0, 0, 4000, 3000), elevationMm: 900 });
-    design = addPlatform(design, { name: 'Lower', boundary: rectangularBoundary(5000, 0, 4000, 3000), elevationMm: 450 });
+    design = addPlatform(design, { name: 'Lower', boundary: rectangularBoundary(4560, 0, 4000, 3000), elevationMm: 450 });
     const input = suggestStairBetweenEdges(design.platforms[0], 'P1-E2', design.platforms[1], 'P2-E4', 3);
     design = addStair(design, input);
     expect(design.stairs[0]).toMatchObject({ fromEdgeId: 'P1-E2', toEdgeId: 'P2-E4', riserCount: 3, riserHeightMm: 150, directionDeg: 0 });
@@ -199,8 +235,28 @@ describe('multi-platform deck design contract', () => {
     design = movePlatform(design, 'P2', 1000, 250);
     expect(design.stairs[0].startMm).toEqual([4000, 2000]);
     expect(design.stairs[0].endMm).toEqual([5821, 1750]);
+    expect(design.stairs[0].totalRunMm).toBe(Math.round(Math.hypot(1821, -250)));
+    expect(design.stairs[0].treadDepthMm).toBe(Math.round(design.stairs[0].totalRunMm / 2));
     expect(design.stairs[0].fromEdgeT).toBeCloseTo(.5);
     expect(design.stairs[0].toEdgeT).toBeCloseTo(.5);
+    expect(assessDesign(design).errors.some((issue) => issue.objectId === 'ST1' && issue.message.includes('allows at most'))).toBe(true);
+  });
+
+  it('keeps a valid hosted stair run and tread geometry synchronized after a small landing move', () => {
+    let design = addPlatform(createEmptyDesign(), { name: 'Upper', boundary: rectangularBoundary(0, 0, 4000, 3000), elevationMm: 900 });
+    design = addPlatform(design, { name: 'Lower landing', purpose: 'landing', boundary: rectangularBoundary(4710, 0, 3000, 3000), elevationMm: 450 });
+    design = addStair(design, suggestPointToPointStair(design, 'P1', 'P1-E2', { kind: 'platform', platformId: 'P2' }, [4000, 1500], [4710, 1500], 'P2-E4'));
+    design = movePlatform(design, 'P2', -40, 0);
+
+    expect(design.stairs[0]).toMatchObject({ startMm: [4000, 1500], endMm: [4670, 1500], totalRunMm: 670, treadDepthMm: 335 });
+    expect(assessDesign(design).errors.filter((issue) => issue.objectId === 'ST1')).toEqual([]);
+  });
+
+  it('rejects a hosted stair opening that clips a platform corner', () => {
+    let design = addPlatform(createEmptyDesign(), { boundary: rectangularBoundary(0, 0, 4000, 3000), elevationMm: 600 });
+    design = addStair(design, suggestPointToPointStair(design, 'P1', 'P1-E2', { kind: 'terrain', elevationMm: 0 }, [4000, 350], [4600, 350]));
+
+    expect(assessDesign(design).errors).toContainEqual({ objectId: 'ST1', message: expect.stringContaining('too close to a platform corner') });
   });
 
   it('moves a stair-to-grade assembly with its anchored platform node', () => {

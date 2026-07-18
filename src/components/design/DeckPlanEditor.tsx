@@ -1,6 +1,6 @@
 import { Check, ChevronDown, CircleDollarSign, FlipHorizontal2, Footprints, Hand, Magnet, Map, Minus, MousePointer2, Pencil, Plus, Redo2, RotateCcw, RotateCw, Ruler, Scan, Undo2, X, ZoomIn, ZoomOut } from 'lucide-react';
 import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from 'react';
-import { boundaryCenter, boundaryFromPoints, findHighestPlatformBelowPoint, nearestPlatformEdgePoint, proposePointToPointStairGeometry, rotateBoundary, stairDepartureDirection } from '../../domain/deckDesign';
+import { boundaryCenter, boundaryFromPoints, findHighestPlatformBelowPoint, nearestPlatformEdgePoint, proposePointToPointStairGeometry, rotateBoundary, stairDepartureDirection, suggestedPlatformElevationForBoundary } from '../../domain/deckDesign';
 import type { AddPlatformInput, ClosedBoundary, DeckDesign, DeckPlatform, DeckStair, PointMm } from '../../domain/deckDesign';
 import { projectPropertyToLocal, terrainElevationAt, type LocalPropertyGeometry, type SiteModel } from '../../domain/siteModel';
 import type { Property } from '../../types';
@@ -138,7 +138,8 @@ export function DeckPlanEditor({ design, site, property, canUndo, canRedo, onAdd
   const finishDrawing = () => {
     if (draft.length < 3) { setMessage('Place at least three corners before finishing.'); return; }
     try {
-      onAddPlatform({ boundary: boundaryFromPoints(draft, `D${design.platforms.length + 1}-V`), elevationMm: defaultElevation(site, draft), houseEdgeIndex: houseEdgeIndex(draft) });
+      const boundary = boundaryFromPoints(draft, `D${design.platforms.length + 1}-V`);
+      onAddPlatform({ boundary, elevationMm: defaultElevation(design, site, boundary), houseEdgeIndex: houseEdgeIndex(draft) });
       setDraft([]); setDraftFuture([]); setHoverPoint(null); setMode('select'); setMessage('Platform added. Pull an edge, drag a corner, or type an exact edge length.');
     } catch (reason) { setMessage(reason instanceof Error ? reason.message : 'The platform boundary is invalid.'); }
   };
@@ -358,7 +359,7 @@ export function DeckPlanEditor({ design, site, property, canUndo, canRedo, onAdd
 
   const displayedBoundary = (platform: DeckPlatform) => preview?.platformId === platform.id ? preview.boundary : platform.boundary;
   const cancelDrawing = () => { setDraft([]); setDraftFuture([]); setHoverPoint(null); setStairSource(null); setDragRulers(null); setMode('select'); setMessage(''); };
-  const beginDrawing = () => { setMode('draw'); setDraft([]); setDraftFuture([]); setHoverPoint(null); setMessage('Click the first corner. Backspace or Undo removes an accidental corner.'); setTimeout(() => svgRef.current?.focus(), 0); };
+  const beginDrawing = () => { setMode('draw'); setDraft([]); setDraftFuture([]); setHoverPoint(null); setMessage('Click the first corner anywhere—even over an existing platform. Backspace or Undo removes an accidental corner.'); setTimeout(() => svgRef.current?.focus(), 0); };
   const beginInsert = () => { setMode('insert'); setStairSource(null); setMessage('Click anywhere on a platform edge to insert a new shape corner.'); };
   const beginRemove = () => { setMode('remove'); setStairSource(null); setMessage('Click a red corner to remove it. A platform must keep at least three corners.'); };
   const beginStairs = () => { fitView('detail'); setMode('stairs'); setStairSource(null); setMessage('Step 1: click the exact deck-edge point where the stair opening begins.'); };
@@ -457,28 +458,31 @@ export function DeckPlanEditor({ design, site, property, canUndo, canRedo, onAdd
         </defs>
         <rect data-background="true" width={VIEW_WIDTH} height={VIEW_HEIGHT} fill="url(#architect-grid)" />
         <SiteContext site={site} geometry={propertyGeometry} transform={transform} viewMode={viewMode} />
-        {design.platforms.map((platform) => <PlatformShape key={platform.id} platform={platform} boundary={displayedBoundary(platform)} selected={selectedPlatform?.id === platform.id} detectedLanding={detectedLanding?.id === platform.id} transform={transform} interactionMode={mode} stairSourceEdgeId={stairSource?.platformId === platform.id ? stairSource.edgeId : null} onSelect={(event) => connectStairPlatform(event, platform)} onRotate={(event) => beginPlatformRotate(event, platform)} onVertex={(event, index) => handleVertexPointerDown(event, platform, index)} onEdge={(event, index) => handleEdgePointerDown(event, platform, index)} />)}
-        {design.stairs.map((stair) => {
-          const visibleStair = stairPreview?.stairId === stair.id ? { ...stair, widthMm: stairPreview.widthMm, directionDeg: stairPreview.directionDeg, startMm: stairPreview.startMm, endMm: stairPreview.endMm } : stair;
-          const sourcePlatformId = stair.from.kind === 'platform' ? stair.from.platformId : null;
-          const sourcePlatform = sourcePlatformId ? design.platforms.find((platform) => platform.id === sourcePlatformId) : null;
-          const sourceEdgeIndex = sourcePlatform?.edges.findIndex((edge) => edge.id === stair.fromEdgeId) ?? -1;
-          const sourceStart = sourcePlatform && sourceEdgeIndex >= 0 ? sourcePlatform.boundary.vertices[sourceEdgeIndex] : null;
-          const sourceEnd = sourcePlatform && sourceEdgeIndex >= 0 ? sourcePlatform.boundary.vertices[(sourceEdgeIndex + 1) % sourcePlatform.boundary.vertices.length] : null;
-          const departureEdgeAngleDeg = sourceStart && sourceEnd ? Math.atan2(sourceEnd.yMm - sourceStart.yMm, sourceEnd.xMm - sourceStart.xMm) * 180 / Math.PI : null;
-          return <StairShape key={stair.id} stair={visibleStair} departureEdgeAngleDeg={departureEdgeAngleDeg} transform={transform} selected={design.selectedObjectId === stair.id} onSelect={() => onSelectObject(stair.id)} onBeginMove={(event) => beginStairDrag(event, stair, 'move')} onBeginWidthLeft={(event) => beginStairDrag(event, stair, 'width-left')} onBeginWidthRight={(event) => beginStairDrag(event, stair, 'width-right')} onBeginDirection={(event) => beginStairDrag(event, stair, 'direction')} />;
-        })}
+        <g data-testid="existing-design-layers" pointerEvents={existingLayersPointerEvents(mode)}>
+          {design.platforms.map((platform) => <PlatformShape key={platform.id} platform={platform} boundary={displayedBoundary(platform)} selected={selectedPlatform?.id === platform.id} detectedLanding={detectedLanding?.id === platform.id} transform={transform} interactionMode={mode} stairSourceEdgeId={stairSource?.platformId === platform.id ? stairSource.edgeId : null} onSelect={(event) => connectStairPlatform(event, platform)} onRotate={(event) => beginPlatformRotate(event, platform)} onVertex={(event, index) => handleVertexPointerDown(event, platform, index)} onEdge={(event, index) => handleEdgePointerDown(event, platform, index)} />)}
+          {design.stairs.map((stair) => {
+            const visibleStair = stairPreview?.stairId === stair.id ? { ...stair, widthMm: stairPreview.widthMm, directionDeg: stairPreview.directionDeg, startMm: stairPreview.startMm, endMm: stairPreview.endMm } : stair;
+            const sourcePlatformId = stair.from.kind === 'platform' ? stair.from.platformId : null;
+            const sourcePlatform = sourcePlatformId ? design.platforms.find((platform) => platform.id === sourcePlatformId) : null;
+            const sourceEdgeIndex = sourcePlatform?.edges.findIndex((edge) => edge.id === stair.fromEdgeId) ?? -1;
+            const sourceStart = sourcePlatform && sourceEdgeIndex >= 0 ? sourcePlatform.boundary.vertices[sourceEdgeIndex] : null;
+            const sourceEnd = sourcePlatform && sourceEdgeIndex >= 0 ? sourcePlatform.boundary.vertices[(sourceEdgeIndex + 1) % sourcePlatform.boundary.vertices.length] : null;
+            const departureEdgeAngleDeg = sourceStart && sourceEnd ? Math.atan2(sourceEnd.yMm - sourceStart.yMm, sourceEnd.xMm - sourceStart.xMm) * 180 / Math.PI : null;
+            return <StairShape key={stair.id} stair={visibleStair} departureEdgeAngleDeg={departureEdgeAngleDeg} transform={transform} selected={design.selectedObjectId === stair.id} onSelect={() => onSelectObject(stair.id)} onBeginMove={(event) => beginStairDrag(event, stair, 'move')} onBeginWidthLeft={(event) => beginStairDrag(event, stair, 'width-left')} onBeginWidthRight={(event) => beginStairDrag(event, stair, 'width-right')} onBeginDirection={(event) => beginStairDrag(event, stair, 'direction')} />;
+          })}
+        </g>
         {dragRulers && <SmartRulers result={dragRulers} transform={transform} />}
         {draft.length > 0 && <DraftBoundary points={draft} hoverPoint={hoverPoint} transform={transform} onClose={finishDrawing} />}
         {mode === 'stairs' && stairSource && hoverPoint && <StairDraft startMm={stairSource.pointMm} endMm={hoverPoint} riseMm={stairPreviewRiseMm} directionDeg={stairPreviewDirectionDeg} targetLabel={detectedLanding ? `${detectedLanding.name} · EL. ${detectedLanding.elevationMm} mm` : `LOCAL GRADE · EL. ${hoverGrade?.elevationMm ?? site.terrain.datum.elevationMm} mm${hoverGrade?.method === 'interpolated' ? ' · interpolated' : ''}`} transform={transform} />}
       </svg>
       {propertyGeometry && (propertyGeometry.alignmentStatus === 'provisional' ? <button type="button" onClick={onOpenProperty} className="absolute left-4 top-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-left text-[10px] font-bold uppercase tracking-[.08em] text-amber-900 shadow-sm">Property visible · alignment provisional<br /><span className="text-[9px] underline">Choose the correct house edge →</span></button> : <div className="absolute left-4 top-4 rounded-md border border-emerald-300 bg-white/95 px-3 py-2 text-[10px] font-bold uppercase tracking-[.08em] text-emerald-800 shadow-sm">Property visible · {propertyGeometry.alignmentStatus === 'field-measured' ? 'field-measured wall' : 'homeowner-selected house edge'}</div>)}
       {propertyGeometry && <div className="absolute right-4 top-4 flex overflow-hidden rounded-lg border border-slate-300 bg-white/95 shadow-lg"><button type="button" onClick={onRotateProperty} className="flex min-h-10 items-center gap-1.5 border-r border-slate-200 px-3 text-[10px] font-bold text-slate-700" title="Use when the municipal house and yard appear on the opposite side"><RotateCw size={14} /> Rotate site 180°</button><button type="button" onClick={onMirrorProperty} className="flex min-h-10 items-center gap-1.5 px-3 text-[10px] font-bold text-slate-700" title="Reverse the start and end of the selected house wall"><FlipHorizontal2 size={14} /> Reverse wall direction</button></div>}
+      {mode === 'draw' && <div role="status" className="pointer-events-none absolute left-1/2 top-4 w-[min(390px,calc(100%-32px))] -translate-x-1/2 rounded-lg border border-emerald-300 bg-white/95 px-4 py-2 text-center shadow-lg"><strong className="block text-[10px] uppercase tracking-[.12em] text-emerald-800">Drawing a new platform layer</strong><span className="mt-0.5 block text-[10px] leading-4 text-slate-600">Place corners anywhere, including over an existing platform. Elevation is set separately.</span></div>}
       {mode === 'stairs' && <section aria-label="Add stairs steps" className="absolute left-1/2 top-4 w-[min(430px,calc(100%-32px))] -translate-x-1/2 rounded-xl border border-emerald-800/20 bg-white/95 p-4 shadow-xl backdrop-blur-sm">
         <div className="flex items-start justify-between gap-3"><div><span className="text-[10px] font-bold uppercase tracking-[.13em] text-emerald-700">{stairSource ? 'Point B · landing' : 'Point A · departure'}</span><strong className="mt-1 block text-sm text-slate-900">{stairSource ? 'Click where the stairs should end' : 'Click where the stairs should begin'}</strong></div><button type="button" onClick={cancelDrawing} aria-label="Cancel adding stairs" className="grid h-8 w-8 shrink-0 place-items-center rounded-md border border-slate-300 text-slate-500"><X size={14} /></button></div>
         {!stairSource ? <p className="mt-2 text-xs leading-5 text-slate-600">Click the exact departure point on a platform edge. This becomes the stair opening in the deck and guard.</p> : <div className="mt-3 grid gap-2">
           <div className="rounded-lg bg-slate-100 px-3 py-2 text-xs text-slate-700"><strong>Point A · {stairSourcePlatform?.name}, edge {stairSourceEdgeIndex + 1}</strong><span className="ml-2 text-slate-500">elevation {stairSourcePlatform?.elevationMm} mm</span></div>
-          <p className="text-xs leading-5 text-slate-600">Click the yard for grade, or click inside a lower platform to use it as a landing. The stair axis stays square to the departure edge so its stringers meet a real header; the agent detects the nearest lower level and anchors Point B.</p>
+          <p className="text-xs leading-5 text-slate-600">Click the yard for grade, or click inside a lower platform to use it as a landing. The stair axis stays square to the departure edge so its stringers meet a real header; the geometry engine detects the nearest lower level and anchors Point B.</p>
           {detectedLanding && <p className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-[10px] font-bold text-emerald-950">Detected below cursor: {detectedLanding.name} · elevation {detectedLanding.elevationMm} mm · rise {stairPreviewRiseMm} mm</p>}
           {stairRiseToGradeMm >= 125 && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-[10px] font-semibold text-emerald-950">Elevation change: {stairRiseToGradeMm} mm. You do not need to place Point B at a code-perfect distance.</p>}
         </div>}
@@ -676,6 +680,9 @@ function StairShape({ stair, departureEdgeAngleDeg, transform, selected, onSelec
 
 function normalizePlanDegrees(value: number): number { return ((value % 360) + 360) % 360; }
 
+/** Existing geometry stays visible as reference while a new platform owns every canvas click. */
+export function existingLayersPointerEvents(mode: EditorMode): 'none' | undefined { return mode === 'draw' ? 'none' : undefined; }
+
 function StairDraft({ startMm, endMm, riseMm, directionDeg, targetLabel, transform }: { startMm: PointMm; endMm: PointMm; riseMm: number; directionDeg: number; targetLabel: string; transform: Transform }) {
   const startX = transform.x(startMm[0]); const startY = transform.y(startMm[1]);
   const runMm = Math.round(distance(startMm, endMm));
@@ -728,10 +735,12 @@ function ToolButton({ active, label, icon, onClick }: { active: boolean; label: 
 }
 
 function houseEdgeIndex(points: PointMm[]): number | undefined { const index = points.findIndex((point, i) => { const next = points[(i + 1) % points.length]; return point[1] === 0 && next?.[1] === 0; }); return index >= 0 ? index : undefined; }
-function defaultElevation(site: SiteModel, boundary: PointMm[]): number {
+function defaultElevation(design: DeckDesign, site: SiteModel, boundary: ClosedBoundary): number {
+  const stairLandingElevation = suggestedPlatformElevationForBoundary(design, boundary);
+  if (stairLandingElevation !== null) return stairLandingElevation;
   const door = site.designWall.openings.find((opening) => opening.kind === 'door');
   if (door) return Math.max(site.terrain.datum.elevationMm + 150, door.sillHeightMm - 75);
-  const center: PointMm = boundary.length ? [boundary.reduce((sum, point) => sum + point[0], 0) / boundary.length, boundary.reduce((sum, point) => sum + point[1], 0) / boundary.length] : [0, 0];
+  const center: PointMm = boundary.vertices.length ? [boundary.vertices.reduce((sum, point) => sum + point.xMm, 0) / boundary.vertices.length, boundary.vertices.reduce((sum, point) => sum + point.yMm, 0) / boundary.vertices.length] : [0, 0];
   return terrainElevationAt(site.terrain, center).elevationMm + 450;
 }
 function currentInstruction(count: number): string { return count < 3 ? `Place another corner. The line snaps every ${ANGLE_SNAP_DEG}°; hold Alt for a free angle.` : 'Click the first green point or choose Finish to close the platform.'; }

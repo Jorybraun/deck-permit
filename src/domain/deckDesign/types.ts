@@ -138,3 +138,12 @@ export interface PointToPointStairGeometry {
   treadCount?: number;
   treadDepthMm?: number;
 }
+
+export interface StairLandingCandidate {
+  platformId: string;
+  platformName: string;
+  elevationMm: number;
+  edgeId: string;
+  pointMm: PointMm;
+  distanceFromCurrentEndMm: number;
+}

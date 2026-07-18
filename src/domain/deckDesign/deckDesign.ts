@@ -1,5 +1,5 @@
 import { assessClosedBoundary, boundariesOverlap } from '../cad/makerCadKernel';
-import type { AddPlatformInput, AddStairInput, BoundaryVertex, ClosedBoundary, DeckDesign, DeckPlatform, DeckStair, DesignAssessment, PlatformEdge, PointMm, PointToPointStairGeometry, VerticalEndpoint } from './types';
+import type { AddPlatformInput, AddStairInput, BoundaryVertex, ClosedBoundary, DeckDesign, DeckPlatform, DeckStair, DesignAssessment, PlatformEdge, PointMm, PointToPointStairGeometry, StairLandingCandidate, VerticalEndpoint } from './types';
 
 const DEFAULT_FINISH = {
   decking: 'Pressure-treated wood decking',
@@ -49,7 +49,8 @@ export function addPlatform(design: DeckDesign, input: AddPlatformInput, now = n
     framingIntent: { ...DEFAULT_FRAMING_INTENT },
     finish: { ...DEFAULT_FINISH },
   };
-  return touch({ ...design, platforms: [...design.platforms, platform], selectedObjectId: id }, now);
+  const nextDesign = { ...design, platforms: [...design.platforms, platform], selectedObjectId: id };
+  return touch(rehostTerrainStairsToPlatform(nextDesign, id), now);
 }
 
 export function updatePlatformBoundary(design: DeckDesign, platformId: string, boundary: ClosedBoundary, now = new Date().toISOString()): DeckDesign {
@@ -62,11 +63,12 @@ export function updatePlatformBoundary(design: DeckDesign, platformId: string, b
     boundary: cloneBoundary(boundary, platform.id),
     edges: reconcileEdges(platform.edges, boundary, platform.id),
   };
-  return touch({
+  const nextDesign = {
     ...design,
     platforms: design.platforms.map((candidate) => candidate.id === platformId ? nextPlatform : candidate),
     stairs: design.stairs.map((stair) => reanchorStairToPlatform(stair, platform, nextPlatform)),
-  }, now);
+  };
+  return touch(rehostTerrainStairsToPlatform(nextDesign, platformId), now);
 }
 
 export function movePlatform(design: DeckDesign, platformId: string, deltaXmm: number, deltaYmm: number, now = new Date().toISOString()): DeckDesign {
@@ -79,11 +81,12 @@ export function movePlatform(design: DeckDesign, platformId: string, deltaXmm: n
       vertices: platform.boundary.vertices.map((vertex) => ({ ...vertex, xMm: integer(vertex.xMm + deltaXmm), yMm: integer(vertex.yMm + deltaYmm) })),
     },
   };
-  return touch({
+  const nextDesign = {
     ...design,
     platforms: design.platforms.map((candidate) => candidate.id === platformId ? nextPlatform : candidate),
     stairs: design.stairs.map((stair) => reanchorStairToPlatform(stair, platform, nextPlatform)),
-  }, now);
+  };
+  return touch(rehostTerrainStairsToPlatform(nextDesign, platformId), now);
 }
 
 /** Rotates a platform around its geometric centre while keeping connected stair endpoints attached. */
@@ -97,11 +100,12 @@ export function rotatePlatform(design: DeckDesign, platformId: string, deltaDeg:
   const assessment = assessClosedBoundary(boundary);
   if (assessment.errors.length) throw new DeckDesignError('invalid-boundary', assessment.errors.join(' '));
   const stairs = design.stairs.map((stair) => rotateAttachedStair(stair, platformId, pivot, deltaDeg));
-  return touch({
+  const nextDesign = {
     ...design,
     platforms: design.platforms.map((candidate) => candidate.id === platformId ? { ...candidate, boundary } : candidate),
     stairs,
-  }, now);
+  };
+  return touch(rehostTerrainStairsToPlatform(nextDesign, platformId), now);
 }
 
 export function boundaryCenter(boundary: ClosedBoundary): PointMm {
@@ -122,7 +126,7 @@ export function setPlatformElevation(design: DeckDesign, platformId: string, ele
   const platforms = design.platforms.map((platform) => platform.id === platformId ? { ...platform, elevationMm: integer(elevationMm) } : platform);
   const nextDesign = { ...design, platforms };
   const stairs = design.stairs.map((stair) => endpointUsesPlatform(stair.from, platformId) || endpointUsesPlatform(stair.to, platformId) ? recalculateStairElevation(nextDesign, stair) : stair);
-  return touch({ ...nextDesign, stairs }, now);
+  return touch(rehostTerrainStairsToPlatform({ ...nextDesign, stairs }, platformId), now);
 }
 
 export function movePlatformLayer(design: DeckDesign, platformId: string, delta: -1 | 1, now = new Date().toISOString()): DeckDesign {
@@ -153,6 +157,53 @@ export function findHighestPlatformBelowPoint(design: DeckDesign, sourcePlatform
   return design.platforms
     .filter((platform) => platform.id !== sourcePlatformId && platform.elevationMm < source.elevationMm && pointInBoundary(pointMm, platform.boundary))
     .sort((first, second) => second.elevationMm - first.elevationMm)[0] ?? null;
+}
+
+/** Suggests the level carried by a terrain-ended stair when a new platform is drawn at Point B. */
+export function suggestedPlatformElevationForBoundary(design: DeckDesign, boundary: ClosedBoundary): number | null {
+  const matches = design.stairs.flatMap((stair) => {
+    if (stair.from.kind !== 'platform' || stair.to.kind !== 'terrain') return [];
+    const match = terrainStairLandingIntersection(stair, boundary);
+    return match ? [{ elevationMm: stair.to.elevationMm, distanceMm: match.distanceMm }] : [];
+  }).sort((first, second) => first.distanceMm - second.distanceMm);
+  return matches[0]?.elevationMm ?? null;
+}
+
+/** Lower platforms whose edge is reached by the current stair axis near Point B. */
+export function stairLandingCandidates(design: DeckDesign, stairId: string): StairLandingCandidate[] {
+  const stair = design.stairs.find((candidate) => candidate.id === stairId);
+  if (!stair) throw new DeckDesignError('object-not-found', `Stair ${stairId} does not exist.`);
+  if (stair.from.kind !== 'platform') return [];
+  const source = platformForEndpoint(design, stair.from);
+  return design.platforms.flatMap((platform) => {
+    if (platform.id === source.id || source.elevationMm - platform.elevationMm < 125) return [];
+    const match = stairLandingIntersection(stair, platform.boundary);
+    const edgeId = match ? platform.edges[match.edgeIndex]?.id : null;
+    if (!match || !edgeId) return [];
+    return [{ platformId: platform.id, platformName: platform.name, elevationMm: platform.elevationMm, edgeId, pointMm: match.pointMm, distanceFromCurrentEndMm: match.distanceMm }];
+  }).sort((first, second) => first.distanceFromCurrentEndMm - second.distanceFromCurrentEndMm || second.elevationMm - first.elevationMm);
+}
+
+/** Explicitly hosts Point B on a selected lower platform and recalculates the flight. */
+export function connectStairLanding(design: DeckDesign, stairId: string, platformId: string, now = new Date().toISOString()): DeckDesign {
+  const stair = design.stairs.find((candidate) => candidate.id === stairId);
+  if (!stair) throw new DeckDesignError('object-not-found', `Stair ${stairId} does not exist.`);
+  const candidate = stairLandingCandidates(design, stairId).find((item) => item.platformId === platformId);
+  if (!candidate) throw new DeckDesignError('invalid-stair-run', 'The selected lower platform is not reached by this stair axis near Point B. Move the platform or stair, then try again.');
+  const platform = design.platforms.find((item) => item.id === candidate.platformId)!;
+  const hosted = recalculateStairElevation(design, reconcileStairPlan({
+    ...stair,
+    to: { kind: 'platform', platformId: platform.id },
+    toEdgeId: candidate.edgeId,
+    toEdgeT: edgeParameter(platform, candidate.edgeId, candidate.pointMm),
+    endMm: candidate.pointMm,
+  }));
+  return touch({
+    ...design,
+    platforms: design.platforms.map((item) => item.id === platform.id ? { ...item, edges: item.edges.map((edge) => edge.id === candidate.edgeId ? { ...edge, role: 'stair' as const } : edge) } : item),
+    stairs: design.stairs.map((item) => item.id === stair.id ? hosted : item),
+    selectedObjectId: stair.id,
+  }, now);
 }
 
 /** Snaps an interior landing gesture to the nearest usable edge of that platform. */
@@ -311,7 +362,7 @@ export function setStairConstruction(design: DeckDesign, stairId: string, change
     endMm = intersection;
   }
   const toEdgeT = stair.to.kind === 'platform' && stair.toEdgeId ? edgeParameter(platformForEndpoint(design, stair.to), stair.toEdgeId, endMm) : stair.toEdgeT;
-  return touch({ ...design, stairs: design.stairs.map((candidate) => candidate.id === stairId ? { ...candidate, ...changes, directionDeg, endMm, widthMm, landingDepthMm, stringerCount, ...(toEdgeT === undefined ? {} : { toEdgeT }) } : candidate) }, now);
+  return touch({ ...design, stairs: design.stairs.map((candidate) => candidate.id === stairId ? reconcileStairPlan({ ...candidate, ...changes, directionDeg, endMm, widthMm, landingDepthMm, stringerCount, ...(toEdgeT === undefined ? {} : { toEdgeT }) }) : candidate) }, now);
 }
 
 export function addStair(design: DeckDesign, input: AddStairInput, now = new Date().toISOString()): DeckDesign {
@@ -336,6 +387,11 @@ export function addStair(design: DeckDesign, input: AddStairInput, now = new Dat
   const totalRunMm = Math.max(0, riserCount - 1) * treadDepthMm;
   const directionRadians = directionDeg * Math.PI / 180;
   const calculatedEnd: PointMm = [Math.round(input.startMm[0] + Math.cos(directionRadians) * totalRunMm), Math.round(input.startMm[1] + Math.sin(directionRadians) * totalRunMm)];
+  const hostedEnd = input.to.kind === 'platform' && input.toEdgeId && !input.endMm
+    ? stairLineIntersectionWithEdge(input.startMm, directionDeg, platformForEndpoint(design, input.to), input.toEdgeId)
+    : null;
+  if (input.to.kind === 'platform' && input.toEdgeId && !input.endMm && !hostedEnd) throw new DeckDesignError('invalid-stair-run', 'The stair axis does not reach the selected destination edge. Move the landing or choose another edge.');
+  const endMm: PointMm = input.endMm ? [integer(input.endMm[0]), integer(input.endMm[1])] : hostedEnd ?? calculatedEnd;
   const stair: DeckStair = {
     id,
     name: input.name?.trim() || `Stair ${design.stairs.length + 1}`,
@@ -344,9 +400,9 @@ export function addStair(design: DeckDesign, input: AddStairInput, now = new Dat
     ...(input.fromEdgeId ? { fromEdgeId: input.fromEdgeId } : {}),
     ...(input.toEdgeId ? { toEdgeId: input.toEdgeId } : {}),
     ...(input.from.kind === 'platform' && input.fromEdgeId ? { fromEdgeT: edgeParameter(platformForEndpoint(design, input.from), input.fromEdgeId, input.startMm) } : {}),
-    ...(input.to.kind === 'platform' && input.toEdgeId && input.endMm ? { toEdgeT: edgeParameter(platformForEndpoint(design, input.to), input.toEdgeId, input.endMm) } : {}),
+    ...(input.to.kind === 'platform' && input.toEdgeId ? { toEdgeT: edgeParameter(platformForEndpoint(design, input.to), input.toEdgeId, endMm) } : {}),
     startMm: [integer(input.startMm[0]), integer(input.startMm[1])],
-    endMm: input.endMm ? [integer(input.endMm[0]), integer(input.endMm[1])] : calculatedEnd,
+    endMm,
     directionDeg,
     widthMm,
     landingDepthMm,
@@ -357,7 +413,7 @@ export function addStair(design: DeckDesign, input: AddStairInput, now = new Dat
     treadDepthMm,
     totalRunMm,
   };
-  return touch({ ...design, stairs: [...design.stairs, stair], selectedObjectId: id }, now);
+  return touch({ ...design, stairs: [...design.stairs, reconcileStairPlan(stair)], selectedObjectId: id }, now);
 }
 
 /** Builds a code-screened stair intent between two exact plan points. */
@@ -510,17 +566,41 @@ export function assessDesign(design: DeckDesign): DesignAssessment {
   }
   design.stairs.forEach((stair) => {
     const riseMm = Math.abs(endpointElevation(design, stair.from) - endpointElevation(design, stair.to));
+    const geometry = assessStairPlanGeometry(design, stair);
     if (riseMm < 125) errors.push({ objectId: stair.id, message: `${stair.name} connects levels only ${riseMm} mm apart. Remove the stair or change a platform elevation.` });
-    if (stair.from.kind === 'platform' && stair.fromEdgeId) {
-      const platform = platformForEndpoint(design, stair.from);
-      const edgeLengthMm = platformEdgeLength(platform, stair.fromEdgeId);
-      const openingWidthMm = projectedStairOpeningWidth(platform, stair.fromEdgeId, stair);
+    if (geometry.status === 'invalid-rise') errors.push({ objectId: stair.id, message: `${stair.name} has a ${riseMm} mm rise that cannot be resolved as one code-screened flight. Add a landing or revise the levels.` });
+    if (geometry.status === 'too-short') errors.push({ objectId: stair.id, message: `${stair.name} has only ${geometry.runMm} mm of run; this rise needs at least ${geometry.minimumRunMm} mm between its attached endpoints.` });
+    if (geometry.status === 'too-long') errors.push({ objectId: stair.id, message: `${stair.name} has ${geometry.runMm} mm of run; this rise allows at most ${geometry.maximumRunMm} mm as one straight flight.` });
+    const hostedEndpoints = [
+      stair.from.kind === 'platform' && stair.fromEdgeId ? { endpoint: 'top', host: stair.from, edgeId: stair.fromEdgeId, pointMm: stair.startMm } : null,
+      stair.to.kind === 'platform' && stair.toEdgeId ? { endpoint: 'bottom', host: stair.to, edgeId: stair.toEdgeId, pointMm: stair.endMm } : null,
+    ].filter((value): value is { endpoint: string; host: Extract<VerticalEndpoint, { kind: 'platform' }>; edgeId: string; pointMm: PointMm } => Boolean(value));
+    hostedEndpoints.forEach(({ endpoint, host, edgeId, pointMm }) => {
+      const platform = platformForEndpoint(design, host);
+      const edgeLengthMm = platformEdgeLength(platform, edgeId);
+      const openingWidthMm = projectedStairOpeningWidth(platform, edgeId, stair);
+      const edgeT = edgeParameter(platform, edgeId, pointMm);
+      const nearest = closestPointOnPlatformEdge(platform, edgeId, pointMm);
+      if (nearest.distanceMm > 5) errors.push({ objectId: stair.id, message: `${stair.name} ${endpoint} connection is ${nearest.distanceMm} mm away from its host edge. Reattach the stair endpoint.` });
       if (openingWidthMm > edgeLengthMm) errors.push({ objectId: stair.id, message: `${stair.name} needs a ${openingWidthMm} mm stair opening, but the connected platform edge is only ${edgeLengthMm} mm long.` });
-      warnings.push({ objectId: stair.id, message: `${stair.name} geometry is connected; its header, trimmers, stringer attachment, fasteners, bearing, and load path still require structural review.` });
+      else if (openingWidthMm / 2 > edgeLengthMm * edgeT || openingWidthMm / 2 > edgeLengthMm * (1 - edgeT)) errors.push({ objectId: stair.id, message: `${stair.name} ${endpoint} opening is too close to a platform corner for its ${openingWidthMm} mm projected header. Move the connection along the edge.` });
+    });
+    if (hostedEndpoints.length) warnings.push({ objectId: stair.id, message: `${stair.name} geometry is connected; its header, trimmers, stringer attachment, fasteners, bearing, and load path still require structural review.` });
+    if (stair.from.kind === 'platform' && stair.to.kind === 'terrain') {
+      const source = platformForEndpoint(design, stair.from);
+      const sameLevelCandidate = design.platforms.find((platform) => platform.id !== source.id && platform.elevationMm === source.elevationMm && terrainStairLandingIntersection(stair, platform.boundary));
+      if (sameLevelCandidate) warnings.push({ objectId: stair.id, message: `${stair.name} Point B aligns with ${sameLevelCandidate.name}, but both platforms are at ${source.elevationMm} mm. Lower ${sameLevelCandidate.name} by at least 125 mm to connect the stair to that layer.` });
     }
   });
   if (!design.platforms.length) warnings.push({ objectId: 'design', message: 'Draw the first deck platform.' });
   return { areaSqM: round(areaSqM, 3), errors, warnings };
+}
+
+/** Checks the actual hosted endpoint distance rather than trusting cached stair dimensions. */
+export function assessStairPlanGeometry(design: DeckDesign, stair: DeckStair): PointToPointStairGeometry {
+  const riseMm = Math.abs(endpointElevation(design, stair.from) - endpointElevation(design, stair.to));
+  const runMm = Math.round(Math.hypot(stair.endMm[0] - stair.startMm[0], stair.endMm[1] - stair.startMm[1]));
+  return calculatePointToPointStairGeometry(riseMm, runMm);
 }
 
 export function platformElevation(design: DeckDesign, platformId: string): number {
@@ -574,10 +654,14 @@ function stairLineIntersectionWithEdge(startMm: PointMm, directionDeg: number, p
   if (index < 0) throw new DeckDesignError('object-not-found', `Platform edge ${edgeId} does not exist.`);
   const edgeStart = platform.boundary.vertices[index];
   const edgeEnd = platform.boundary.vertices[(index + 1) % platform.boundary.vertices.length];
+  return stairLineIntersectionWithSegment(startMm, directionDeg, [edgeStart.xMm, edgeStart.yMm], [edgeEnd.xMm, edgeEnd.yMm]);
+}
+
+function stairLineIntersectionWithSegment(startMm: PointMm, directionDeg: number, edgeStart: PointMm, edgeEnd: PointMm): PointMm | null {
   const radians = directionDeg * Math.PI / 180;
   const ray: PointMm = [Math.cos(radians), Math.sin(radians)];
-  const segment: PointMm = [edgeEnd.xMm - edgeStart.xMm, edgeEnd.yMm - edgeStart.yMm];
-  const offset: PointMm = [edgeStart.xMm - startMm[0], edgeStart.yMm - startMm[1]];
+  const segment: PointMm = [edgeEnd[0] - edgeStart[0], edgeEnd[1] - edgeStart[1]];
+  const offset: PointMm = [edgeStart[0] - startMm[0], edgeStart[1] - startMm[1]];
   const denominator = cross2d(ray, segment);
   if (Math.abs(denominator) < .000001) return null;
   const rayT = cross2d(offset, segment) / denominator;
@@ -587,6 +671,49 @@ function stairLineIntersectionWithEdge(startMm: PointMm, directionDeg: number, p
 }
 
 function cross2d(first: PointMm, second: PointMm): number { return first[0] * second[1] - first[1] * second[0]; }
+
+function stairLandingIntersection(stair: DeckStair, boundary: ClosedBoundary): { edgeIndex: number; pointMm: PointMm; distanceMm: number } | null {
+  const candidates = boundary.vertices.flatMap((vertex, edgeIndex, vertices) => {
+    const next = vertices[(edgeIndex + 1) % vertices.length];
+    const pointMm = stairLineIntersectionWithSegment(stair.startMm, stair.directionDeg, [vertex.xMm, vertex.yMm], [next.xMm, next.yMm]);
+    return pointMm ? [{ edgeIndex, pointMm, distanceMm: Math.round(Math.hypot(pointMm[0] - stair.endMm[0], pointMm[1] - stair.endMm[1])) }] : [];
+  }).sort((first, second) => first.distanceMm - second.distanceMm);
+  const nearest = candidates[0];
+  if (!nearest) return null;
+  return pointInBoundary(stair.endMm, boundary) || nearest.distanceMm <= stair.landingDepthMm ? nearest : null;
+}
+
+function terrainStairLandingIntersection(stair: DeckStair, boundary: ClosedBoundary): { edgeIndex: number; pointMm: PointMm; distanceMm: number } | null {
+  return stair.to.kind === 'terrain' ? stairLandingIntersection(stair, boundary) : null;
+}
+
+/** Converts a yard endpoint into a hosted landing when a lower platform is placed under Point B. */
+function rehostTerrainStairsToPlatform(design: DeckDesign, platformId: string): DeckDesign {
+  const platform = design.platforms.find((candidate) => candidate.id === platformId);
+  if (!platform) return design;
+  const hostedEdgeIds = new Set<string>();
+  const stairs = design.stairs.map((stair) => {
+    if (stair.from.kind !== 'platform' || stair.to.kind !== 'terrain' || stair.from.platformId === platform.id) return stair;
+    const sourcePlatformId = stair.from.platformId;
+    const source = design.platforms.find((candidate) => candidate.id === sourcePlatformId);
+    if (!source || source.elevationMm - platform.elevationMm < 125) return stair;
+    const match = terrainStairLandingIntersection(stair, platform.boundary);
+    const edgeId = match ? platform.edges[match.edgeIndex]?.id : null;
+    if (!match || !edgeId) return stair;
+    hostedEdgeIds.add(edgeId);
+    const hosted = reconcileStairPlan({
+      ...stair,
+      to: { kind: 'platform', platformId: platform.id },
+      toEdgeId: edgeId,
+      toEdgeT: edgeParameter(platform, edgeId, match.pointMm),
+      endMm: match.pointMm,
+    });
+    return recalculateStairElevation(design, hosted);
+  });
+  if (!hostedEdgeIds.size) return design;
+  const platforms = design.platforms.map((candidate) => candidate.id === platform.id ? { ...candidate, edges: candidate.edges.map((edge) => hostedEdgeIds.has(edge.id) ? { ...edge, role: 'stair' as const } : edge) } : candidate);
+  return { ...design, platforms, stairs };
+}
 
 function reanchorStairToPlatform(stair: DeckStair, previous: DeckPlatform, next: DeckPlatform): DeckStair {
   const fromAttached = stair.from.kind === 'platform' && stair.from.platformId === previous.id && Boolean(stair.fromEdgeId);
@@ -601,8 +728,7 @@ function reanchorStairToPlatform(stair: DeckStair, previous: DeckPlatform, next:
   } else if (toAttached && stair.from.kind === 'terrain') {
     startMm = [startMm[0] + endMm[0] - stair.endMm[0], startMm[1] + endMm[1] - stair.endMm[1]];
   }
-  const directionDeg = normalizeDegrees(Math.atan2(endMm[1] - startMm[1], endMm[0] - startMm[0]) * 180 / Math.PI);
-  return { ...stair, startMm, endMm, directionDeg, ...(fromT === undefined ? {} : { fromEdgeT: fromT }), ...(toT === undefined ? {} : { toEdgeT: toT }) };
+  return reconcileStairPlan({ ...stair, startMm, endMm, ...(fromT === undefined ? {} : { fromEdgeT: fromT }), ...(toT === undefined ? {} : { toEdgeT: toT }) });
 }
 
 function updatePlatform(design: DeckDesign, platformId: string, update: (platform: DeckPlatform) => DeckPlatform, now: string): DeckDesign {
@@ -634,7 +760,16 @@ function recalculateStairElevation(design: DeckDesign, stair: DeckStair): DeckSt
   const endMm: PointMm = stair.to.kind === 'terrain'
     ? [Math.round(stair.startMm[0] + Math.cos(radians) * geometry.runMm), Math.round(stair.startMm[1] + Math.sin(radians) * geometry.runMm)]
     : stair.endMm;
-  return { ...stair, endMm, riserCount: geometry.riserCount, riserHeightMm: geometry.riserHeightMm, treadDepthMm: geometry.treadDepthMm, totalRunMm: geometry.runMm };
+  return reconcileStairPlan({ ...stair, endMm, riserCount: geometry.riserCount, riserHeightMm: geometry.riserHeightMm, treadDepthMm: geometry.treadDepthMm, totalRunMm: geometry.runMm });
+}
+
+/** Keeps cached stair dimensions synchronized with the physical A→B connection line. */
+function reconcileStairPlan(stair: DeckStair): DeckStair {
+  const runMm = Math.round(Math.hypot(stair.endMm[0] - stair.startMm[0], stair.endMm[1] - stair.startMm[1]));
+  const directionDeg = runMm > 0 ? normalizeDegrees(Math.atan2(stair.endMm[1] - stair.startMm[1], stair.endMm[0] - stair.startMm[0]) * 180 / Math.PI) : stair.directionDeg;
+  const treadCount = Math.max(0, stair.riserCount - 1);
+  const treadDepthMm = treadCount ? Math.round(runMm / treadCount) : stair.treadDepthMm;
+  return { ...stair, directionDeg, totalRunMm: runMm, treadDepthMm };
 }
 
 function platformEdgeLength(platform: DeckPlatform, edgeId: string): number {
@@ -643,6 +778,15 @@ function platformEdgeLength(platform: DeckPlatform, edgeId: string): number {
   const start = platform.boundary.vertices[index];
   const end = platform.boundary.vertices[(index + 1) % platform.boundary.vertices.length];
   return Math.round(Math.hypot(end.xMm - start.xMm, end.yMm - start.yMm));
+}
+
+function closestPointOnPlatformEdge(platform: DeckPlatform, edgeId: string, pointMm: PointMm): { pointMm: PointMm; distanceMm: number } {
+  const index = platform.edges.findIndex((edge) => edge.id === edgeId);
+  if (index < 0) return { pointMm, distanceMm: Number.POSITIVE_INFINITY };
+  const start = platform.boundary.vertices[index];
+  const end = platform.boundary.vertices[(index + 1) % platform.boundary.vertices.length];
+  const nearest = closestPointOnSegment(pointMm, [start.xMm, start.yMm], [end.xMm, end.yMm]);
+  return { pointMm: nearest, distanceMm: Math.round(Math.hypot(nearest[0] - pointMm[0], nearest[1] - pointMm[1])) };
 }
 
 function projectedStairOpeningWidth(platform: DeckPlatform, edgeId: string, stair: DeckStair): number {
@@ -666,8 +810,7 @@ function rotateAttachedStair(stair: DeckStair, platformId: string, pivot: PointM
   const rotateEnd = toSelected || (fromSelected && stair.to.kind === 'terrain');
   const startMm = rotateStart ? rotatePoint(stair.startMm, pivot, deltaDeg) : stair.startMm;
   const endMm = rotateEnd ? rotatePoint(stair.endMm, pivot, deltaDeg) : stair.endMm;
-  const directionDeg = normalizeDegrees(Math.atan2(endMm[1] - startMm[1], endMm[0] - startMm[0]) * 180 / Math.PI);
-  return { ...stair, startMm, endMm, directionDeg };
+  return reconcileStairPlan({ ...stair, startMm, endMm });
 }
 
 function rotatePoint(point: PointMm, pivot: PointMm, deltaDeg: number): PointMm {

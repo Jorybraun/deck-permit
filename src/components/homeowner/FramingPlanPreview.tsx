@@ -15,11 +15,11 @@ export function FramingPlanPreview({ design, framing, stale }: FramingPlanPrevie
   const transform = createPlanTransform(design, framing);
   return <section className="overflow-hidden rounded-xl border border-slate-300 bg-white shadow-sm" aria-labelledby="framing-plan-heading">
     <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
-      <div><span className="text-[10px] font-bold uppercase tracking-[.14em] text-emerald-800">A3 · Framing plan</span><h3 id="framing-plan-heading" className="mt-1 text-lg font-bold text-slate-950">Generated member layout</h3><p className="mt-1 text-xs text-slate-600">Diagrammatic review preview. Member coordinates and dimensions govern; printing scale is assigned when the sheet set is issued.</p></div>
+      <div><span className="text-[10px] font-bold uppercase tracking-[.14em] text-emerald-800">S1.0 · Framing plan</span><h3 id="framing-plan-heading" className="mt-1 text-lg font-bold text-slate-950">Generated member layout</h3><p className="mt-1 text-xs text-slate-600">Diagrammatic review preview. Member coordinates and dimensions govern; printing scale is assigned when the sheet set is issued.</p></div>
       <span className={`rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-[.08em] ${stale ? 'bg-amber-100 text-amber-900' : framing.status === 'engineering-required' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-900'}`}>{stale ? 'Design changed · regenerate' : framing.status.replace(/-/g, ' ')}</span>
     </div>
     <div className="bg-[#e9eeeb] p-3 sm:p-5">
-      <svg viewBox={`0 0 ${SHEET_WIDTH} ${SHEET_HEIGHT}`} className="h-auto w-full bg-white shadow-md" role="img" aria-label={`Framing plan with ${framing.joists.length} joists, ${framing.beams.length} beams, ${framing.posts.length} posts, and ${framing.stairStringers.length} stair stringers`}>
+      <svg viewBox={`0 0 ${SHEET_WIDTH} ${SHEET_HEIGHT}`} className="h-auto w-full bg-white shadow-md" role="img" aria-label={`Framing plan with ${framing.joists.length} joists, ${framing.beams.length} beams, ${framing.posts.length} posts, ${framing.stairOpenings.length} stair headers, and ${framing.stairStringers.length} stair stringers`}>
         <defs>
           <pattern id="framing-grid" width="25" height="25" patternUnits="userSpaceOnUse"><path d="M25 0H0V25" fill="none" stroke="#edf1ee" strokeWidth="1" /></pattern>
         </defs>
@@ -46,11 +46,17 @@ export function FramingPlanPreview({ design, framing, stale }: FramingPlanPrevie
         <g aria-label="Guards" stroke="#754c9b" strokeWidth="5" strokeDasharray="4 4">
           {framing.guards.map((guard) => <line key={guard.id} x1={transform.x(guard.startMm[0])} y1={transform.y(guard.startMm[1])} x2={transform.x(guard.endMm[0])} y2={transform.y(guard.endMm[1])} />)}
         </g>
+        <g aria-label="Stair opening trimmers" stroke="#b43f2d" strokeWidth="5" strokeDasharray="4 2">
+          {framing.stairTrimmers.map((trimmer) => <line key={trimmer.id} x1={transform.x(trimmer.startMm[0])} y1={transform.y(trimmer.startMm[1])} x2={transform.x(trimmer.endMm[0])} y2={transform.y(trimmer.endMm[1])} />)}
+        </g>
+        <g aria-label="Stair opening headers" stroke="#b43f2d" strokeWidth="8">
+          {framing.stairOpenings.map((opening) => <g key={opening.id}><line x1={transform.x(opening.headerStartMm[0])} y1={transform.y(opening.headerStartMm[1])} x2={transform.x(opening.headerEndMm[0])} y2={transform.y(opening.headerEndMm[1])} /><MemberLabel point={opening.centerMm} transform={transform} text={`${opening.id} · ${opening.projectedWidthMm}`} /></g>)}
+        </g>
         <g aria-label="Stair stringers" stroke="#9b5e2d" strokeWidth="3" strokeDasharray="7 3">
           {framing.stairStringers.map((stringer) => <line key={stringer.id} x1={transform.x(stringer.startMm[0])} y1={transform.y(stringer.startMm[1])} x2={transform.x(stringer.endMm[0])} y2={transform.y(stringer.endMm[1])} />)}
         </g>
         <g transform={`translate(52 ${SHEET_HEIGHT - 85})`}><line x1="0" y1="0" x2={1000 * transform.scale} y2="0" stroke="#26372f" strokeWidth="3" /><line x1="0" y1="-6" x2="0" y2="6" stroke="#26372f" strokeWidth="2" /><line x1={1000 * transform.scale} y1="-6" x2={1000 * transform.scale} y2="6" stroke="#26372f" strokeWidth="2" /><text x={500 * transform.scale} y="18" textAnchor="middle" fontSize="9" fontWeight="700">1 000 mm</text></g>
-        <g transform={`translate(360 ${SHEET_HEIGHT - 92})`} fontSize="9" fontWeight="700" fill="#31443a"><LegendLine x={0} color="#3d8a6c" label="JOIST" /><LegendLine x={105} color="#173f67" label="BEAM" wide /><LegendLine x={210} color="#d35420" label="LEDGER" wide /><LegendLine x={330} color="#754c9b" label="GUARD" wide /><LegendLine x={445} color="#9b5e2d" label="STRINGER" /></g>
+        <g transform={`translate(320 ${SHEET_HEIGHT - 92})`} fontSize="9" fontWeight="700" fill="#31443a"><LegendLine x={0} color="#3d8a6c" label="JOIST" /><LegendLine x={95} color="#173f67" label="BEAM" wide /><LegendLine x={185} color="#d35420" label="LEDGER" wide /><LegendLine x={285} color="#754c9b" label="GUARD" wide /><LegendLine x={385} color="#b43f2d" label="HEADER" wide /><LegendLine x={495} color="#9b5e2d" label="STRINGER" /></g>
         <g transform={`translate(${SHEET_WIDTH - 275} ${SHEET_HEIGHT - 112})`}><rect width="247" height="84" fill="white" stroke="#26372f" /><text x="12" y="19" fontSize="12" fontWeight="900" fill="#17231d">FRAMING PLAN · REVIEW SET</text><text x="12" y="36" fontSize="9" fontWeight="700" fill="#4d5e55">{framing.codeProfile.label}</text><text x="12" y="52" fontSize="8" fill="#65756d">Generated {formatDate(framing.generatedAt)}</text><rect x="12" y="61" width="221" height="15" fill="#fff1d6" /><text x="122" y="72" textAnchor="middle" fontSize="8" fontWeight="900" fill="#8a4b12">NOT FOR CONSTRUCTION · REVIEW REQUIRED</text></g>
       </svg>
     </div>
@@ -65,6 +71,8 @@ function createPlanTransform(design: DeckDesign, framing: FramingDesign): PlanTr
     ...framing.joists.flatMap((member) => [member.startMm, member.endMm]),
     ...framing.beams.flatMap((member) => [member.startMm, member.endMm]),
     ...framing.stairStringers.flatMap((member) => [member.startMm, member.endMm]),
+    ...framing.stairOpenings.flatMap((member) => [member.headerStartMm, member.headerEndMm]),
+    ...framing.stairTrimmers.flatMap((member) => [member.startMm, member.endMm]),
   ];
   if (!points.length) points.push([0, 0], [1000, 1000]);
   const minX = Math.min(...points.map((point) => point[0])); const maxX = Math.max(...points.map((point) => point[0]));

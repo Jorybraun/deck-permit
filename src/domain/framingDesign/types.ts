@@ -103,6 +103,53 @@ export interface StairStringerMember {
   status: 'review-required';
 }
 
+/** A framed interruption at a platform edge receiving one end of a stair flight. */
+export interface StairOpeningMember {
+  id: string;
+  stairId: string;
+  endpoint: 'from' | 'to';
+  platformId: string;
+  edgeId: string;
+  centerMm: PointMm;
+  clearWidthMm: number;
+  projectedWidthMm: number;
+  skewDeg: number;
+  headerStartMm: PointMm;
+  headerEndMm: PointMm;
+  headerSection: 'Engineer design';
+  status: 'review-required';
+}
+
+/** Concept geometry for doubled framing beside a stair opening; size and fastening remain reviewed. */
+export interface StairTrimmerMember {
+  id: string;
+  stairId: string;
+  openingId: string;
+  platformId: string;
+  side: 'left' | 'right';
+  startMm: PointMm;
+  endMm: PointMm;
+  lengthMm: number;
+  section: 'Engineer design';
+  status: 'review-required';
+}
+
+/** Traceable interface between a stair flight and a platform header, landing, or grade. */
+export interface StairConnection {
+  id: string;
+  stairId: string;
+  endpoint: 'from' | 'to';
+  hostKind: 'platform-edge' | 'terrain';
+  platformId?: string;
+  edgeId?: string;
+  pointMm: PointMm;
+  elevationMm: number;
+  connectionType: 'stringer-to-header' | 'stringer-to-landing-edge' | 'stringer-to-grade-landing';
+  receivingMemberIds: string[];
+  requirements: string[];
+  status: 'review-required';
+}
+
 export interface PlatformFramingSystem {
   platformId: string;
   joistAxis: 'x' | 'y';
@@ -154,6 +201,9 @@ export interface FramingDesign {
   footings: FootingMember[];
   guards: GuardAssembly[];
   stairStringers: StairStringerMember[];
+  stairOpenings: StairOpeningMember[];
+  stairTrimmers: StairTrimmerMember[];
+  stairConnections: StairConnection[];
   checks: FramingCheck[];
   reviewGates: FramingReviewGate[];
   sources: FramingRuleSource[];

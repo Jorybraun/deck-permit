@@ -1,9 +1,10 @@
-import type { DeckDesign, DeckPlatform, PointMm } from '../deckDesign';
+import { assessStairPlanGeometry, type DeckDesign, type DeckPlatform, type PointMm } from '../deckDesign';
 import { assessExistingConditionCapture, terrainElevationAt, type SiteModel } from '../siteModel';
 import { boundaryBounds, clipAxisLine, isAxisAlignedRectangle, isHorizontal, lineLength, platformEdgePoints, stationsAlong } from './geometry';
 import { codeProfileForMunicipality, CWC_DECK_GUIDE, selectPreliminarySections } from './rules';
 import type { BeamMember, FramingCheck, FramingDesign, FramingReviewGate, FramingStatus, GenerateFramingInput, GuardAssembly, JoistMember, LedgerMember, PlatformFramingSystem, StairStringerMember } from './types';
 import { FramingDesignError } from './types';
+import { generateStairConnectionFraming } from './stairConnections';
 
 const DEAD_LOAD_KPA = 0.5;
 const LIVE_LOAD_KPA = 1.9;
@@ -121,12 +122,20 @@ export function generateFramingDesign(design: DeckDesign, site: SiteModel, input
   });
 
   const stairStringers = generateStairStringers(design);
+  const stairConnectionFraming = generateStairConnectionFraming(design);
+  const invalidStairCount = design.stairs.filter((stair) => assessStairPlanGeometry(design, stair).status !== 'valid').length;
+  if (design.stairs.length) checks.push({
+    id: 'stair-connections', title: 'Hosted stair openings and connections', objectId: 'framing', status: invalidStairCount ? 'blocked' : 'review',
+    result: `${stairConnectionFraming.openings.length} header opening(s), ${stairConnectionFraming.trimmers.length} trimmer line(s), and ${stairConnectionFraming.connections.length} endpoint connection(s) generated.${invalidStairCount ? ` ${invalidStairCount} stair flight(s) have unresolved A→B geometry.` : ''}`,
+    basis: 'Connection geometry is coordinated to hosted platform edges. Header capacity, stringer hardware, fasteners, reactions, and landing support remain project-specific structural design.',
+  });
   checks.push(...globalChecks(site, footings.length, ledgers.length, guards.length, stairStringers.length));
   const hasEngineering = platformSystems.some((system) => system.status === 'engineering-required');
   const reviewGates = buildReviewGates(site, hasEngineering, ledgers.length, guards.length, stairStringers.length);
   return {
     schema: 'framing-design/v1', units: 'mm', inputFingerprint: framingInputFingerprint(design, site, input), generatedAt,
     codeProfile: codeProfileForMunicipality(input.municipality), assumptions, platformSystems, joists, beams, ledgers, posts, footings, guards, stairStringers,
+    stairOpenings: stairConnectionFraming.openings, stairTrimmers: stairConnectionFraming.trimmers, stairConnections: stairConnectionFraming.connections,
     checks, reviewGates, sources: [CWC_DECK_GUIDE], status: hasEngineering ? 'engineering-required' : 'review-required',
   };
 }
@@ -138,7 +147,7 @@ export function framingInputFingerprint(design: DeckDesign, site: SiteModel, inp
     site: { terrain: site.terrain, capture: site.capture.evidence.map(({ id, category, sha256, status }) => ({ id, category, sha256, status })), wall: { selectionStatus: site.designWall.selectionStatus, sourceBuildingId: site.designWall.sourceBuildingId, sourceEdgeIndex: site.designWall.sourceEdgeIndex, lengthMm: site.designWall.lengthMm, rimMaterial: site.designWall.rimMaterial, rimDepthMm: site.designWall.rimDepthMm, cladding: site.designWall.cladding, flashingFeasible: site.designWall.flashingFeasible } },
     input: { municipality: input.municipality, snowLoadKpa: input.snowLoadKpa, treatment: input.treatment || 'incised', soilBearingKpa: input.soilBearingKpa || DEFAULT_SOIL_BEARING_KPA },
   };
-  return `fd1-${fnv1a(JSON.stringify(structuralInput))}`;
+  return `fd2-${fnv1a(JSON.stringify(structuralInput))}`;
 }
 
 export function isFramingStale(framing: FramingDesign | null, design: DeckDesign, site: SiteModel, input: GenerateFramingInput): boolean {
@@ -186,12 +195,14 @@ function generateStairStringers(design: DeckDesign): StairStringerMember[] {
   return design.stairs.flatMap((stair) => {
     const riseMm = Math.abs(endpointElevation(design, stair.from) - endpointElevation(design, stair.to));
     const count = stair.stringerCount ?? Math.max(3, Math.ceil(stair.widthMm / 450) + 1);
-    const radians = stair.directionDeg * Math.PI / 180; const direction: PointMm = [Math.cos(radians), Math.sin(radians)]; const lateral: PointMm = [-direction[1], direction[0]];
+    const runMm = Math.round(Math.hypot(stair.endMm[0] - stair.startMm[0], stair.endMm[1] - stair.startMm[1]));
+    const direction: PointMm = runMm ? [(stair.endMm[0] - stair.startMm[0]) / runMm, (stair.endMm[1] - stair.startMm[1]) / runMm] : [1, 0];
+    const lateral: PointMm = [-direction[1], direction[0]];
     return Array.from({ length: count }, (_, index) => {
       const offset = count === 1 ? 0 : -stair.widthMm / 2 + stair.widthMm * index / (count - 1);
       const start: PointMm = [Math.round(stair.startMm[0] + lateral[0] * offset), Math.round(stair.startMm[1] + lateral[1] * offset)];
-      const end: PointMm = [Math.round(start[0] + direction[0] * stair.totalRunMm), Math.round(start[1] + direction[1] * stair.totalRunMm)];
-      return { id: `${stair.id}-STR${index + 1}`, stairId: stair.id, startMm: start, endMm: end, runMm: stair.totalRunMm, riseMm, section: 'Engineer / manufacturer design', status: 'review-required' };
+      const end: PointMm = [Math.round(stair.endMm[0] + lateral[0] * offset), Math.round(stair.endMm[1] + lateral[1] * offset)];
+      return { id: `${stair.id}-STR${index + 1}`, stairId: stair.id, startMm: start, endMm: end, runMm, riseMm, section: 'Engineer / manufacturer design', status: 'review-required' };
     });
   });
 }

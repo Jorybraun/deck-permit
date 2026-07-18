@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { ProfessionalReviewCycle, Property, ReviewExchangePublication, ReviewRedlineResolution, VerificationEvidence } from '../types';
-import { addPlatform, addStair, createEmptyDesign, insertPlatformVertex, movePlatformLayer, moveStair, removePlatform, removeStair, renamePlatform, resizeStairSide, rotatePlatform, selectDesignObject, setPlatformEdgeLength, setPlatformEdgeRole, setPlatformElevation, setPlatformFinish, setPlatformFramingIntent, setPlatformPurpose, setStairConstruction, updatePlatformBoundary } from '../domain/deckDesign';
+import { addPlatform, addStair, connectStairLanding, createEmptyDesign, insertPlatformVertex, movePlatformLayer, moveStair, removePlatform, removeStair, renamePlatform, resizeStairSide, rotatePlatform, selectDesignObject, setPlatformEdgeLength, setPlatformEdgeRole, setPlatformElevation, setPlatformFinish, setPlatformFramingIntent, setPlatformPurpose, setStairConstruction, updatePlatformBoundary } from '../domain/deckDesign';
 import type { AddPlatformInput, AddStairInput, ClosedBoundary, DeckDesign } from '../domain/deckDesign';
 import type { SiteModel } from '../domain/siteModel';
 import type { FramingDesign } from '../domain/framingDesign';
@@ -58,6 +58,7 @@ export interface HomeownerProjectState {
   moveStair: (stairId: string, deltaXmm: number, deltaYmm: number) => void;
   resizeStairSide: (stairId: string, side: 'left' | 'right', widthMm: number) => void;
   setStairConstruction: (stairId: string, changes: Parameters<typeof setStairConstruction>[2]) => void;
+  connectStairLanding: (stairId: string, platformId: string) => void;
   addStair: (input: AddStairInput) => void;
   selectObject: (objectId: string | null) => void;
   undoDesign: () => void;
@@ -119,6 +120,7 @@ export const useHomeownerProject = create<HomeownerProjectState>((set) => ({
   moveStair: (stairId, deltaXmm, deltaYmm) => set((state) => commitDesign(state, moveStair(state.design, stairId, deltaXmm, deltaYmm))),
   resizeStairSide: (stairId, side, widthMm) => set((state) => commitDesign(state, resizeStairSide(state.design, stairId, side, widthMm))),
   setStairConstruction: (stairId, changes) => set((state) => commitDesign(state, setStairConstruction(state.design, stairId, changes))),
+  connectStairLanding: (stairId, platformId) => set((state) => commitDesign(state, connectStairLanding(state.design, stairId, platformId))),
   addStair: (input) => set((state) => commitDesign(state, addStair(state.design, input))),
   selectObject: (objectId) => set((state) => ({ design: selectDesignObject(state.design, objectId) })),
   undoDesign: () => set((state) => {

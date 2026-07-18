@@ -38,8 +38,10 @@ describe('canonical seven-sheet review set', () => {
       expect(sheet.svg).toContain('BLANK UNTIL APPLIED');
     }
     expect(planSet.sheets.find((sheet) => sheet.number === 'A1.0')?.svg).toContain('SELECTED HOUSE WALL');
-    expect(planSet.sheets.find((sheet) => sheet.number === 'S1.0')?.svg).toContain('Stringers');
+    expect(planSet.sheets.find((sheet) => sheet.number === 'S1.0')?.svg).toContain('Stair framing');
+    expect(planSet.sheets.find((sheet) => sheet.number === 'S1.0')?.svg).toContain('ST1-FROM-HDR');
     expect(planSet.sheets.find((sheet) => sheet.number === 'A3.0')?.svg).toContain('3 STRINGERS');
+    expect(planSet.sheets.find((sheet) => sheet.number === 'A3.0')?.svg).toContain('TOP: ST1-FROM-CONN');
     expect(planSet.sheets.find((sheet) => sheet.number === 'S3.0')?.svg).toContain('PROFESSIONAL REVIEW GATES');
   });
 });

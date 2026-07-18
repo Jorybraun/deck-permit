@@ -40,13 +40,30 @@ describe('FramingDesign v1 public contract', () => {
 
   it('derives guards and stair stringers from elevations and vertical connections', () => {
     let design = addPlatform(createEmptyDesign(), { boundary: rectangularBoundary(0, 0, 4000, 3000), elevationMm: 900 });
-    design = addPlatform(design, { boundary: rectangularBoundary(5000, 0, 3500, 3000), elevationMm: 450 });
+    design = addPlatform(design, { boundary: rectangularBoundary(4560, 0, 3500, 3000), elevationMm: 450 });
     design = addStair(design, { from: { kind: 'platform', platformId: 'P1' }, to: { kind: 'platform', platformId: 'P2' }, fromEdgeId: 'P1-E2', toEdgeId: 'P2-E4', startMm: [4000, 1500], directionDeg: 0, widthMm: 900, riserCount: 3 });
     const framing = generateFramingDesign(design, createSiteModel(property), { municipality: 'Town of Sidney', snowLoadKpa: 1 });
     expect(framing.guards.filter((guard) => guard.platformId === 'P1')).toHaveLength(3);
     expect(framing.guards[0].heightMm).toBe(900);
     expect(framing.stairStringers).toHaveLength(3);
     expect(framing.stairStringers[0]).toMatchObject({ stairId: 'ST1', runMm: 560, riseMm: 450 });
+    expect(framing.stairStringers[0].endMm[0] - framing.stairStringers[0].startMm[0]).toBe(560);
+    expect(framing.stairOpenings).toHaveLength(2);
+    expect(framing.stairTrimmers).toHaveLength(4);
+    expect(framing.stairConnections).toHaveLength(2);
+    expect(framing.stairConnections.map((connection) => connection.connectionType)).toEqual(['stringer-to-header', 'stringer-to-landing-edge']);
+    expect(framing.stairOpenings[0]).toMatchObject({ stairId: 'ST1', endpoint: 'from', clearWidthMm: 900, projectedWidthMm: 900, skewDeg: 0, headerSection: 'Engineer design' });
+    expect(framing.checks.find((check) => check.id === 'stair-connections')).toMatchObject({ status: 'review' });
+  });
+
+  it('creates a grade-bearing endpoint without inventing a platform header', () => {
+    let design = addPlatform(createEmptyDesign(), { boundary: rectangularBoundary(0, 0, 4000, 3000), elevationMm: 600 });
+    design = addStair(design, { from: { kind: 'platform', platformId: 'P1' }, to: { kind: 'terrain', elevationMm: 0 }, fromEdgeId: 'P1-E2', startMm: [4000, 1500], directionDeg: 0, widthMm: 900 });
+    const framing = generateFramingDesign(design, createSiteModel(property), { municipality: 'Town of Sidney', snowLoadKpa: 1 });
+
+    expect(framing.stairOpenings).toHaveLength(1);
+    expect(framing.stairTrimmers).toHaveLength(2);
+    expect(framing.stairConnections[1]).toMatchObject({ endpoint: 'to', hostKind: 'terrain', connectionType: 'stringer-to-grade-landing', elevationMm: 0, receivingMemberIds: [] });
   });
 
   it('fingerprints structural inputs while ignoring canvas selection and timestamps', () => {
