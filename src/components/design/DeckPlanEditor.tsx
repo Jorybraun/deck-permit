@@ -2,7 +2,7 @@ import { Check, ChevronDown, CircleDollarSign, FlipHorizontal2, Footprints, Hand
 import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from 'react';
 import { boundaryCenter, boundaryFromPoints, findHighestPlatformBelowPoint, nearestPlatformEdgePoint, proposePointToPointStairGeometry, rotateBoundary, stairDepartureDirection, suggestedPlatformElevationForBoundary } from '../../domain/deckDesign';
 import type { AddPlatformInput, ClosedBoundary, DeckDesign, DeckPlatform, DeckStair, PointMm } from '../../domain/deckDesign';
-import { projectPropertyToLocal, terrainElevationAt, type LocalPropertyGeometry, type SiteModel } from '../../domain/siteModel';
+import { deriveReferenceSetbackGuides, projectPropertyToLocal, terrainElevationAt, type LocalPropertyGeometry, type ReferenceSetbackGuide, type SiteModel } from '../../domain/siteModel';
 import type { Property } from '../../types';
 import { estimateProject } from '../../services/projectEstimate';
 import { ANGLE_SNAP_DEG, constrainDraftPoint, formatAngle, interiorAngleDeg, lineAngleDeg, snapDraggedVertex, snapPointToSmartGuides, type SmartGuideResult } from './draftingGeometry';
@@ -74,6 +74,7 @@ export function DeckPlanEditor({ design, site, property, canUndo, canRedo, onAdd
   const [estimateOpen, setEstimateOpen] = useState(false);
   const [stairSource, setStairSource] = useState<{ platformId: string; edgeId: string; pointMm: PointMm } | null>(null);
   const propertyGeometry = useMemo(() => projectPropertyToLocal(property, site), [property, site]);
+  const setbackGuides = useMemo(() => deriveReferenceSetbackGuides(property, propertyGeometry, site), [property, propertyGeometry, site]);
   const estimate = useMemo(() => estimateProject(design), [design]);
   const transform = useMemo(() => createTransform(design, site, propertyGeometry, viewMode, zoom, pan), [design, site, propertyGeometry, viewMode, zoom, pan]);
   const selectedPlatform = design.platforms.find((platform) => platform.id === design.selectedObjectId) || null;
@@ -457,7 +458,7 @@ export function DeckPlanEditor({ design, site, property, canUndo, canRedo, onAdd
           <filter id="platform-shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="3" stdDeviation="3" floodColor="#274335" floodOpacity=".16" /></filter>
         </defs>
         <rect data-background="true" width={VIEW_WIDTH} height={VIEW_HEIGHT} fill="url(#architect-grid)" />
-        <SiteContext site={site} geometry={propertyGeometry} transform={transform} viewMode={viewMode} />
+        <SiteContext site={site} geometry={propertyGeometry} setbackGuides={setbackGuides} transform={transform} viewMode={viewMode} />
         <g data-testid="existing-design-layers" pointerEvents={existingLayersPointerEvents(mode)}>
           {design.platforms.map((platform) => <PlatformShape key={platform.id} platform={platform} boundary={displayedBoundary(platform)} selected={selectedPlatform?.id === platform.id} detectedLanding={detectedLanding?.id === platform.id} transform={transform} interactionMode={mode} stairSourceEdgeId={stairSource?.platformId === platform.id ? stairSource.edgeId : null} onSelect={(event) => connectStairPlatform(event, platform)} onRotate={(event) => beginPlatformRotate(event, platform)} onVertex={(event, index) => handleVertexPointerDown(event, platform, index)} onEdge={(event, index) => handleEdgePointerDown(event, platform, index)} />)}
           {design.stairs.map((stair) => {
@@ -531,11 +532,21 @@ function createTransform(design: DeckDesign, site: SiteModel, geometry: LocalPro
   return { scale, x: (value) => offsetX + value * scale, y: (value) => offsetY + value * scale, fromScreenX: (value) => (value - offsetX) / scale, fromScreenY: (value) => (value - offsetY) / scale };
 }
 
-function SiteContext({ site, geometry, transform, viewMode }: { site: SiteModel; geometry: LocalPropertyGeometry | null; transform: Transform; viewMode: ViewMode }) {
+function SiteContext({ site, geometry, setbackGuides, transform, viewMode }: { site: SiteModel; geometry: LocalPropertyGeometry | null; setbackGuides: ReferenceSetbackGuide[]; transform: Transform; viewMode: ViewMode }) {
   const selectedBuilding = geometry?.buildings.find((building) => building.id === geometry.selectedBuildingId);
   if (!geometry || !selectedBuilding) return <FallbackHouseReference site={site} transform={transform} />;
   return <g pointerEvents="none">
     <polygon points={svgPoints(geometry.parcel, transform)} fill={viewMode === 'property' ? 'rgba(220,241,228,.55)' : 'none'} stroke="#23805e" strokeWidth={viewMode === 'property' ? 3 : 2} strokeDasharray="9 5" />
+    {setbackGuides.length > 0 && <g aria-label="Recorded zoning setback guides">{setbackGuides.map((guide) => {
+      const propertyMid = midpoint(guide.propertyStartMm, guide.propertyEndMm);
+      const guideMid = midpoint(guide.guideStartMm, guide.guideEndMm);
+      return <g key={guide.id}>
+        <polygon points={svgPoints(guide.bandPolygon, transform)} fill="rgba(194,65,12,.075)" stroke="none" />
+        <line x1={transform.x(guide.guideStartMm[0])} y1={transform.y(guide.guideStartMm[1])} x2={transform.x(guide.guideEndMm[0])} y2={transform.y(guide.guideEndMm[1])} stroke="#c2410c" strokeWidth="2" strokeDasharray="7 5" />
+        <line x1={transform.x(propertyMid[0])} y1={transform.y(propertyMid[1])} x2={transform.x(guideMid[0])} y2={transform.y(guideMid[1])} stroke="#c2410c" strokeWidth="1" strokeDasharray="3 3" />
+        <text x={transform.x(guideMid[0])} y={transform.y(guideMid[1]) - 7} textAnchor="middle" fontSize="8" fontWeight="900" fill="#9a3412" paintOrder="stroke" stroke="white" strokeWidth="3">{guide.yard.toUpperCase().replace(/-/g, ' ')} SETBACK · {formatM(guide.requiredMm)}</text>
+      </g>;
+    })}</g>}
     {geometry.buildings.filter((building) => building.id !== selectedBuilding.id).map((building) => <polygon key={building.id} points={svgPoints(building.polygon, transform)} fill={viewMode === 'property' ? '#e1e7e3' : 'none'} stroke="#7b8b82" strokeWidth="1.5" />)}
     <polygon points={svgPoints(selectedBuilding.polygon, transform)} fill="#d3ddd7" stroke="#394b42" strokeWidth="2.5" />
     <line x1={transform.x(0)} y1={transform.y(0)} x2={transform.x(geometry.anchorLengthMm)} y2={transform.y(0)} stroke={geometry.alignmentStatus === 'field-measured' ? '#114c37' : '#d65d2e'} strokeWidth="6" strokeDasharray={geometry.alignmentStatus === 'provisional' ? '10 5' : undefined} />
@@ -754,6 +765,7 @@ function pointOnEdge(platform: DeckPlatform, edgeIndex: number, pointer: PointMm
   return [Math.round(start.xMm + edgeX * t), Math.round(start.yMm + edgeY * t)];
 }
 function distance(first: PointMm, second: PointMm): number { return Math.hypot(second[0] - first[0], second[1] - first[1]); }
+function midpoint(first: PointMm, second: PointMm): PointMm { return [(first[0] + second[0]) / 2, (first[1] + second[1]) / 2]; }
 function formatM(mm: number): string { return `${(mm / 1000).toFixed(2)} m`; }
 function average(values: number[]): number { return values.reduce((sum, value) => sum + value, 0) / Math.max(1, values.length); }
 function svgPoints(points: PointMm[], transform: Transform): string { return points.map(([x, y]) => `${transform.x(x)},${transform.y(y)}`).join(' '); }

@@ -44,6 +44,8 @@ describe('canonical ten-sheet review set', () => {
     expect(siteSheet).toContain('SITE / COVERAGE SCHEDULE');
     expect(siteSheet).toContain('REFERENCE SETBACK SCREEN');
     expect(siteSheet).toContain('FRONT · PL-1');
+    expect(siteSheet).toContain('FRONT SETBACK · 4.50 m');
+    expect(siteSheet).toContain('setback-band');
     expect(siteSheet).toContain('PL-1 · P1');
     expect(siteSheet).toContain('site-stair');
     expect(siteSheet).toContain('site-footing');
