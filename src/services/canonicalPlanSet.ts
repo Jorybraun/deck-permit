@@ -4,6 +4,7 @@ import { projectPropertyToLocal, terrainElevationAt, type LocalPropertyGeometry,
 import type { PlanSheet, Property } from '../types';
 
 const CONTENT_BOTTOM = 970;
+export const CANONICAL_PLAN_SET_SCHEMA = 'permitly-canonical-plan-set/v2' as const;
 
 interface CanonicalPlanSetInput {
   property: Property;
@@ -19,18 +20,25 @@ export interface CanonicalPlanSet {
   sheets: PlanSheet[];
 }
 
+/** Fingerprints both canonical structural input and the drawing contract that presents it. */
+export function canonicalPlanFingerprint(framing: FramingDesign): string {
+  return `DP-${fnv1a32(`${CANONICAL_PLAN_SET_SCHEMA}|${framing.inputFingerprint}`)}`;
+}
+
 interface IssueMeta { fingerprint: string; revision: number; issuedAt: string }
 
-/** Generates seven coordinated 11×17 review sheets from canonical v1 design/framing. */
+/** Generates nine coordinated 11×17 review sheets from canonical v1 design/framing. */
 export function generateCanonicalPlanSet(input: CanonicalPlanSetInput): CanonicalPlanSet {
   const issue: IssueMeta = {
-    fingerprint: `DP-${input.framing.inputFingerprint.slice(-8).toUpperCase()}`,
+    fingerprint: canonicalPlanFingerprint(input.framing),
     revision: input.revision || 1,
     issuedAt: input.issuedAt || new Date().toISOString(),
   };
   const sheets = [
     coverSheet(input, issue),
     siteSheet(input, issue),
+    deckPlanSheet(input, issue),
+    foundationSheet(input, issue),
     framingSheet(input, issue),
     elevationSheet(input, issue),
     sectionSheet(input, issue),
@@ -55,8 +63,9 @@ function coverSheet(input: CanonicalPlanSetInput, issue: IssueMeta): PlanSheet {
     ['Issue', `Rev ${pad(issue.revision)} · ${issue.fingerprint}`],
   ];
   const indexRows = [
-    ['A0.0', 'Cover, project data, drawing index'], ['A1.0', 'Site and dimensioned deck plan'], ['S1.0', 'Framing plan and member schedule'],
-    ['A2.0', 'Platform and stair elevations'], ['S2.0', 'Typical building sections'], ['A3.0', 'Stair, guard, footing, connection details'], ['S3.0', 'Design basis, checks, review gates'],
+    ['A0.0', 'Cover, project data, drawing index'], ['A1.0', 'Site and property relationship'], ['A2.0', 'Dimensioned deck and landing plan'],
+    ['S1.0', 'Foundation and post plan'], ['S2.0', 'Framing plan and member schedule'], ['A3.0', 'Platform and stair elevations'],
+    ['S3.0', 'Typical building sections'], ['A4.0', 'Stair, guard, footing, connection details'], ['S4.0', 'Design basis, checks, review gates'],
   ];
   const required = framing.reviewGates.filter((gate) => gate.status === 'required');
   return makeSheet('cover', 'Cover & Project Data', 'NTS', 'A0.0', input, issue, `
@@ -82,12 +91,48 @@ function siteSheet(input: CanonicalPlanSetInput, issue: IssueMeta): PlanSheet {
     ['Interior side', zoning ? `${zoning.setbacks.side} m` : 'unconfirmed'], ['Exterior side', zoning ? `${zoning.setbacks.exteriorSide} m` : 'unconfirmed'],
     ['Wall evidence', input.site.designWall.selectionStatus], ['Geometry status', input.site.status],
   ];
-  return makeSheet('site', 'Site & Dimensioned Deck Plan', 'DIAGRAMMATIC · DIMENSIONS GOVERN', 'A1.0', input, issue, `
+  return makeSheet('site', 'Site & Property Relationship', 'DIAGRAMMATIC · DIMENSIONS GOVERN', 'A1.0', input, issue, `
     <text class="view-title" x="625" y="68" text-anchor="middle">SITE AND DECK LOCATION PLAN</text>
     <rect x="55" y="78" width="1140" height="810" class="panel"/>${siteDrawing}
     <rect x="1230" y="78" width="400" height="810" class="panel"/><text class="section" x="1260" y="118">SITE / ZONING SCHEDULE</text>${table(rows, 1260, 142, 340, 46, 145)}
     <text class="section" x="1260" y="600">EVIDENCE BASIS</text>${noteList([...input.property.evidence.slice(0, 3).map((source) => `${source.label}: ${source.status}; retrieved ${source.retrievedAt.slice(0, 10)}.`), ...input.site.capture.evidence.slice(0, 3).map((record) => `${record.category}: ${record.fileName}; SHA ${record.sha256.slice(0, 10)}…; ${record.status}.`)], 1260, 628, 42, 330)}
     ${notice(1230, 825, 400, 64, 'SURVEY / SETBACK GATE', 'Municipal GIS is reference evidence, not a legal survey. Confirm deck and footing offsets before permit submission.')}`);
+}
+
+function deckPlanSheet(input: CanonicalPlanSetInput, issue: IssueMeta): PlanSheet {
+  const { design, site } = input;
+  const points: PointMm[] = [
+    [0, 0], [site.designWall.lengthMm, 0],
+    ...design.platforms.flatMap((platform) => platform.boundary.vertices.map((vertex): PointMm => [vertex.xMm, vertex.yMm])),
+    ...design.stairs.flatMap((stair) => [stair.startMm, stair.endMm]),
+  ];
+  const tx = drawingTransform(points, { x: 70, y: 110, width: 1080, height: 710 });
+  const platformRows = design.platforms.map((platform) => {
+    const areaSqM = polygonArea(platform.boundary.vertices.map((vertex): PointMm => [vertex.xMm, vertex.yMm])) / 1_000_000;
+    return [platform.id, `${platform.name} · ${platform.purpose} · EL. ${platform.elevationMm} · ${areaSqM.toFixed(1)} m² · ${platform.finish.decking}`];
+  });
+  const stairRows = design.stairs.map((stair) => [stair.id, `${stair.name} · ${stair.widthMm} wide · ${stair.riserCount}R @ ${stair.riserHeightMm} · ${stair.treadDepthMm} tread · bearing ${Math.round(stair.directionDeg)}°`]);
+  return makeSheet('deck-plan', 'Dimensioned Deck & Landing Plan', 'DIMENSIONED MODEL · DO NOT SCALE', 'A2.0', input, issue, `
+    <text class="view-title" x="610" y="72" text-anchor="middle">DECK, LANDING, STAIR AND GUARD PLAN</text><rect x="55" y="82" width="1125" height="800" class="panel"/>
+    ${deckLayoutPlanSvg(design, site, tx)}
+    <rect x="1210" y="82" width="420" height="800" class="panel"/><text class="section" x="1240" y="120">PLATFORM SCHEDULE</text>${table(platformRows, 1240, 145, 360, 62, 55)}
+    <text class="section" x="1240" y="${Math.min(610, 170 + platformRows.length * 62)}">STAIR SCHEDULE</text>${table(stairRows.length ? stairRows : [['—', 'No stairs in current design']], 1240, Math.min(635, 195 + platformRows.length * 62), 360, 68, 55)}
+    ${notice(1210, 805, 420, 77, 'PLAN COORDINATION', 'Written edge dimensions and elevations govern. Confirm the house wall, openings, clearances, finished surfaces, and every landing before professional issue.')}`);
+}
+
+function foundationSheet(input: CanonicalPlanSetInput, issue: IssueMeta): PlanSheet {
+  const { design, framing, site } = input;
+  const points: PointMm[] = [
+    [0, 0], [site.designWall.lengthMm, 0],
+    ...design.platforms.flatMap((platform) => platform.boundary.vertices.map((vertex): PointMm => [vertex.xMm, vertex.yMm])),
+    ...framing.footings.flatMap((footing): PointMm[] => [[footing.centerMm[0] - footing.widthMm / 2, footing.centerMm[1] - footing.lengthMm / 2], [footing.centerMm[0] + footing.widthMm / 2, footing.centerMm[1] + footing.lengthMm / 2]]),
+  ];
+  const tx = drawingTransform(points, { x: 70, y: 110, width: 1050, height: 710 });
+  return makeSheet('foundations', 'Foundation & Post Plan', 'DIMENSIONED MODEL · DO NOT SCALE', 'S1.0', input, issue, `
+    <text class="view-title" x="590" y="72" text-anchor="middle">FOUNDATION, POST AND BEAM SUPPORT PLAN</text><rect x="55" y="82" width="1090" height="800" class="panel"/>
+    ${foundationPlanSvg(design, framing, site, tx)}
+    <rect x="1175" y="82" width="455" height="800" class="panel"/><text class="section" x="1205" y="120">FOOTING / POST COORDINATE SCHEDULE</text>${foundationSchedule(framing, site, 1195, 145, 415, 635)}
+    ${notice(1175, 805, 455, 77, 'FOUNDATION DESIGN GATE', `Bearing pads use ${framing.assumptions.soilBearingKpa} kPa assumed soil capacity only. A qualified reviewer must resolve soil, frost depth, thickness, reinforcement, uplift, lateral restraint, drainage, utilities, and setbacks.`)}`);
 }
 
 function framingSheet(input: CanonicalPlanSetInput, issue: IssueMeta): PlanSheet {
@@ -100,7 +145,7 @@ function framingSheet(input: CanonicalPlanSetInput, issue: IssueMeta): PlanSheet
     ['Footings', `${framing.footings.length} preliminary bearing pads · depth unresolved`], ['Guards', `${framing.guards.length} exposed edge assemblies`],
     ['Stair framing', `${countLabel(framing.stairStringers.length, 'stringer')} · ${countLabel(framing.stairOpenings.length, 'header')} · ${countLabel(framing.stairTrimmers.length, 'trimmer')}`], ['Overall status', framing.status.replace(/-/g, ' ')],
   ];
-  return makeSheet('framing', 'Framing Plan & Member Schedule', 'DIMENSIONED MODEL · DO NOT SCALE', 'S1.0', input, issue, `
+  return makeSheet('framing', 'Framing Plan & Member Schedule', 'DIMENSIONED MODEL · DO NOT SCALE', 'S2.0', input, issue, `
     <text class="view-title" x="610" y="70" text-anchor="middle">FRAMING PLAN</text><rect x="55" y="82" width="1125" height="800" class="panel"/>
     ${framingPlanSvg(design, framing, tx)}
     <rect x="1210" y="82" width="420" height="800" class="panel"/><text class="section" x="1240" y="120">MEMBER SCHEDULE</text>${table(schedule, 1240, 144, 360, 48, 115)}
@@ -116,7 +161,7 @@ function elevationSheet(input: CanonicalPlanSetInput, issue: IssueMeta): PlanShe
   const platforms = input.design.platforms;
   const views = platforms.map((platform, index) => elevationView(platform, 100, 120 + index * Math.min(330, 680 / Math.max(1, platforms.length)), 1030, Math.min(285, 620 / Math.max(1, platforms.length)), terrainElevationAt(input.site.terrain, platformReferencePoint(platform)).elevationMm)).join('');
   const stairRows = input.design.stairs.map((stair) => [stair.name, `${stair.riserCount} risers @ ${stair.riserHeightMm} mm · ${stair.treadDepthMm} mm treads · ${stair.totalRunMm} mm run`]);
-  return makeSheet('elevations', 'Platform & Stair Elevations', 'DIMENSIONED MODEL · DO NOT SCALE', 'A2.0', input, issue, `
+  return makeSheet('elevations', 'Platform & Stair Elevations', 'DIMENSIONED MODEL · DO NOT SCALE', 'A3.0', input, issue, `
     <text class="view-title" x="620" y="70" text-anchor="middle">PLATFORM ELEVATIONS</text><rect x="55" y="82" width="1135" height="800" class="panel"/>${views}
     <rect x="1220" y="82" width="410" height="800" class="panel"/><text class="section" x="1250" y="120">ELEVATION SCHEDULE</text>${table(platforms.map((platform) => [platform.name, `surface ${platform.elevationMm} mm above datum · ${platform.finish.decking}`]), 1250, 145, 350, 52, 115)}
     <text class="section" x="1250" y="410">STAIR SCHEDULE</text>${table(stairRows.length ? stairRows : [['Stairs', 'None']], 1250, 435, 350, 65, 95)}
@@ -130,7 +175,7 @@ function sectionSheet(input: CanonicalPlanSetInput, issue: IssueMeta): PlanSheet
   const beam = input.framing.beams.find((member) => member.platformId === platform?.id);
   const post = input.framing.posts.find((member) => member.platformId === platform?.id);
   const footing = input.framing.footings.find((member) => member.platformId === platform?.id);
-  return makeSheet('sections', 'Typical Building Sections', 'NTS · DIMENSIONS SHOWN', 'S2.0', input, issue, `
+  return makeSheet('sections', 'Typical Building Sections', 'NTS · DIMENSIONS SHOWN', 'S3.0', input, issue, `
     <text class="view-title" x="560" y="70" text-anchor="middle">TYPICAL DECK SECTION · ${esc((first?.supportStrategy || 'UNRESOLVED').toUpperCase())}</text>
     ${sectionDiagram(platform, joist?.section || 'Engineer design', beam?.section || 'Engineer design', post?.section || 'Engineer design', footing?.widthMm || 0, Boolean(input.framing.ledgers.length))}
     <rect x="1120" y="82" width="510" height="800" class="panel"/><text class="section" x="1150" y="120">SECTION KEYNOTES</text>
@@ -141,7 +186,7 @@ function sectionSheet(input: CanonicalPlanSetInput, issue: IssueMeta): PlanSheet
 function detailSheet(input: CanonicalPlanSetInput, issue: IssueMeta): PlanSheet {
   const stair = input.design.stairs[0];
   const guard = input.framing.guards[0];
-  return makeSheet('details', 'Stair, Guard, Footing & Connection Details', 'NTS · DIMENSIONS SHOWN', 'A3.0', input, issue, `
+  return makeSheet('details', 'Stair, Guard, Footing & Connection Details', 'NTS · DIMENSIONS SHOWN', 'A4.0', input, issue, `
     <text class="view-title" x="390" y="66" text-anchor="middle">D1 · STAIR GEOMETRY</text>${stairDetail(stair, input.framing.stairConnections.filter((connection) => connection.stairId === stair?.id), 70, 95, 650, 350)}
     <text class="view-title" x="1040" y="66" text-anchor="middle">D2 · GUARD INTENT</text>${guardDetail(guard, 740, 95, 580, 350)}
     <text class="view-title" x="1480" y="66" text-anchor="middle">D3 · FOOTING INTENT</text>${footingDetail(input.framing.footings[0], 1350, 95, 280, 350)}
@@ -152,7 +197,7 @@ function detailSheet(input: CanonicalPlanSetInput, issue: IssueMeta): PlanSheet 
 function calculationSheet(input: CanonicalPlanSetInput, issue: IssueMeta): PlanSheet {
   const { framing } = input;
   const loadRows = [['Dead load', `${framing.assumptions.deadLoadKpa.toFixed(2)} kPa`], ['Residential live load', `${framing.assumptions.liveLoadKpa.toFixed(2)} kPa`], ['Site snow load', `${framing.assumptions.snowLoadKpa.toFixed(2)} kPa`], ['Governing area load', `${framing.assumptions.governingAreaLoadKpa.toFixed(2)} kPa`], ['Assumed soil bearing', `${framing.assumptions.soilBearingKpa} kPa`], ['Lumber basis', `${framing.assumptions.lumberSpecies} ${framing.assumptions.lumberGrade} · ${framing.assumptions.treatment}`]];
-  return makeSheet('calculations', 'Design Basis, Checks & Review Gates', 'NTS', 'S3.0', input, issue, `
+  return makeSheet('calculations', 'Design Basis, Checks & Review Gates', 'NTS', 'S4.0', input, issue, `
     <text class="section" x="70" y="70">DESIGN BASIS</text>${table(loadRows, 70, 95, 650, 54, 220)}
     <text class="section" x="70" y="465">PLATFORM SYSTEM SCREENING</text>${input.framing.platformSystems.map((system, index) => statusBox(70, 490 + index * 100, 650, system.status.toUpperCase().replace(/-/g, ' '), `${system.platformId} · ${system.supportStrategy} · ${system.joistDesignSpanMm} mm span`, system.status === 'engineering-required' ? 'blocked' : 'review', system.explanation)).join('')}
     <text class="section" x="780" y="70">FRAMING CHECKS</text>${framing.checks.map((check, index) => statusBox(780, 95 + index * 90, 850, check.status.toUpperCase(), check.title, check.status, `${check.result} Basis: ${check.basis}`)).join('')}
@@ -173,6 +218,45 @@ function titleBlock(number: string, title: string, scale: string, input: Canonic
 interface Tx { scale: number; x: (value: number) => number; y: (value: number) => number }
 function drawingTransform(points: PointMm[], frame: { x: number; y: number; width: number; height: number }): Tx { const source = points.length ? points : [[0, 0], [1000, 1000]]; const minX = Math.min(...source.map((point) => point[0])); const maxX = Math.max(...source.map((point) => point[0])); const minY = Math.min(...source.map((point) => point[1])); const maxY = Math.max(...source.map((point) => point[1])); const scale = Math.min(frame.width / Math.max(1000, maxX - minX), frame.height / Math.max(1000, maxY - minY)); const ox = frame.x + (frame.width - (maxX - minX) * scale) / 2 - minX * scale; const oy = frame.y + (frame.height - (maxY - minY) * scale) / 2 - minY * scale; return { scale, x: (value) => ox + value * scale, y: (value) => oy + value * scale }; }
 function siteGeometrySvg(geometry: LocalPropertyGeometry, design: DeckDesign, site: SiteModel, tx: Tx): string { return `<polygon points="${pts(geometry.parcel, tx)}" class="parcel"/>${geometry.buildings.map((building) => `<polygon points="${pts(building.polygon, tx)}" class="${building.primary ? 'existing-primary' : 'existing'}"/>`).join('')}${design.platforms.map((platform) => `<polygon points="${pts(platform.boundary.vertices.map((vertex): PointMm => [vertex.xMm, vertex.yMm]), tx)}" class="deck-area"/>${edgeDimensions(platform, tx)}`).join('')}${site.terrain.gradePoints.map((point) => `<circle cx="${tx.x(point.xMm)}" cy="${tx.y(point.yMm)}" r="6" class="post"/><text class="tiny" x="${tx.x(point.xMm) + 9}" y="${tx.y(point.yMm) - 8}">${esc(point.id)} · EL. ${point.elevationMm}</text>`).join('')}<line x1="${tx.x(0)}" y1="${tx.y(0)}" x2="${tx.x(geometry.anchorLengthMm)}" y2="${tx.y(0)}" class="wall"/><text class="note" x="${tx.x(0)}" y="${tx.y(0) - 12}">SELECTED HOUSE WALL · ${geometry.anchorLengthMm} mm</text><text class="tiny" x="80" y="865">GREEN DASHED: MUNICIPAL PARCEL · GREY: MUNICIPAL BUILDING · OCHRE: PROPOSED DECK · DOTS: GRADE OBSERVATIONS</text>`; }
+function deckLayoutPlanSvg(design: DeckDesign, site: SiteModel, tx: Tx): string {
+  const wall = `<line x1="${tx.x(0)}" y1="${tx.y(0)}" x2="${tx.x(site.designWall.lengthMm)}" y2="${tx.y(0)}" class="wall"/><text class="note" x="${tx.x(0)}" y="${tx.y(0) - 17}">EXISTING HOUSE / SELECTED WALL · ${site.designWall.lengthMm}</text>${site.designWall.openings.map((opening) => `<line x1="${tx.x(opening.offsetMm)}" y1="${tx.y(0)}" x2="${tx.x(opening.offsetMm + opening.widthMm)}" y2="${tx.y(0)}" class="opening"/><text class="tiny" x="${tx.x(opening.offsetMm + opening.widthMm / 2)}" y="${tx.y(0) - 8}" text-anchor="middle">${esc(opening.kind.toUpperCase())} ${opening.id} · ${opening.widthMm} · SILL EL. ${opening.sillHeightMm}</text>`).join('')}`;
+  const platforms = design.platforms.map((platform) => {
+    const center = platformReferencePoint(platform);
+    return `<polygon points="${pts(platform.boundary.vertices.map((vertex): PointMm => [vertex.xMm, vertex.yMm]), tx)}" class="deck-area"/>${edgeDimensions(platform, tx)}<text class="callout" x="${tx.x(center[0])}" y="${tx.y(center[1]) - 7}" text-anchor="middle">${esc(platform.name.toUpperCase())}</text><text class="tiny" x="${tx.x(center[0])}" y="${tx.y(center[1]) + 10}" text-anchor="middle">${esc((platform.purpose || 'deck').toUpperCase())} · TOP EL. ${platform.elevationMm}</text>${platform.edges.map((edge, index) => edge.role === 'guard' ? line([platform.boundary.vertices[index].xMm, platform.boundary.vertices[index].yMm], [platform.boundary.vertices[(index + 1) % platform.boundary.vertices.length].xMm, platform.boundary.vertices[(index + 1) % platform.boundary.vertices.length].yMm], tx, 'guard') : '').join('')}`;
+  }).join('');
+  return `${wall}${platforms}${design.stairs.map((stair) => stairPlanSvg(stair, tx)).join('')}<g transform="translate(80 835)"><line x1="0" y1="0" x2="160" y2="0" class="wall"/><line x1="0" y1="-7" x2="0" y2="7" class="thin"/><line x1="160" y1="-7" x2="160" y2="7" class="thin"/><text class="tiny" x="80" y="18" text-anchor="middle">MODEL SCALE BAR · ${Math.round(160 / tx.scale)} mm</text></g>`;
+}
+function stairPlanSvg(stair: DeckDesign['stairs'][number], tx: Tx): string {
+  const dx = stair.endMm[0] - stair.startMm[0]; const dy = stair.endMm[1] - stair.startMm[1]; const length = Math.hypot(dx, dy) || 1;
+  const nx = -dy / length * stair.widthMm / 2; const ny = dx / length * stair.widthMm / 2;
+  const corners: PointMm[] = [[stair.startMm[0] + nx, stair.startMm[1] + ny], [stair.endMm[0] + nx, stair.endMm[1] + ny], [stair.endMm[0] - nx, stair.endMm[1] - ny], [stair.startMm[0] - nx, stair.startMm[1] - ny]];
+  const treadCount = Math.max(1, stair.riserCount - 1);
+  const treads = Array.from({ length: treadCount + 1 }, (_, index) => { const fraction = index / treadCount; const center: PointMm = [stair.startMm[0] + dx * fraction, stair.startMm[1] + dy * fraction]; return line([center[0] + nx, center[1] + ny], [center[0] - nx, center[1] - ny], tx, 'tread'); }).join('');
+  const mid: PointMm = [(stair.startMm[0] + stair.endMm[0]) / 2, (stair.startMm[1] + stair.endMm[1]) / 2];
+  return `<polygon points="${pts(corners, tx)}" class="stair-flight"/>${treads}<circle cx="${tx.x(stair.startMm[0])}" cy="${tx.y(stair.startMm[1])}" r="8" class="endpoint"/><text class="tiny" x="${tx.x(stair.startMm[0])}" y="${tx.y(stair.startMm[1]) + 3}" text-anchor="middle">A</text><circle cx="${tx.x(stair.endMm[0])}" cy="${tx.y(stair.endMm[1])}" r="8" class="endpoint"/><text class="tiny" x="${tx.x(stair.endMm[0])}" y="${tx.y(stair.endMm[1]) + 3}" text-anchor="middle">B</text><text class="callout" x="${tx.x(mid[0])}" y="${tx.y(mid[1]) - 12}" text-anchor="middle">${esc(stair.name.toUpperCase())} · ${stair.widthMm} WIDE · ${stair.riserCount}R</text>`;
+}
+function foundationPlanSvg(design: DeckDesign, framing: FramingDesign, site: SiteModel, tx: Tx): string {
+  const originX = tx.x(0); const originY = tx.y(0);
+  return `<line x1="${originX}" y1="${originY}" x2="${tx.x(site.designWall.lengthMm)}" y2="${originY}" class="wall"/><circle cx="${originX}" cy="${originY}" r="10" class="datum"/><line x1="${originX - 16}" y1="${originY}" x2="${originX + 16}" y2="${originY}" class="dimension"/><line x1="${originX}" y1="${originY - 16}" x2="${originX}" y2="${originY + 16}" class="dimension"/><text class="note" x="${originX + 14}" y="${originY - 14}">PROJECT DATUM (0,0) · SELECTED WALL START</text>${design.platforms.map((platform) => `<polygon points="${pts(platform.boundary.vertices.map((vertex): PointMm => [vertex.xMm, vertex.yMm]), tx)}" class="outline"/>`).join('')}${framing.beams.map((beam) => line(beam.startMm, beam.endMm, tx, 'support-grid')).join('')}${framing.footings.map((footing, index) => { const x = tx.x(footing.centerMm[0]); const y = tx.y(footing.centerMm[1]); const width = Math.max(12, footing.widthMm * tx.scale); const height = Math.max(12, footing.lengthMm * tx.scale); return `<rect x="${x - width / 2}" y="${y - height / 2}" width="${width}" height="${height}" class="footing-fill"/><rect x="${x - 5}" y="${y - 5}" width="10" height="10" class="post"/><text class="foundation-tag" x="${x}" y="${y - height / 2 - 6}" text-anchor="middle">F${String(index + 1).padStart(2, '0')}</text>`; }).join('')}<text class="tiny" x="80" y="855">COORDINATES ARE MILLIMETRES FROM PROJECT DATUM · FOOTING SIZES ARE BEARING-ONLY PRELIMINARY VALUES · WRITTEN SCHEDULE GOVERNS</text>`;
+}
+function foundationSchedule(framing: FramingDesign, site: SiteModel, x: number, y: number, width: number, height: number): string {
+  if (!framing.footings.length) return `<text class="note" x="${x + 10}" y="${y + 24}">No generated footings.</text>`;
+  const columns = [32, 84, 42, 42, 58, 39, 72, 46];
+  const headers = ['TAG', 'MODEL ID', 'X', 'Y', 'SIZE', 'R kN', 'POST / H', 'GRADE'];
+  const rowHeight = Math.min(34, height / (framing.footings.length + 1));
+  const boundaries = columns.reduce<number[]>((items, column) => [...items, items[items.length - 1] + column], [x]);
+  const header = `<rect x="${x}" y="${y}" width="${width}" height="${rowHeight}" class="schedule-head"/>${headers.map((headerText, index) => `<text class="schedule-label" x="${boundaries[index] + 4}" y="${y + rowHeight * .64}">${headerText}</text>`).join('')}`;
+  const rows = framing.footings.map((footing, index) => {
+    const yy = y + (index + 1) * rowHeight;
+    const post = framing.posts.find((candidate) => candidate.id === footing.postId);
+    const grade = terrainElevationAt(site.terrain, footing.centerMm).elevationMm;
+    const section = (post?.section || 'DESIGN').replace('Engineer design', 'ENG');
+    const values = [`F${String(index + 1).padStart(2, '0')}`, footing.id, Math.round(footing.centerMm[0]), Math.round(footing.centerMm[1]), `${footing.widthMm}×${footing.lengthMm}`, footing.estimatedReactionKn.toFixed(1), `${section} / ${post?.heightMm ?? '—'}`, grade];
+    return `<rect x="${x}" y="${yy}" width="${width}" height="${rowHeight}" class="schedule-row"/>${values.map((value, columnIndex) => `<text class="schedule-text" x="${boundaries[columnIndex] + 4}" y="${yy + rowHeight * .64}">${esc(String(value))}</text>`).join('')}`;
+  }).join('');
+  const verticals = boundaries.slice(1, -1).map((boundary) => `<line x1="${boundary}" y1="${y}" x2="${boundary}" y2="${y + rowHeight * (framing.footings.length + 1)}" class="thin"/>`).join('');
+  return `${header}${rows}${verticals}`;
+}
 function framingPlanSvg(design: DeckDesign, framing: FramingDesign, tx: Tx): string { return `${design.platforms.map((platform) => `<polygon points="${pts(platform.boundary.vertices.map((vertex): PointMm => [vertex.xMm, vertex.yMm]), tx)}" class="outline"/>${edgeDimensions(platform, tx)}`).join('')}${framing.footings.map((member) => `<circle cx="${tx.x(member.centerMm[0])}" cy="${tx.y(member.centerMm[1])}" r="${Math.max(8, member.widthMm * tx.scale / 2)}" class="footing"/>`).join('')}${framing.joists.map((member) => line(member.startMm, member.endMm, tx, 'member')).join('')}${framing.ledgers.map((member) => line(member.startMm, member.endMm, tx, 'ledger')).join('')}${framing.beams.map((member) => `${line(member.startMm, member.endMm, tx, 'beam')}<text class="tiny" x="${tx.x((member.startMm[0] + member.endMm[0]) / 2)}" y="${tx.y((member.startMm[1] + member.endMm[1]) / 2) - 12}" text-anchor="middle">${esc(member.id)} · ${esc(member.section)}</text>`).join('')}${framing.posts.map((member) => `<rect x="${tx.x(member.pointMm[0]) - 7}" y="${tx.y(member.pointMm[1]) - 7}" width="14" height="14" class="post"/>`).join('')}${framing.guards.map((member) => line(member.startMm, member.endMm, tx, 'guard')).join('')}${framing.stairTrimmers.map((member) => line(member.startMm, member.endMm, tx, 'stair-trimmer')).join('')}${framing.stairOpenings.map((member) => `${line(member.headerStartMm, member.headerEndMm, tx, 'stair-header')}<text class="tiny" x="${tx.x(member.centerMm[0])}" y="${tx.y(member.centerMm[1]) - 10}" text-anchor="middle">${esc(member.id)} · ${member.projectedWidthMm}</text>`).join('')}${framing.stairStringers.map((member) => line(member.startMm, member.endMm, tx, 'stringer')).join('')}`; }
 function edgeDimensions(platform: DeckPlatform, tx: Tx): string { return platform.boundary.vertices.map((start, index, vertices) => { const end = vertices[(index + 1) % vertices.length]; const x = (tx.x(start.xMm) + tx.x(end.xMm)) / 2; const y = (tx.y(start.yMm) + tx.y(end.yMm)) / 2; const length = Math.round(Math.hypot(end.xMm - start.xMm, end.yMm - start.yMm)); return `<rect x="${x - 31}" y="${y - 9}" width="62" height="16" rx="3" class="dim-bg"/><text class="dimension-text" x="${x}" y="${y + 3}" text-anchor="middle">${length}</text>`; }).join(''); }
 function elevationView(platform: DeckPlatform, x: number, y: number, width: number, height: number, terrain: number): string { const bounds = platformBounds(platform); const sx = width / Math.max(1000, bounds.maxX - bounds.minX); const sy = Math.min(.22, (height - 70) / Math.max(1200, platform.elevationMm - terrain + 1200)); const deckY = y + height - 35 - (platform.elevationMm - terrain) * sy; const gradeY = y + height - 35; const surfaceX1 = x + 30; const surfaceX2 = x + 30 + (bounds.maxX - bounds.minX) * sx; const guards = platform.edges.some((edge) => edge.role === 'guard') || platform.elevationMm - terrain > 600; return `<g><text class="section" x="${x + 18}" y="${y + 22}">${esc(platform.name.toUpperCase())} · EL. ${platform.elevationMm}</text><line x1="${x + 20}" y1="${gradeY}" x2="${x + width - 20}" y2="${gradeY}" class="grade"/><line x1="${surfaceX1}" y1="${deckY}" x2="${surfaceX2}" y2="${deckY}" class="deck-line"/><line x1="${surfaceX1 + 25}" y1="${deckY}" x2="${surfaceX1 + 25}" y2="${gradeY}" class="post-line"/><line x1="${surfaceX2 - 25}" y1="${deckY}" x2="${surfaceX2 - 25}" y2="${gradeY}" class="post-line"/>${guards ? `<line x1="${surfaceX1}" y1="${deckY - 900 * sy}" x2="${surfaceX2}" y2="${deckY - 900 * sy}" class="guard"/>` : ''}${dimV(deckY, gradeY, surfaceX1 - 40, `${platform.elevationMm - terrain} mm`)}<text class="tiny" x="${surfaceX1}" y="${gradeY + 15}">FINISHED GRADE · FIELD VERIFY</text></g>`; }
@@ -186,7 +270,7 @@ function statusBox(x: number, y: number, width: number, label: string, title: st
 function notice(x: number, y: number, width: number, height: number, title: string, copy: string): string { return `<rect x="${x}" y="${y}" width="${width}" height="${height}" rx="4" class="notice"/><text class="notice-title" x="${x + 16}" y="${y + 25}">${esc(title)}</text>${wrapped(copy, x + 16, y + 46, width - 32, 10, 13, 4)}`; }
 function noteList(notes: string[], x: number, y: number, spacing: number, width: number): string { return notes.map((note, index) => `<text class="note" x="${x}" y="${y + index * spacing}">•</text>${wrapped(note, x + 18, y + index * spacing, width - 18, 10, 13, 3)}`).join(''); }
 function wrapped(value: string, x: number, y: number, maxWidth: number, fontSize: number, lineHeight: number, maxLines: number): string { const maxChars = Math.max(16, Math.floor(maxWidth / (fontSize * .56))); const words = value.split(/\s+/); const lines: string[] = []; let line = ''; for (const word of words) { if (line && `${line} ${word}`.length > maxChars) { lines.push(line); line = word; } else line = line ? `${line} ${word}` : word; } if (line) lines.push(line); return `<text x="${x}" y="${y}" font-size="${fontSize}">${lines.slice(0, maxLines).map((item, index) => `<tspan x="${x}" dy="${index ? lineHeight : 0}">${esc(item)}</tspan>`).join('')}</text>`; }
-function styles(): string { return `<style>text{font-family:Arial,Helvetica,sans-serif;fill:#17231d}.sheet-border,.title-block,.panel{fill:#fff;stroke:#17231d;stroke-width:2}.thin{stroke:#68756e;stroke-width:1}.sheet-heading{font-size:36px;font-weight:700}.subheading{font-size:20px}.section,.view-title{font-size:16px;font-weight:700;letter-spacing:.5px}.note{font-size:11px}.small{font-size:11px}.tiny{font-size:8px}.label{font-size:10px;font-weight:700}.title-name{font-size:19px;font-weight:700}.title-drawing{font-size:13px;font-weight:700}.title-warning{font-size:10px;font-weight:700;fill:#a33b27}.sheet-no{font-size:29px;font-weight:700}.seal-box{fill:#f7f9f8;stroke:#68756e;stroke-dasharray:5 3}.seal-title{font-size:8px;font-weight:700}.seal-note{font-size:7px;fill:#56625c}.table-line{fill:#fff;stroke:#8c9891;stroke-width:1}.notice{fill:#fff4da;stroke:#af6d00;stroke-width:1.5}.notice-title{font-size:12px;font-weight:700;fill:#7a4700}.status-pass{fill:#e8f5ed;stroke:#2c7652}.status-review{fill:#edf4ff;stroke:#476f9c}.status-blocked{fill:#ffe8e3;stroke:#b33e2b}.parcel{fill:#e6f4eb;stroke:#167252;stroke-width:4;stroke-dasharray:10 5}.existing-primary{fill:#d2dbd6;stroke:#263b31;stroke-width:3}.existing{fill:#e5eae7;stroke:#748078}.deck-area{fill:#dca66e;stroke:#7e4c22;stroke-width:3}.wall{stroke:#d35420;stroke-width:7}.outline{fill:none;stroke:#17241d;stroke-width:4}.member{stroke:#3d8a6c;stroke-width:2}.beam{stroke:#173f67;stroke-width:9}.ledger{stroke:#d35420;stroke-width:7;stroke-dasharray:12 4}.post{fill:#173f67;stroke:#fff}.footing{fill:none;stroke:#b27b1e;stroke-width:2;stroke-dasharray:5 3}.guard{stroke:#754c9b;stroke-width:6;stroke-dasharray:5 4}.stringer{stroke:#9b5e2d;stroke-width:4;stroke-dasharray:7 3}.stair-header{stroke:#b43f2d;stroke-width:10}.stair-trimmer{stroke:#b43f2d;stroke-width:6;stroke-dasharray:4 2}.dim-bg{fill:#fff;stroke:#7a8b82}.dimension-text{font-size:8px;font-weight:700;fill:#175ec7}.dimension{stroke:#175ec7;stroke-width:1}.grade{stroke:#425149;stroke-width:2;stroke-dasharray:12 5}.deck-line{stroke:#17241d;stroke-width:8}.post-line{stroke:#6d4325;stroke-width:7}.rail{stroke:#17241d;stroke-width:4}.stair{stroke:#b56a15;stroke-width:4}.existing{fill:#d9dfdb;stroke:#5b6861}.ledger-fill{fill:#c97a59;stroke:#793a28}.flashing{stroke:#c2462d;stroke-width:4;fill:none}.decking{fill:#c79562;stroke:#5b3b21}.member-fill{fill:#d9b78f;stroke:#5b3b21}.beam-fill{fill:#bd8954;stroke:#5b3b21}.post-fill{fill:#9b6639;stroke:#5b3b21}.concrete{fill:#d5d8d6;stroke:#59645e}.callout{font-size:11px;font-weight:700;paint-order:stroke;stroke:#fff;stroke-width:5}</style>`; }
+function styles(): string { return `<style>text{font-family:Arial,Helvetica,sans-serif;fill:#17231d}.sheet-border,.title-block,.panel{fill:#fff;stroke:#17231d;stroke-width:2}.thin{stroke:#68756e;stroke-width:1}.sheet-heading{font-size:36px;font-weight:700}.subheading{font-size:20px}.section,.view-title{font-size:16px;font-weight:700;letter-spacing:.5px}.note{font-size:11px}.small{font-size:11px}.tiny{font-size:8px}.label{font-size:10px;font-weight:700}.title-name{font-size:19px;font-weight:700}.title-drawing{font-size:13px;font-weight:700}.title-warning{font-size:10px;font-weight:700;fill:#a33b27}.sheet-no{font-size:29px;font-weight:700}.seal-box{fill:#f7f9f8;stroke:#68756e;stroke-dasharray:5 3}.seal-title{font-size:8px;font-weight:700}.seal-note{font-size:7px;fill:#56625c}.table-line{fill:#fff;stroke:#8c9891;stroke-width:1}.schedule-head{fill:#e8eee9;stroke:#68756e}.schedule-row{fill:#fff;stroke:#a2aca6}.schedule-label{font-size:6.5px;font-weight:700}.schedule-text{font-size:6.5px}.foundation-tag{font-size:8px;font-weight:700;paint-order:stroke;stroke:#fff;stroke-width:4}.notice{fill:#fff4da;stroke:#af6d00;stroke-width:1.5}.notice-title{font-size:12px;font-weight:700;fill:#7a4700}.status-pass{fill:#e8f5ed;stroke:#2c7652}.status-review{fill:#edf4ff;stroke:#476f9c}.status-blocked{fill:#ffe8e3;stroke:#b33e2b}.parcel{fill:#e6f4eb;stroke:#167252;stroke-width:4;stroke-dasharray:10 5}.existing-primary{fill:#d2dbd6;stroke:#263b31;stroke-width:3}.existing{fill:#e5eae7;stroke:#748078}.deck-area{fill:#dca66e;fill-opacity:.72;stroke:#7e4c22;stroke-width:3}.wall{stroke:#d35420;stroke-width:7}.opening{stroke:#16867d;stroke-width:13}.outline{fill:none;stroke:#17241d;stroke-width:4}.stair-flight{fill:#f0d4b8;stroke:#9b5e2d;stroke-width:3}.tread{stroke:#9b5e2d;stroke-width:2}.endpoint{fill:#fff;stroke:#9b5e2d;stroke-width:3}.member{stroke:#3d8a6c;stroke-width:2}.beam{stroke:#173f67;stroke-width:9}.support-grid{stroke:#173f67;stroke-width:5;stroke-dasharray:10 4;opacity:.72}.ledger{stroke:#d35420;stroke-width:7;stroke-dasharray:12 4}.post{fill:#173f67;stroke:#fff}.datum{fill:#fff;stroke:#175ec7;stroke-width:3}.footing{fill:none;stroke:#b27b1e;stroke-width:2;stroke-dasharray:5 3}.footing-fill{fill:#fff4da;stroke:#b27b1e;stroke-width:3}.guard{stroke:#754c9b;stroke-width:6;stroke-dasharray:5 4}.stringer{stroke:#9b5e2d;stroke-width:4;stroke-dasharray:7 3}.stair-header{stroke:#b43f2d;stroke-width:10}.stair-trimmer{stroke:#b43f2d;stroke-width:6;stroke-dasharray:4 2}.dim-bg{fill:#fff;stroke:#7a8b82}.dimension-text{font-size:8px;font-weight:700;fill:#175ec7}.dimension{stroke:#175ec7;stroke-width:1}.grade{stroke:#425149;stroke-width:2;stroke-dasharray:12 5}.deck-line{stroke:#17241d;stroke-width:8}.post-line{stroke:#6d4325;stroke-width:7}.rail{stroke:#17241d;stroke-width:4}.stair{stroke:#b56a15;stroke-width:4}.existing{fill:#d9dfdb;stroke:#5b6861}.ledger-fill{fill:#c97a59;stroke:#793a28}.flashing{stroke:#c2462d;stroke-width:4;fill:none}.decking{fill:#c79562;stroke:#5b3b21}.member-fill{fill:#d9b78f;stroke:#5b3b21}.beam-fill{fill:#bd8954;stroke:#5b3b21}.post-fill{fill:#9b6639;stroke:#5b3b21}.concrete{fill:#d5d8d6;stroke:#59645e}.callout{font-size:11px;font-weight:700;paint-order:stroke;stroke:#fff;stroke-width:5}</style>`; }
 function line(first: PointMm, second: PointMm, tx: Tx, className: string): string { return `<line x1="${tx.x(first[0])}" y1="${tx.y(first[1])}" x2="${tx.x(second[0])}" y2="${tx.y(second[1])}" class="${className}"/>`; }
 function dimV(y1: number, y2: number, x: number, label: string): string { return `<line x1="${x}" y1="${y1}" x2="${x}" y2="${y2}" class="dimension"/><line x1="${x - 8}" y1="${y1}" x2="${x + 8}" y2="${y1}" class="dimension"/><line x1="${x - 8}" y1="${y2}" x2="${x + 8}" y2="${y2}" class="dimension"/><text class="dimension-text" x="${x - 10}" y="${(y1 + y2) / 2}" text-anchor="middle" transform="rotate(-90 ${x - 10} ${(y1 + y2) / 2})">${esc(label)}</text>`; }
 function pts(points: PointMm[], tx: Tx): string { return points.map((point) => `${tx.x(point[0])},${tx.y(point[1])}`).join(' '); }
@@ -195,5 +279,6 @@ function platformBounds(platform: DeckPlatform) { const xs = platform.boundary.v
 function platformReferencePoint(platform: DeckPlatform): PointMm { const count = Math.max(1, platform.boundary.vertices.length); return [platform.boundary.vertices.reduce((sum, vertex) => sum + vertex.xMm, 0) / count, platform.boundary.vertices.reduce((sum, vertex) => sum + vertex.yMm, 0) / count]; }
 function polygonArea(points: PointMm[]): number { return Math.abs(points.reduce((sum, point, index) => { const next = points[(index + 1) % points.length]; return sum + point[0] * next[1] - next[0] * point[1]; }, 0) / 2); }
 function unique(values: string[]): string[] { return [...new Set(values)]; }
+function fnv1a32(value: string): string { let hash = 0x811c9dc5; for (let index = 0; index < value.length; index += 1) { hash ^= value.charCodeAt(index); hash = Math.imul(hash, 0x01000193); } return (hash >>> 0).toString(16).padStart(8, '0').toUpperCase(); }
 function pad(value: number): string { return String(value).padStart(2, '0'); }
 function esc(value: string): string { return value.replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[character] || character); }

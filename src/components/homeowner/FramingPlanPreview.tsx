@@ -15,7 +15,7 @@ export function FramingPlanPreview({ design, framing, stale }: FramingPlanPrevie
   const transform = createPlanTransform(design, framing);
   return <section className="overflow-hidden rounded-xl border border-slate-300 bg-white shadow-sm" aria-labelledby="framing-plan-heading">
     <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 px-5 py-4">
-      <div><span className="text-[10px] font-bold uppercase tracking-[.14em] text-emerald-800">S1.0 · Framing plan</span><h3 id="framing-plan-heading" className="mt-1 text-lg font-bold text-slate-950">Generated member layout</h3><p className="mt-1 text-xs text-slate-600">Diagrammatic review preview. Member coordinates and dimensions govern; printing scale is assigned when the sheet set is issued.</p></div>
+      <div><span className="text-[10px] font-bold uppercase tracking-[.14em] text-emerald-800">S2.0 · Framing plan</span><h3 id="framing-plan-heading" className="mt-1 text-lg font-bold text-slate-950">Generated member layout</h3><p className="mt-1 text-xs text-slate-600">Diagrammatic review preview. Member coordinates and dimensions govern; printing scale is assigned when the sheet set is issued.</p></div>
       <span className={`rounded-full px-3 py-1.5 text-[10px] font-bold uppercase tracking-[.08em] ${stale ? 'bg-amber-100 text-amber-900' : framing.status === 'engineering-required' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-900'}`}>{stale ? 'Design changed · regenerate' : framing.status.replace(/-/g, ' ')}</span>
     </div>
     <div className="bg-[#e9eeeb] p-3 sm:p-5">

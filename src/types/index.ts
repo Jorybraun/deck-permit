@@ -239,7 +239,7 @@ export interface Step {
 }
 
 export interface PlanSheet {
-  id: 'cover' | 'site' | 'framing' | 'elevations' | 'sections' | 'details' | 'calculations';
+  id: 'cover' | 'site' | 'deck-plan' | 'foundations' | 'framing' | 'elevations' | 'sections' | 'details' | 'calculations';
   number: string;
   title: string;
   scale: string;

@@ -6,7 +6,7 @@ The redline workflow turns a sealed professional change request into structured,
 
 ## Redline authority
 
-Each `ReviewRedline` is authored in the private reviewer portal and contains a unique identifier, the published design fingerprint, one of the seven drawing sheet identifiers, category, required/advisory severity, bounded title and comment text, a percentage-based marker position, and timestamp. A `changes-requested` decision requires at least one required redline. An `accepted` decision may contain advisory redlines only.
+Each `ReviewRedline` is authored in the private reviewer portal and contains a unique identifier, the published design fingerprint, one of the controlled drawing-sheet identifiers in that issue, category, required/advisory severity, bounded title and comment text, a percentage-based marker position, and timestamp. A `changes-requested` decision requires at least one required redline. An `accepted` decision may contain advisory redlines only.
 
 The server validates redlines against the immutable review package and rejects revision or sheet mismatches. Reviewer capability authentication still controls submission; the professional-directory attestation and sealed PDF remain required.
 

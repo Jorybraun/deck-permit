@@ -14,7 +14,7 @@ const property: Property = {
   evidence: [{ id: 'parcel', label: 'Town parcel layer', url: 'https://example.test/parcel', authority: 'municipal', retrievedAt: '2026-07-18T00:00:00.000Z', status: 'reference' }], existingConditions: null,
 };
 
-describe('canonical seven-sheet review set', () => {
+describe('canonical nine-sheet review set', () => {
   it('derives coordinated, parseable 11×17 sheets from the current design and framing graph', () => {
     let design = addPlatform(createEmptyDesign(), { name: 'Upper deck', boundary: rectangularBoundary(0, 0, 4000, 3000), elevationMm: 900, houseEdgeIndex: 0 });
     design = addPlatform(design, { name: 'Lower deck', boundary: rectangularBoundary(4710, 0, 3500, 3000), elevationMm: 450 });
@@ -23,8 +23,9 @@ describe('canonical seven-sheet review set', () => {
     const framing = generateFramingDesign(design, site, { municipality: 'Town of Sidney', snowLoadKpa: 1 }, '2026-07-18T00:00:00.000Z');
     const planSet = generateCanonicalPlanSet({ property, site, design, framing, issuedAt: '2026-07-18T00:00:00.000Z' });
 
-    expect(planSet.sheets).toHaveLength(7);
-    expect(planSet.sheets.map((sheet) => sheet.number)).toEqual(['A0.0', 'A1.0', 'S1.0', 'A2.0', 'S2.0', 'A3.0', 'S3.0']);
+    expect(planSet.fingerprint).not.toBe(`DP-${framing.inputFingerprint.slice(-8).toUpperCase()}`);
+    expect(planSet.sheets).toHaveLength(9);
+    expect(planSet.sheets.map((sheet) => sheet.number)).toEqual(['A0.0', 'A1.0', 'A2.0', 'S1.0', 'S2.0', 'A3.0', 'S3.0', 'A4.0', 'S4.0']);
     expect(planSet.sheets.every((sheet) => sheet.designFingerprint === planSet.fingerprint)).toBe(true);
     for (const sheet of planSet.sheets) {
       const errors: string[] = [];
@@ -38,10 +39,14 @@ describe('canonical seven-sheet review set', () => {
       expect(sheet.svg).toContain('BLANK UNTIL APPLIED');
     }
     expect(planSet.sheets.find((sheet) => sheet.number === 'A1.0')?.svg).toContain('SELECTED HOUSE WALL');
-    expect(planSet.sheets.find((sheet) => sheet.number === 'S1.0')?.svg).toContain('Stair framing');
-    expect(planSet.sheets.find((sheet) => sheet.number === 'S1.0')?.svg).toContain('ST1-FROM-HDR');
-    expect(planSet.sheets.find((sheet) => sheet.number === 'A3.0')?.svg).toContain('3 STRINGERS');
-    expect(planSet.sheets.find((sheet) => sheet.number === 'A3.0')?.svg).toContain('TOP: ST1-FROM-CONN');
-    expect(planSet.sheets.find((sheet) => sheet.number === 'S3.0')?.svg).toContain('PROFESSIONAL REVIEW GATES');
+    expect(planSet.sheets.find((sheet) => sheet.number === 'A2.0')?.svg).toContain('DECK, LANDING, STAIR AND GUARD PLAN');
+    expect(planSet.sheets.find((sheet) => sheet.number === 'A2.0')?.svg).toContain('STAIR 1 · 900 WIDE · 3R');
+    expect(planSet.sheets.find((sheet) => sheet.number === 'S1.0')?.svg).toContain('FOOTING / POST COORDINATE SCHEDULE');
+    expect(planSet.sheets.find((sheet) => sheet.number === 'S1.0')?.svg).toContain('FOUNDATION DESIGN GATE');
+    expect(planSet.sheets.find((sheet) => sheet.number === 'S2.0')?.svg).toContain('Stair framing');
+    expect(planSet.sheets.find((sheet) => sheet.number === 'S2.0')?.svg).toContain('ST1-FROM-HDR');
+    expect(planSet.sheets.find((sheet) => sheet.number === 'A4.0')?.svg).toContain('3 STRINGERS');
+    expect(planSet.sheets.find((sheet) => sheet.number === 'A4.0')?.svg).toContain('TOP: ST1-FROM-CONN');
+    expect(planSet.sheets.find((sheet) => sheet.number === 'S4.0')?.svg).toContain('PROFESSIONAL REVIEW GATES');
   });
 });

@@ -4,6 +4,7 @@ import type { DeckDesign } from '../../domain/deckDesign';
 import type { FramingCheck, FramingDesign, FramingReviewGate } from '../../domain/framingDesign';
 import type { SiteModel } from '../../domain/siteModel';
 import { buildCanonicalReviewIssue } from '../../services/canonicalReviewIssue';
+import { canonicalPlanFingerprint } from '../../services/canonicalPlanSet';
 import type { ProfessionalReviewCycle, Property, ReviewExchangePublication, ReviewRedlineResolution, VerificationEvidence } from '../../types';
 import { FramingPlanPreview } from './FramingPlanPreview';
 import { CanonicalReviewPanel } from './CanonicalReviewPanel';
@@ -38,19 +39,21 @@ export function PermitStage({ property, site, design, framing, framingStale, des
   const blockers = [...designErrors, ...siteErrors];
   const framingCurrent = Boolean(framing && !framingStale);
   const requiredGates = framing?.reviewGates.filter((gate) => gate.status === 'required') || [];
-  const currentFingerprint = framing ? `DP-${framing.inputFingerprint.slice(-8).toUpperCase()}` : '';
+  const currentFingerprint = framing ? canonicalPlanFingerprint(framing) : '';
   const publicationIsCurrent = reviewPublication?.designFingerprint === currentFingerprint;
   const issueRevision = publicationIsCurrent ? reviewPublication?.revision || reviewIssueRevision : reviewIssueRevision + 1;
   const reviewIssue = useMemo(() => framingCurrent && framing ? buildCanonicalReviewIssue({ property, site, design, framing, reviewCycles: professionalReviewCycles, revision: issueRevision, issuedAt: publicationIsCurrent ? reviewPublication?.issueIssuedAt : undefined }) : null, [design, framing, framingCurrent, issueRevision, professionalReviewCycles, property, publicationIsCurrent, reviewPublication?.issueIssuedAt, site]);
   const reviewSheets = reviewIssue?.reviewPackage.planset || [];
   const plannedSheets = [
     { id: 'A0.0', name: 'Cover, project data & drawing index', status: property.parcel ? 'derived' : 'blocked' },
-    { id: 'A1.0', name: 'Site & dimensioned deck plan', status: property.parcel ? 'reference' : 'blocked' },
-    { id: 'S1.0', name: 'Framing plan & member schedule', status: framingCurrent ? 'derived' : 'blocked' },
-    { id: 'A2.0', name: 'Platform & stair elevations', status: framingCurrent ? 'derived' : 'blocked' },
-    { id: 'S2.0', name: 'Typical building sections', status: framingCurrent ? 'review' : 'blocked' },
-    { id: 'A3.0', name: 'Stair, guard, footing & connection details', status: framingCurrent ? 'review' : 'blocked' },
-    { id: 'S3.0', name: 'Design basis, checks & review gates', status: framingCurrent ? 'review' : 'blocked' },
+    { id: 'A1.0', name: 'Site & property relationship', status: property.parcel ? 'reference' : 'blocked' },
+    { id: 'A2.0', name: 'Dimensioned deck, landing, stair & guard plan', status: framingCurrent ? 'derived' : 'blocked' },
+    { id: 'S1.0', name: 'Foundation, post & coordinate plan', status: framingCurrent ? 'review' : 'blocked' },
+    { id: 'S2.0', name: 'Framing plan & member schedule', status: framingCurrent ? 'derived' : 'blocked' },
+    { id: 'A3.0', name: 'Platform & stair elevations', status: framingCurrent ? 'derived' : 'blocked' },
+    { id: 'S3.0', name: 'Typical building sections', status: framingCurrent ? 'review' : 'blocked' },
+    { id: 'A4.0', name: 'Stair, guard, footing & connection details', status: framingCurrent ? 'review' : 'blocked' },
+    { id: 'S4.0', name: 'Design basis, checks & review gates', status: framingCurrent ? 'review' : 'blocked' },
   ] as const;
 
   return <><main className="h-full overflow-y-auto bg-[#f4f6f3] px-4 py-7 sm:px-8 lg:px-12">
@@ -78,7 +81,7 @@ export function PermitStage({ property, site, design, framing, framingStale, des
       </>}
 
       <section className="grid gap-5 lg:grid-cols-[1.15fr_.85fr]">
-        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-start justify-between gap-4"><div><h3 className="font-[Manrope] text-lg font-bold text-slate-950">Permit drawing set</h3><p className="mt-1 text-sm text-slate-600">Seven coordinated 11×17 sheets derived from this design and framing revision.</p>{framingCurrent && framing && <p className="mt-2 text-[10px] font-bold uppercase tracking-[.1em] text-emerald-700">Issue fingerprint · DP-{framing.inputFingerprint.slice(-8).toUpperCase()}</p>}</div><FileText className="text-emerald-800" size={22} /></div><ol className="mt-5 grid gap-2">{plannedSheets.map((sheet) => <li key={sheet.id} className="flex min-h-12 items-center gap-3 rounded-lg border border-slate-200 px-3 text-sm text-slate-700"><span className="grid h-7 w-10 place-items-center rounded-md bg-slate-100 text-[10px] font-bold text-slate-600">{sheet.id}</span><span className="flex-1 font-semibold">{sheet.name}</span><SheetStatus status={sheet.status} /></li>)}</ol><div className="mt-4 grid gap-2 sm:grid-cols-2"><button type="button" onClick={() => { setPreviewSheetIndex(0); setPreviewZoom(100); setPreviewOpen(true); }} disabled={!framingCurrent} className="flex min-h-11 items-center justify-center gap-2 rounded-lg bg-emerald-800 px-4 text-xs font-bold text-white disabled:opacity-40"><Printer size={15} /> Preview complete set</button><button type="button" onClick={() => void onDownloadReviewSet()} disabled={!framingCurrent} className="flex min-h-11 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 text-xs font-bold text-slate-700 disabled:opacity-40"><Download size={15} /> Download 11×17 PDF</button></div><p className="mt-3 text-[10px] leading-4 text-slate-500">The preview fits the complete 17:11 sheet before you zoom. The downloaded PDF uses a fixed 17×11 landscape media box, so portrait printer defaults cannot crop the right side. Review set only; a blank seal box is never treated as approval.</p></article>
+        <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm"><div className="flex items-start justify-between gap-4"><div><h3 className="font-[Manrope] text-lg font-bold text-slate-950">Permit drawing set</h3><p className="mt-1 text-sm text-slate-600">Nine coordinated 11×17 sheets derived from this design and framing revision.</p>{framingCurrent && framing && <p className="mt-2 text-[10px] font-bold uppercase tracking-[.1em] text-emerald-700">Issue fingerprint · {canonicalPlanFingerprint(framing)}</p>}</div><FileText className="text-emerald-800" size={22} /></div><ol className="mt-5 grid gap-2">{plannedSheets.map((sheet) => <li key={sheet.id} className="flex min-h-12 items-center gap-3 rounded-lg border border-slate-200 px-3 text-sm text-slate-700"><span className="grid h-7 w-10 place-items-center rounded-md bg-slate-100 text-[10px] font-bold text-slate-600">{sheet.id}</span><span className="flex-1 font-semibold">{sheet.name}</span><SheetStatus status={sheet.status} /></li>)}</ol><div className="mt-4 grid gap-2 sm:grid-cols-2"><button type="button" onClick={() => { setPreviewSheetIndex(0); setPreviewZoom(100); setPreviewOpen(true); }} disabled={!framingCurrent} className="flex min-h-11 items-center justify-center gap-2 rounded-lg bg-emerald-800 px-4 text-xs font-bold text-white disabled:opacity-40"><Printer size={15} /> Preview complete set</button><button type="button" onClick={() => void onDownloadReviewSet()} disabled={!framingCurrent} className="flex min-h-11 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 text-xs font-bold text-slate-700 disabled:opacity-40"><Download size={15} /> Download 11×17 PDF</button></div><p className="mt-3 text-[10px] leading-4 text-slate-500">The preview fits the complete 17:11 sheet before you zoom. The downloaded PDF uses a fixed 17×11 landscape media box, so portrait printer defaults cannot crop the right side. Review set only; a blank seal box is never treated as approval.</p></article>
         <div className="grid content-start gap-4">
           <article className={`rounded-xl border p-5 ${blockers.length ? 'border-amber-200 bg-amber-50' : 'border-emerald-200 bg-emerald-50'}`}><h3 className="flex items-center gap-2 font-[Manrope] text-lg font-bold">{blockers.length ? <AlertTriangle size={20} /> : <CheckCircle2 size={20} />}{blockers.length ? 'Field and design blockers' : 'Spatial inputs complete'}</h3>{blockers.length ? <ul className="mt-3 grid gap-2 text-sm leading-5">{blockers.map((item) => <li key={item}>• {item}</li>)}</ul> : <p className="mt-2 text-sm leading-6">The spatial design passes its current geometry checks. Framing and permit review gates remain independently visible above.</p>}</article>
           {siteWarnings.length > 0 && <article className="rounded-xl border border-slate-200 bg-white p-5"><h3 className="text-sm font-bold text-slate-900">Existing-condition warnings</h3><ul className="mt-3 grid gap-2 text-xs leading-5 text-slate-600">{siteWarnings.map((warning) => <li key={warning}>• {warning}</li>)}</ul></article>}

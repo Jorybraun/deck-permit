@@ -1,6 +1,6 @@
 # Structural review package
 
-The generated seven-sheet set follows the information categories listed in the Town of Sidney's [Guide to Residential Deck Construction](https://www.sidney.ca/wp-content/uploads/Residential-Deck-Construction.pdf): dimensions, footing and post size/spacing, structural member sizes and spans, house flashing, decking, guards, stairs, and handrails.
+The active nine-sheet set follows the information categories listed in the Town of Sidney's [Guide to Residential Deck Construction](https://www.sidney.ca/wp-content/uploads/Residential-Deck-Construction.pdf): dimensions, footing and post size/spacing, structural member sizes and spans, house flashing, decking, guards, stairs, and handrails. A2.0 is the dimensioned deck/landing/stair plan and S1.0 is the foundation/post coordinate plan; framing, elevations, sections, details, and review gates remain coordinated on their own sheets.
 
 ## Encoded prescriptive scope
 

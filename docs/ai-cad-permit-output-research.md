@@ -4,7 +4,7 @@
 
 The product should let AI create and revise a complete deck proposal, but the issued geometry and drawings must be generated from one canonical parametric model. AI is the architect-like copilot; measured evidence, geometry constraints, code rules, structural calculations, drawing generation, revision control, and professional authentication are separate controlled systems.
 
-The present seven-sheet output is a coordination prototype. It is not yet an architectural or structural construction-document set and must not be represented as permit-ready or engineer-grade.
+The active nine-sheet output is a coordination and professional-review set. A2.0 now isolates the dimensioned deck/landing/stair plan and S1.0 isolates foundation/post coordinates and reactions, but the package is not yet a sealed architectural or structural construction-document set and must not be represented as engineer-grade.
 
 ## What the homeowner supplies
 

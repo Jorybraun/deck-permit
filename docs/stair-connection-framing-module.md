@@ -42,7 +42,7 @@ Those unresolved requirements remain visible in framing checks, review gates, co
 
 ## Drawing behavior
 
-The framing preview and S1.0 sheet render headers and trimmers separately from stringers. The A3.0 stair detail identifies the top and bottom connection records. Every drawing identifier resolves back to the deterministic framing graph.
+The framing preview and S2.0 sheet render headers and trimmers separately from stringers. A2.0 shows the stair flight in the deck plan, and the A4.0 stair detail identifies the top and bottom connection records. Every drawing identifier resolves back to the deterministic framing graph.
 
 ## Verification
 
