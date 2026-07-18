@@ -1,6 +1,6 @@
 import type { DeckDesign } from '../domain/deckDesign';
 import type { FramingDesign, StructuralConnectionGroup } from '../domain/framingDesign';
-import type { SiteModel } from '../domain/siteModel';
+import { calculateSiteClearances, projectPropertyToLocal, type SiteClearanceAssessment, type SiteModel } from '../domain/siteModel';
 import type { Property } from '../types';
 import { canonicalPlanFingerprint } from './canonicalPlanSet';
 
@@ -24,6 +24,7 @@ export interface CanonicalCalculationReport {
     lumber: string;
     treatment: string;
   };
+  siteClearance: SiteClearanceAssessment;
   platformSystems: Array<{
     platformId: string;
     name: string;
@@ -109,6 +110,7 @@ interface CalculationReportInput {
 /** Builds a traceable demand booklet without claiming member or connector capacity. */
 export function buildCanonicalCalculationReport(input: CalculationReportInput): CanonicalCalculationReport {
   const { property, design, framing } = input;
+  const siteClearance = calculateSiteClearances(projectPropertyToLocal(property, input.site), design);
   const q = framing.assumptions.governingAreaLoadKpa;
   const joistGroups = groupJoists(framing).map((group) => {
     const spanM = group.governingSpanMm / 1000;
@@ -163,6 +165,7 @@ export function buildCanonicalCalculationReport(input: CalculationReportInput): 
       governingAreaLoadKpa: q, assumedSoilBearingKpa: framing.assumptions.soilBearingKpa,
       lumber: `${framing.assumptions.lumberSpecies} ${framing.assumptions.lumberGrade}`, treatment: framing.assumptions.treatment,
     },
+    siteClearance,
     platformSystems: framing.platformSystems.map((system) => {
       const platform = design.platforms.find((candidate) => candidate.id === system.platformId);
       return {
@@ -227,6 +230,12 @@ export async function buildCanonicalCalculationPdf(report: CanonicalCalculationR
   keyValue('Area loads', `${report.designBasis.deadLoadKpa.toFixed(2)} kPa dead + max(${report.designBasis.liveLoadKpa.toFixed(2)} live, ${report.designBasis.snowLoadKpa.toFixed(2)} snow) = ${report.designBasis.governingAreaLoadKpa.toFixed(2)} kPa`);
   keyValue('Lumber basis', `${report.designBasis.lumber} | ${report.designBasis.treatment}`); keyValue('Assumed soil bearing', `${report.designBasis.assumedSoilBearingKpa.toFixed(0)} kPa`);
   paragraph('This booklet exposes the generated demand trail and unresolved work. It does not apply a professional seal or convert unknown field conditions into verified facts.', 10);
+  heading('Site clearance reference', 12);
+  keyValue('Authority', report.siteClearance.authority.replace(/-/g, ' '));
+  keyValue('Reference status', report.siteClearance.status.replace(/-/g, ' '));
+  keyValue('Closest written offset', report.siteClearance.minimumDistanceMm === null ? 'unavailable' : `${(report.siteClearance.minimumDistanceMm / 1000).toFixed(2)} m`);
+  report.siteClearance.dimensions.forEach((dimension) => keyValue(`PL-${dimension.parcelEdgeIndex + 1} / ${dimension.platformId}`, `${(dimension.distanceMm / 1000).toFixed(2)} m municipal GIS reference`));
+  paragraph(report.siteClearance.limitation, 8.5);
 
   newPage(); heading('1. Platform systems', 17);
   report.platformSystems.forEach((system) => { heading(`${system.platformId} - ${system.name}`, 12); keyValue('Geometry', `${system.areaSqM.toFixed(2)} m2 | top EL ${system.elevationMm} mm`); keyValue('Framing topology', `${system.supportStrategy} | joists ${system.joistAxis.toUpperCase()} | design span ${system.joistDesignSpanMm} mm`); keyValue('Screening status', system.status.replace(/-/g, ' ')); paragraph(system.explanation); rule(); });

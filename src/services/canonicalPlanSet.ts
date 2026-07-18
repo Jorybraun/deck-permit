@@ -1,7 +1,7 @@
 import { createOrthographicProjection } from '../domain/architecturalViews';
 import type { DeckDesign, DeckPlatform, PointMm } from '../domain/deckDesign';
 import type { FramingDesign } from '../domain/framingDesign';
-import { assessExistingConditionCapture, assessSiteModel, projectPropertyToLocal, terrainElevationAt, type LocalPropertyGeometry, type SiteModel } from '../domain/siteModel';
+import { assessExistingConditionCapture, assessSiteModel, calculateSiteClearances, projectPropertyToLocal, terrainElevationAt, type LocalPropertyGeometry, type SiteClearanceAssessment, type SiteModel } from '../domain/siteModel';
 import type { PlanSheet, Property } from '../types';
 import { renderOrthographicElevationSvg } from './orthographicElevationSvg';
 
@@ -133,21 +133,26 @@ function existingConditionsSheet(input: CanonicalPlanSetInput, issue: IssueMeta)
 
 function siteSheet(input: CanonicalPlanSetInput, issue: IssueMeta): PlanSheet {
   const geometry = projectPropertyToLocal(input.property, input.site);
+  const clearance = calculateSiteClearances(geometry, input.design);
   const points = [...(geometry?.parcel || []), ...input.design.platforms.flatMap((platform) => platform.boundary.vertices.map((vertex): PointMm => [vertex.xMm, vertex.yMm]))];
   const tx = drawingTransform(points, { x: 70, y: 90, width: 1110, height: 760 });
-  const siteDrawing = geometry ? siteGeometrySvg(geometry, input.design, input.site, tx) : `<text class="note" x="120" y="180">Municipal parcel geometry unavailable. Provide an accepted dimensioned survey.</text>`;
+  const siteDrawing = geometry ? siteGeometrySvg(geometry, input.design, input.site, clearance, tx) : `<text class="note" x="120" y="180">Municipal parcel geometry unavailable. Provide an accepted dimensioned survey.</text>`;
   const zoning = input.property.zoning;
   const rows = [
     ['PID', input.property.parcel?.pid || 'unconfirmed'], ['Lot area', input.property.parcel?.areaSqm ? `${input.property.parcel.areaSqm.toFixed(0)} m²` : 'unconfirmed'],
     ['Zone', zoning?.zone || 'unconfirmed'], ['Front yard', zoning ? `${zoning.setbacks.front} m` : 'unconfirmed'], ['Rear yard', zoning ? `${zoning.setbacks.rear} m` : 'unconfirmed'],
     ['Interior side', zoning ? `${zoning.setbacks.side} m` : 'unconfirmed'], ['Exterior side', zoning ? `${zoning.setbacks.exteriorSide} m` : 'unconfirmed'],
     ['Wall evidence', input.site.designWall.selectionStatus], ['Geometry status', input.site.status],
+    ['Closest GIS reference', clearance.minimumDistanceMm === null ? 'unavailable' : `${(clearance.minimumDistanceMm / 1000).toFixed(2)} m`],
+    ['Reference containment', clearance.allDeckVerticesInsideReferenceParcel === null ? 'unavailable' : clearance.allDeckVerticesInsideReferenceParcel ? 'inside reference parcel' : 'crossing / outside reference parcel'],
   ];
+  const clearanceRows = clearance.dimensions.slice(0, 4).map((dimension) => [`PL-${dimension.parcelEdgeIndex + 1}`, `${dimension.platformId} · ${(dimension.distanceMm / 1000).toFixed(2)} m · GIS reference`]);
   return makeSheet('site', 'Site & Property Relationship', 'DIAGRAMMATIC · DIMENSIONS GOVERN', 'A1.0', input, issue, `
     <text class="view-title" x="625" y="68" text-anchor="middle">SITE AND DECK LOCATION PLAN</text>
     <rect x="55" y="78" width="1140" height="810" class="panel"/>${siteDrawing}
-    <rect x="1230" y="78" width="400" height="810" class="panel"/><text class="section" x="1260" y="118">SITE / ZONING SCHEDULE</text>${table(rows, 1260, 142, 340, 46, 145)}
-    <text class="section" x="1260" y="600">EVIDENCE BASIS</text>${noteList([...input.property.evidence.slice(0, 3).map((source) => `${source.label}: ${source.status}; retrieved ${source.retrievedAt.slice(0, 10)}.`), ...input.site.capture.evidence.slice(0, 3).map((record) => `${record.category}: ${record.fileName}; SHA ${record.sha256.slice(0, 10)}…; ${record.status}.`)], 1260, 628, 42, 330)}
+    <rect x="1230" y="78" width="400" height="810" class="panel"/><text class="section" x="1260" y="118">SITE / ZONING SCHEDULE</text>${table(rows, 1260, 142, 340, 34, 145)}
+    <text class="section" x="1260" y="540">REFERENCE CLEARANCE SCHEDULE</text>${table(clearanceRows.length ? clearanceRows : [['—', 'Municipal parcel geometry unavailable']], 1260, 562, 340, 34, 62)}
+    <text class="section" x="1260" y="718">EVIDENCE BASIS</text>${noteList(boundedNotes([...input.property.evidence.slice(0, 2).map((source) => `${source.label}: ${source.status}; retrieved ${source.retrievedAt.slice(0, 10)}.`), ...input.site.capture.evidence.slice(0, 1).map((record) => `${record.category}: ${record.fileName}; SHA ${record.sha256.slice(0, 10)}…; ${record.status}.`)], 2, 'additional evidence record(s) are indexed in the review package.'), 1260, 742, 42, 330)}
     ${notice(1230, 825, 400, 64, 'SURVEY / SETBACK GATE', 'Municipal GIS is reference evidence, not a legal survey. Confirm deck and footing offsets before permit submission.')}`);
 }
 
@@ -294,7 +299,16 @@ function existingWallRecordSvg(site: SiteModel, x: number, y: number, width: num
   }).join('');
   return `<rect x="${left}" y="${gradeY - wallHeight}" width="${wallWidth}" height="${wallHeight}" class="evidence-wall"/>${openings}<line x1="${left}" y1="${gradeY + 48}" x2="${left + wallWidth}" y2="${gradeY + 48}" class="dimension"/><line x1="${left}" y1="${gradeY + 40}" x2="${left}" y2="${gradeY + 56}" class="dimension"/><line x1="${left + wallWidth}" y1="${gradeY + 40}" x2="${left + wallWidth}" y2="${gradeY + 56}" class="dimension"/><text class="dimension-text" x="${left + wallWidth / 2}" y="${gradeY + 64}" text-anchor="middle">SELECTED WALL · ${wall.lengthMm} mm</text>${dimV(gradeY - wallHeight, gradeY, left - 20, `${wall.wallHeightMm} mm`)}<text class="note" x="${left}" y="${gradeY - wallHeight - 14}">${esc(wall.label.toUpperCase())} · ${esc(wall.selectionStatus.toUpperCase())}</text><text class="tiny" x="${x + 10}" y="${y + height - 2}">OPENING WIDTH, OFFSET AND SILL ARE MODEL INPUTS. DRAWN OPENING HEIGHT IS DIAGRAMMATIC UNTIL FIELD RECORDED.</text>`;
 }
-function siteGeometrySvg(geometry: LocalPropertyGeometry, design: DeckDesign, site: SiteModel, tx: Tx): string { return `<polygon points="${pts(geometry.parcel, tx)}" class="parcel"/>${geometry.buildings.map((building) => `<polygon points="${pts(building.polygon, tx)}" class="${building.primary ? 'existing-primary' : 'existing'}"/>`).join('')}${design.platforms.map((platform) => `<polygon points="${pts(platform.boundary.vertices.map((vertex): PointMm => [vertex.xMm, vertex.yMm]), tx)}" class="deck-area"/>${edgeDimensions(platform, tx)}`).join('')}${site.terrain.gradePoints.map((point) => `<circle cx="${tx.x(point.xMm)}" cy="${tx.y(point.yMm)}" r="6" class="post"/><text class="tiny" x="${tx.x(point.xMm) + 9}" y="${tx.y(point.yMm) - 8}">${esc(point.id)} · EL. ${point.elevationMm}</text>`).join('')}<line x1="${tx.x(0)}" y1="${tx.y(0)}" x2="${tx.x(geometry.anchorLengthMm)}" y2="${tx.y(0)}" class="wall"/><text class="note" x="${tx.x(0)}" y="${tx.y(0) - 12}">SELECTED HOUSE WALL · ${geometry.anchorLengthMm} mm</text><text class="tiny" x="80" y="865">GREEN DASHED: MUNICIPAL PARCEL · GREY: MUNICIPAL BUILDING · OCHRE: PROPOSED DECK · DOTS: GRADE OBSERVATIONS</text>`; }
+function siteGeometrySvg(geometry: LocalPropertyGeometry, design: DeckDesign, site: SiteModel, clearance: SiteClearanceAssessment, tx: Tx): string {
+  const clearanceDimensions = clearance.dimensions.map((dimension) => {
+    const x1 = tx.x(dimension.deckPointMm[0]); const y1 = tx.y(dimension.deckPointMm[1]);
+    const x2 = tx.x(dimension.propertyPointMm[0]); const y2 = tx.y(dimension.propertyPointMm[1]);
+    const mx = (x1 + x2) / 2; const my = (y1 + y2) / 2;
+    const label = `GIS REF PL-${dimension.parcelEdgeIndex + 1} · ${(dimension.distanceMm / 1000).toFixed(2)} m`;
+    return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#175ec7" stroke-width="1.5" stroke-dasharray="6 4"/><circle cx="${x1}" cy="${y1}" r="3" fill="#fff" stroke="#175ec7" stroke-width="1.5"/><circle cx="${x2}" cy="${y2}" r="3" fill="#fff" stroke="#175ec7" stroke-width="1.5"/><rect x="${mx - 58}" y="${my - 10}" width="116" height="18" rx="3" class="dim-bg"/><text class="dimension-text" x="${mx}" y="${my + 3}" text-anchor="middle">${label}</text>`;
+  }).join('');
+  return `<polygon points="${pts(geometry.parcel, tx)}" class="parcel"/>${geometry.buildings.map((building) => `<polygon points="${pts(building.polygon, tx)}" class="${building.primary ? 'existing-primary' : 'existing'}"/>`).join('')}${design.platforms.map((platform) => `<polygon points="${pts(platform.boundary.vertices.map((vertex): PointMm => [vertex.xMm, vertex.yMm]), tx)}" class="deck-area"/>${edgeDimensions(platform, tx)}`).join('')}${clearanceDimensions}${site.terrain.gradePoints.map((point) => `<circle cx="${tx.x(point.xMm)}" cy="${tx.y(point.yMm)}" r="6" class="post"/><text class="tiny" x="${tx.x(point.xMm) + 9}" y="${tx.y(point.yMm) - 8}">${esc(point.id)} · EL. ${point.elevationMm}</text>`).join('')}<line x1="${tx.x(0)}" y1="${tx.y(0)}" x2="${tx.x(geometry.anchorLengthMm)}" y2="${tx.y(0)}" class="wall"/><text class="note" x="${tx.x(0)}" y="${tx.y(0) - 12}">SELECTED HOUSE WALL · ${geometry.anchorLengthMm} mm</text><text class="tiny" x="80" y="865">GREEN DASHED: MUNICIPAL PARCEL · GREY: MUNICIPAL BUILDING · OCHRE: PROPOSED DECK · BLUE DASHED: GIS REFERENCE CLEARANCE · DOTS: GRADE OBSERVATIONS</text>`;
+}
 function deckLayoutPlanSvg(design: DeckDesign, site: SiteModel, tx: Tx): string {
   const wall = `<line x1="${tx.x(0)}" y1="${tx.y(0)}" x2="${tx.x(site.designWall.lengthMm)}" y2="${tx.y(0)}" class="wall"/><text class="note" x="${tx.x(0)}" y="${tx.y(0) - 17}">EXISTING HOUSE / SELECTED WALL · ${site.designWall.lengthMm}</text>${site.designWall.openings.map((opening) => `<line x1="${tx.x(opening.offsetMm)}" y1="${tx.y(0)}" x2="${tx.x(opening.offsetMm + opening.widthMm)}" y2="${tx.y(0)}" class="opening"/><text class="tiny" x="${tx.x(opening.offsetMm + opening.widthMm / 2)}" y="${tx.y(0) - 8}" text-anchor="middle">${esc(opening.kind.toUpperCase())} ${opening.id} · ${opening.widthMm} · SILL EL. ${opening.sillHeightMm}</text>`).join('')}`;
   const platforms = design.platforms.map((platform) => {

@@ -39,7 +39,11 @@ describe('canonical ten-sheet review set', () => {
       expect(sheet.svg).toContain('NOT FOR CONSTRUCTION');
       expect(sheet.svg).toContain('BLANK UNTIL APPLIED');
     }
-    expect(planSet.sheets.find((sheet) => sheet.number === 'A1.0')?.svg).toContain('SELECTED HOUSE WALL');
+    const siteSheet = planSet.sheets.find((sheet) => sheet.number === 'A1.0')?.svg || '';
+    expect(siteSheet).toContain('SELECTED HOUSE WALL');
+    expect(siteSheet).toContain('REFERENCE CLEARANCE SCHEDULE');
+    expect(siteSheet).toContain('GIS REF PL-');
+    expect(siteSheet).toContain('Municipal GIS is reference evidence, not a legal survey.');
     const existingSheet = planSet.sheets.find((sheet) => sheet.number === 'C1.0')?.svg || '';
     expect(existingSheet).toContain('EXISTING HOUSE WALL AND OPENING RECORD');
     expect(existingSheet).toContain('D1 · 1800 W · SILL 120');

@@ -31,6 +31,8 @@ describe('canonical structural calculation report', () => {
     expect(report.designFingerprint).toMatch(/^DP-[A-F0-9]{8}$/);
     expect(report).toMatchObject({ revision: 3, notForConstruction: true, issuePurpose: 'professional-review' });
     expect(report.platformSystems).toHaveLength(2);
+    expect(report.siteClearance).toMatchObject({ authority: 'municipal-gis-reference', status: expect.stringMatching(/reference-only|outside-or-crossing/) });
+    expect(report.siteClearance.dimensions.length).toBeGreaterThan(0);
     expect(report.joistGroups.length).toBeGreaterThan(0);
     expect(report.joistGroups[0]).toMatchObject({ lineLoadKnM: expect.any(Number), momentDemandKnM: expect.any(Number), shearDemandKn: expect.any(Number) });
     expect(report.joistGroups[0].momentDemandKnM).toBeGreaterThan(0);
