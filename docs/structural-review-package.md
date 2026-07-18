@@ -27,3 +27,5 @@ The CWC guide explicitly excludes footings, guards and railings, house attachmen
 Every unresolved item appears in the keyed connection schedule, review gates, reviewer portal, and submission manifest. A professional review evidence record must match the exact design fingerprint; the fingerprint schema changes when the generated design basis changes so stale seals cannot silently carry forward.
 
 The professional handoff also includes a layered millimetre DXF compiled from the same graph and fingerprint. Stable member and connection IDs agree with S1.0, S2.0, and A4.0; CAD interoperability does not relax any review gate or capacity limitation.
+
+It also includes a revision-bound calculation booklet. The booklet exposes platform systems, joist demand equations, beam/post reactions, footing bearing screens, stair geometry, connection actions, sources, limitations, and every unresolved review gate. It deliberately does not claim member or connector resistance outside the encoded prescriptive scope, and the review server rejects any calculation report that does not match the drawing manifest fingerprint.

@@ -6,6 +6,7 @@ import { generateCanonicalPlanSet } from './canonicalPlanSet';
 import type { ReviewPackagePayload } from './reviewExchange';
 import { reviewCyclesForPublication } from './reviewRedlines';
 import { buildProjectCadExchange } from './projectCadExchange';
+import { buildCanonicalCalculationReport } from './canonicalCalculationReport';
 
 export interface CanonicalReviewIssue {
   manifest: PermitManifest;
@@ -62,6 +63,7 @@ export function buildCanonicalReviewIssue(input: {
     },
     planset: planSet.sheets,
     cadExchange: buildProjectCadExchange({ property: input.property, site: input.site, design: input.design, framing: input.framing, generatedAt: issuedAt }),
+    calculationReport: buildCanonicalCalculationReport({ property: input.property, site: input.site, design: input.design, framing: input.framing, revision, generatedAt: issuedAt }),
     report: {
       generatedAt: input.framing.generatedAt,
       codeEdition: input.framing.codeProfile.label,

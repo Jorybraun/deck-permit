@@ -1,6 +1,7 @@
 import type { Deck, DesignCheck, PermitManifest, PlanSheet, ProfessionalReviewCycle, Property, ReviewExchangePublication, ReviewRedline, StructuralReport, VerificationEvidence } from '../types';
 import { reviewCyclesForPublication } from './reviewRedlines';
 import type { ProjectCadExchange } from './projectCadExchange';
+import type { CanonicalCalculationReport } from './canonicalCalculationReport';
 
 export interface ReviewPackagePayload {
   manifest: PermitManifest;
@@ -8,6 +9,7 @@ export interface ReviewPackagePayload {
   deck: ReviewDeckPayload;
   planset: PlanSheet[];
   cadExchange?: ProjectCadExchange;
+  calculationReport?: CanonicalCalculationReport;
   report: ReviewBasisPayload;
   priorReviewCycles: ProfessionalReviewCycle[];
 }

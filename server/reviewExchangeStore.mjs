@@ -110,6 +110,7 @@ function validateReviewPackage(value) {
   if (!Array.isArray(value.planset) || value.planset.length < 1 || value.planset.length > 20) throw new ReviewExchangeError(400, 'invalid-planset', 'One to twenty drawing sheets are required.');
   if (value.planset.some((sheet) => typeof sheet?.svg !== 'string' || sheet.svg.length < 20 || sheet.svg.length > 1_500_000)) throw new ReviewExchangeError(400, 'invalid-sheet', 'Each drawing sheet must contain a bounded SVG document.');
   if (value.cadExchange !== undefined) validateCadExchange(value.cadExchange, value.manifest.designFingerprint);
+  if (value.calculationReport !== undefined) validateCalculationReport(value.calculationReport, value.manifest.designFingerprint);
   if (!value.report || !Array.isArray(value.report.checks)) throw new ReviewExchangeError(400, 'invalid-report', 'A design-basis report is required.');
   if (value.priorReviewCycles !== undefined && (!Array.isArray(value.priorReviewCycles) || value.priorReviewCycles.length > 10)) throw new ReviewExchangeError(400, 'invalid-review-history', 'The review history may contain up to ten cycles.');
 }
@@ -124,6 +125,37 @@ function validateCadExchange(value, expectedFingerprint) {
   }
   if (!Array.isArray(value.layers) || value.layers.length < 1 || value.layers.length > 50 || value.layers.some((layer) => typeof layer?.id !== 'string' || !/^[A-Z0-9-]{2,40}$/.test(layer.id) || !Number.isInteger(layer.entityCount) || layer.entityCount < 1 || layer.entityCount > 100_000)) {
     throw new ReviewExchangeError(400, 'invalid-cad-layers', 'The CAD exchange layer index is invalid.');
+  }
+}
+
+function validateCalculationReport(value, expectedFingerprint) {
+  if (!value || typeof value !== 'object' || value.schema !== 'permitly-canonical-calculation-report/v1' || value.issuePurpose !== 'professional-review' || value.notForConstruction !== true) {
+    throw new ReviewExchangeError(400, 'invalid-calculation-report', 'The calculation report contract is invalid.');
+  }
+  if (value.designFingerprint !== expectedFingerprint) throw new ReviewExchangeError(409, 'calculation-revision-mismatch', 'The calculation report does not match the published drawing revision.');
+  if (!Number.isInteger(value.revision) || value.revision < 1 || value.revision > 10_000 || typeof value.generatedAt !== 'string' || !Number.isFinite(Date.parse(value.generatedAt))) {
+    throw new ReviewExchangeError(400, 'invalid-calculation-issue', 'The calculation report issue control is invalid.');
+  }
+  const boundedArrays = [
+    ['platformSystems', 1, 100], ['joistGroups', 0, 500], ['beams', 0, 500], ['postFootingChecks', 0, 1_000],
+    ['stairs', 0, 200], ['connections', 0, 2_000], ['checks', 1, 500], ['reviewGates', 0, 500], ['sources', 1, 100], ['limitations', 1, 100],
+  ];
+  for (const [key, minimum, maximum] of boundedArrays) {
+    if (!Array.isArray(value[key]) || value[key].length < minimum || value[key].length > maximum) throw new ReviewExchangeError(400, 'invalid-calculation-content', `The calculation report ${key} collection is invalid.`);
+  }
+  const basis = value.designBasis;
+  if (!basis || ![basis.deadLoadKpa, basis.liveLoadKpa, basis.snowLoadKpa, basis.governingAreaLoadKpa, basis.assumedSoilBearingKpa].every((number) => Number.isFinite(number) && number >= 0 && number <= 10_000)) {
+    throw new ReviewExchangeError(400, 'invalid-calculation-basis', 'The calculation report design basis is invalid.');
+  }
+  const numericKeys = ['spacingMm', 'governingSpanMm', 'lineLoadKnM', 'momentDemandKnM', 'shearDemandKn'];
+  if (value.joistGroups.some((group) => !group || typeof group !== 'object' || numericKeys.some((key) => !Number.isFinite(group[key]) || group[key] < 0 || group[key] > 10_000_000))) {
+    throw new ReviewExchangeError(400, 'invalid-calculation-demand', 'The calculation report member demands are invalid.');
+  }
+  if (value.postFootingChecks.some((item) => !item || typeof item !== 'object' || ![item.reactionKn, item.requiredBearingAreaSqM, item.providedBearingAreaSqM, item.bearingPressureKpa].every((number) => Number.isFinite(number) && number >= 0 && number <= 10_000_000) || item.footingDepth !== 'unresolved' || item.status !== 'review-required')) {
+    throw new ReviewExchangeError(400, 'invalid-calculation-footing', 'The calculation report footing screens are invalid.');
+  }
+  if (value.connections.some((connection) => !connection || typeof connection.id !== 'string' || connection.id.length < 2 || connection.id.length > 100 || connection.status !== 'design-required')) {
+    throw new ReviewExchangeError(400, 'invalid-calculation-connections', 'The calculation report connection work packages are invalid.');
   }
 }
 

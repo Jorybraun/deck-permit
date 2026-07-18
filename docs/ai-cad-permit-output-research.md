@@ -118,7 +118,8 @@ Documents issued for permitting that contain professional engineering must be au
 - Current terrain is one number, not a surface.
 - Framing remains heuristic. The active v2 model now creates keyed connection work packages with quantities, member interfaces, and coordinated gravity actions, but proprietary hardware, fasteners, lateral/uplift actions, and capacity checks remain professional design work.
 - Elevations, sections, and details are diagrammatic and incomplete.
-- The active canonical exporter now converts SVG paths and searchable text directly to fixed-size 17×11 PDF pages without a canvas or page-image intermediary. It also exports a millimetre model-space DXF with named property, architectural, framing, foundation, guard, stair, connection, and annotation layers from the same issue fingerprint. Professional review is still required for the design content itself.
+- The active canonical exporter now converts SVG paths and searchable text directly to fixed-size 17×11 PDF pages without a canvas or page-image intermediary. It also exports a millimetre model-space DXF with named property, architectural, framing, foundation, guard, stair, connection, and annotation layers from the same issue fingerprint.
+- The active professional-review issue now includes a structured calculation contract and downloadable PDF booklet with transparent member demands, reactions, footing bearing screens, stair geometry, connection actions, sources, limitations, and unresolved review gates. It does not yet establish resistance for every member or connection; professional review is still required for the design content itself.
 - The active plan set should stay labelled `Professional review — not for construction` until the model, analysis, drawing, and review pipeline above exists.
 
 ## Primary references

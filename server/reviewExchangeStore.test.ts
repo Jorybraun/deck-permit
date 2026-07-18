@@ -59,6 +59,27 @@ describe('ReviewExchangeStore', () => {
       .rejects.toEqual(expect.objectContaining<Partial<ReviewExchangeError>>({ status: 400, code: 'invalid-cad-payload' }));
   });
 
+  it('accepts only a bounded calculation report tied to the published fingerprint', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'deck-review-'));
+    const store = new ReviewExchangeStore(directory);
+    const calculationReport = {
+      schema: 'permitly-canonical-calculation-report/v1', designFingerprint: fingerprint, generatedAt: new Date().toISOString(), revision: 2,
+      issuePurpose: 'professional-review', status: 'engineering-required', notForConstruction: true,
+      project: { address: '2423 Lovell Ave', pid: 'PID', municipality: 'Sidney', codeProfile: 'BCBC 2024' },
+      designBasis: { deadLoadKpa: 0.5, liveLoadKpa: 1.9, snowLoadKpa: 1, governingAreaLoadKpa: 1.9, assumedSoilBearingKpa: 75, lumber: 'SPF No. 2', treatment: 'exterior' },
+      platformSystems: [{ platformId: 'P1' }],
+      joistGroups: [{ spacingMm: 400, governingSpanMm: 3000, lineLoadKnM: 0.76, momentDemandKnM: 0.855, shearDemandKn: 1.14 }],
+      beams: [], postFootingChecks: [{ reactionKn: 4, requiredBearingAreaSqM: 0.053, providedBearingAreaSqM: 0.16, bearingPressureKpa: 25, footingDepth: 'unresolved', status: 'review-required' }],
+      stairs: [], connections: [{ id: 'C-P1-B1', status: 'design-required' }], checks: [{}], reviewGates: [], sources: [{}], limitations: ['Not for construction.'],
+    };
+    const created = await store.create({ ...reviewPackage, calculationReport });
+    expect((await store.getForReviewer(created.id, created.reviewerToken)).reviewPackage.calculationReport.designFingerprint).toBe(fingerprint);
+    await expect(store.create({ ...reviewPackage, calculationReport: { ...calculationReport, designFingerprint: 'DP-00000000' } }))
+      .rejects.toEqual(expect.objectContaining<Partial<ReviewExchangeError>>({ status: 409, code: 'calculation-revision-mismatch' }));
+    await expect(store.create({ ...reviewPackage, calculationReport: { ...calculationReport, joistGroups: [{ spacingMm: -1 }] } }))
+      .rejects.toEqual(expect.objectContaining<Partial<ReviewExchangeError>>({ status: 400, code: 'invalid-calculation-demand' }));
+  });
+
   it('requires sheet-specific redlines for a change request and validates their revision', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'deck-review-'));
     const store = new ReviewExchangeStore(directory);

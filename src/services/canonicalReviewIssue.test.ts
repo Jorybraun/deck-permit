@@ -26,6 +26,8 @@ describe('canonical professional review issue', () => {
     expect(issue.reviewPackage.deck.canonical).toMatchObject({ schema: 'permitly-canonical-review-snapshot/v1', units: 'mm', design: { schema: 'deck-design/v1' }, framing: { schema: 'framing-design/v2' } });
     expect(issue.reviewPackage.cadExchange).toMatchObject({ schema: 'permitly-project-cad-exchange/v1', units: 'mm', designFingerprint: issue.manifest.designFingerprint, notForConstruction: true });
     expect(issue.reviewPackage.cadExchange?.dxf).toContain(issue.manifest.designFingerprint);
+    expect(issue.reviewPackage.calculationReport).toMatchObject({ schema: 'permitly-canonical-calculation-report/v1', designFingerprint: issue.manifest.designFingerprint, revision: 4, notForConstruction: true });
+    expect(issue.reviewPackage.calculationReport?.connections.length).toBe(framing.connections.length);
     expect(issue.reviewPackage.report.checks.length).toBeGreaterThan(0);
   });
 });
