@@ -6,7 +6,7 @@ import type { PlanSheet, Property } from '../types';
 import { renderOrthographicElevationSvg } from './orthographicElevationSvg';
 
 const CONTENT_BOTTOM = 970;
-export const CANONICAL_PLAN_SET_SCHEMA = 'permitly-canonical-plan-set/v6' as const;
+export const CANONICAL_PLAN_SET_SCHEMA = 'permitly-canonical-plan-set/v7' as const;
 
 interface CanonicalPlanSetInput {
   property: Property;
@@ -54,9 +54,10 @@ export function generateCanonicalPlanSet(input: CanonicalPlanSetInput): Canonica
     issuedAt: input.issuedAt || new Date().toISOString(),
   };
   const connectionSchedules = connectionScheduleSheets(input, issue);
+  const sections = sectionSheets(input, issue);
   const assemblySchedules = assemblyScheduleSheets(input, issue);
   const sheets = [
-    coverSheet(input, issue, connectionSchedules.length, assemblySchedules.length),
+    coverSheet(input, issue, connectionSchedules.length, sections.length, assemblySchedules.length),
     existingConditionsSheet(input, issue),
     siteSheet(input, issue),
     deckPlanSheet(input, issue),
@@ -64,7 +65,7 @@ export function generateCanonicalPlanSet(input: CanonicalPlanSetInput): Canonica
     framingSheet(input, issue),
     ...connectionSchedules,
     elevationSheet(input, issue),
-    sectionSheet(input, issue),
+    ...sections,
     detailSheet(input, issue),
     ...assemblySchedules,
     calculationSheet(input, issue),
@@ -72,7 +73,7 @@ export function generateCanonicalPlanSet(input: CanonicalPlanSetInput): Canonica
   return { fingerprint: issue.fingerprint, sheets };
 }
 
-function coverSheet(input: CanonicalPlanSetInput, issue: IssueMeta, connectionScheduleCount: number, assemblyScheduleCount: number): PlanSheet {
+function coverSheet(input: CanonicalPlanSetInput, issue: IssueMeta, connectionScheduleCount: number, sectionCount: number, assemblyScheduleCount: number): PlanSheet {
   const { property, site, design, framing } = input;
   const totalArea = design.platforms.reduce((sum, platform) => sum + polygonArea(platform.boundary.vertices.map((vertex): PointMm => [vertex.xMm, vertex.yMm])) / 1_000_000, 0);
   const projectRows = [
@@ -89,7 +90,7 @@ function coverSheet(input: CanonicalPlanSetInput, issue: IssueMeta, connectionSc
   const indexRows = [
     ['A0.0', 'Cover, project data, drawing index'], ['C1.0', 'Evidence and existing conditions'], ['A1.0', 'Site and property relationship'], ['A2.0', 'Dimensioned deck and landing plan'],
     ['S1.0', 'Foundation and post plan'], ['S2.0', 'Framing plan and member schedule'], [connectionScheduleCount === 1 ? 'S2.1' : `S2.1–S2.${connectionScheduleCount}`, 'All keyed structural connection design controls'], ['A3.0', 'Platform and stair elevations'],
-    ['S3.0', 'Typical building sections'], ['A4.0', 'Stair, guard, footing, connection details'], [assemblyScheduleCount === 1 ? 'A4.1' : `A4.1–A4.${assemblyScheduleCount}`, 'All stair and guard design-control schedules'], ['S4.0', 'Design basis, checks, review gates'],
+    [sectionCount === 1 ? 'S3.0' : `S3.0–S3.${sectionCount - 1}`, 'Building section for every modeled platform'], ['A4.0', 'Stair, guard, footing, connection details'], [assemblyScheduleCount === 1 ? 'A4.1' : `A4.1–A4.${assemblyScheduleCount}`, 'All stair and guard design-control schedules'], ['S4.0', 'Design basis, checks, review gates'],
   ];
   const required = framing.reviewGates.filter((gate) => gate.status === 'required');
   return makeSheet('cover', 'Cover & Project Data', 'NTS', 'A0.0', input, issue, `
@@ -278,19 +279,26 @@ function elevationSheet(input: CanonicalPlanSetInput, issue: IssueMeta): PlanShe
     ${notice(1220, 750, 410, 132, 'ORTHOGRAPHIC COORDINATION / REVIEW', 'Both views use one scale in horizontal and vertical directions and derive from the same project graph as the editor. Confirm grade, house openings, assemblies, stair landings, post/footing design, guards, and handrails before professional issue.')}`);
 }
 
-function sectionSheet(input: CanonicalPlanSetInput, issue: IssueMeta): PlanSheet {
-  const first = input.framing.platformSystems[0];
-  const platform = input.design.platforms.find((candidate) => candidate.id === first?.platformId);
+function sectionSheets(input: CanonicalPlanSetInput, issue: IssueMeta): PlanSheet[] {
+  const platformIds = input.design.platforms.length ? input.design.platforms.map((platform) => platform.id) : [undefined];
+  return platformIds.map((platformId, index) => sectionSheet(input, issue, platformId, index, platformIds.length));
+}
+
+function sectionSheet(input: CanonicalPlanSetInput, issue: IssueMeta, platformId: string | undefined, index: number, pageCount: number): PlanSheet {
+  const system = input.framing.platformSystems.find((candidate) => candidate.platformId === platformId);
+  const platform = input.design.platforms.find((candidate) => candidate.id === platformId);
   const joist = input.framing.joists.find((member) => member.platformId === platform?.id);
   const beam = input.framing.beams.find((member) => member.platformId === platform?.id);
   const post = input.framing.posts.find((member) => member.platformId === platform?.id);
   const footing = input.framing.footings.find((member) => member.platformId === platform?.id);
-  return makeSheet('sections', 'Typical Building Sections', 'NTS · DIMENSIONS SHOWN', 'S3.0', input, issue, `
-    <text class="view-title" x="560" y="70" text-anchor="middle">TYPICAL DECK SECTION · ${esc((first?.supportStrategy || 'UNRESOLVED').toUpperCase())}</text>
-    ${sectionDiagram(platform, joist?.section || 'Engineer design', beam?.section || 'Engineer design', post?.section || 'Engineer design', footing?.widthMm || 0, Boolean(input.framing.ledgers.length))}
-    <rect x="1120" y="82" width="510" height="800" class="panel"/><text class="section" x="1150" y="120">SECTION KEYNOTES</text>
-    ${table([['1', `${platform?.finish.deckingThicknessMm || 25} mm ${platform?.finish.decking || 'decking'}`], ['2', `${joist?.section || 'Engineer design'} joists @ ${platform?.framingIntent.joistSpacingMm || '—'} mm o.c.`], ['3', `${beam?.section || 'Engineer design'} beam; ply/splice schedule required`], ['4', `${post?.section || 'Engineer design'} post; cap/base connections required`], ['5', footing ? `${footing.widthMm}×${footing.lengthMm} mm preliminary pad; depth required` : 'Footing design required'], ['6', input.framing.ledgers.length ? 'Ledger, fasteners, lateral ties, flashing, and wall substrate require reviewed details' : 'Freestanding lateral system and bracing require reviewed design']], 1150, 145, 450, 72, 55)}
-    ${notice(1120, 760, 510, 122, 'TYPICAL SECTION LIMIT', 'This section coordinates member intent. It does not specify proprietary connectors, fasteners, flashing transitions, reinforcement, frost depth, uplift resistance, or lateral bracing until reviewed.')}`);
+  const ledger = input.framing.ledgers.find((member) => member.platformId === platform?.id);
+  const id: PlanSheet['id'] = index === 0 ? 'sections' : `sections-${index + 1}`;
+  return makeSheet(id, `Building Section · ${platform?.name || 'Unresolved platform'}`, 'NTS · DIMENSIONS SHOWN', `S3.${index}`, input, issue, `
+    <text class="view-title" x="560" y="70" text-anchor="middle">${esc(platform?.name.toUpperCase() || 'UNRESOLVED PLATFORM')} · BUILDING SECTION · ${esc((system?.supportStrategy || 'UNRESOLVED').toUpperCase())}</text>
+    ${sectionDiagram(platform, joist?.section || 'Engineer design', beam?.section || 'Engineer design', post?.section || 'Engineer design', footing?.widthMm || 0, Boolean(ledger))}
+    <rect x="1120" y="82" width="510" height="800" class="panel"/><text class="section" x="1150" y="120">SECTION KEYNOTES · ${index + 1}/${pageCount}</text>
+    ${table([['1', `${platform?.finish.deckingThicknessMm || 25} mm ${platform?.finish.decking || 'decking'}`], ['2', `${joist?.section || 'Engineer design'} joists @ ${platform?.framingIntent.joistSpacingMm || '—'} mm o.c.`], ['3', `${beam?.section || 'Engineer design'} beam; ply/splice schedule required`], ['4', `${post?.section || 'Engineer design'} post; cap/base connections required`], ['5', footing ? `${footing.widthMm}×${footing.lengthMm} mm preliminary pad; depth required` : 'Footing design required'], ['6', ledger ? 'Ledger, fasteners, lateral ties, flashing, and wall substrate require reviewed details' : 'Freestanding lateral system and bracing require reviewed design']], 1150, 145, 450, 72, 55)}
+    ${notice(1120, 760, 510, 122, 'PLATFORM SECTION LIMIT', `This section coordinates ${platform?.name || 'this platform'} only. It does not specify proprietary connectors, fasteners, flashing transitions, reinforcement, frost depth, uplift resistance, or lateral bracing until reviewed.`)}`);
 }
 
 function detailSheet(input: CanonicalPlanSetInput, issue: IssueMeta): PlanSheet {

@@ -72,7 +72,7 @@ export function PermitStage({ property, site, design, framing, framingStale, des
     { id: 'S2.0', name: 'Framing plan & member schedule', status: framingCurrent ? 'derived' : 'blocked' },
     { id: 'S2.1+', name: 'All keyed structural connection design controls', status: framingCurrent ? 'review' : 'blocked' },
     { id: 'A3.0', name: 'Platform & stair elevations', status: framingCurrent ? 'derived' : 'blocked' },
-    { id: 'S3.0', name: 'Typical building sections', status: framingCurrent ? 'review' : 'blocked' },
+    { id: 'S3.0+', name: 'Building section for every platform', status: framingCurrent ? 'review' : 'blocked' },
     { id: 'A4.0', name: 'Stair, guard, footing & connection details', status: framingCurrent ? 'review' : 'blocked' },
     { id: 'A4.1+', name: 'All stair & guard design-control schedules', status: framingCurrent ? 'review' : 'blocked' },
     { id: 'S4.0', name: 'Design basis, checks & review gates', status: framingCurrent ? 'review' : 'blocked' },
@@ -124,7 +124,7 @@ export function PermitStage({ property, site, design, framing, framingStale, des
 
       <section className="grid gap-5 lg:grid-cols-[1.15fr_.85fr]">
         <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex items-start justify-between gap-4"><div><h3 className="font-[Manrope] text-lg font-bold text-slate-950">Permit drawing set</h3><p className="mt-1 text-sm text-slate-600">{reviewSheets.length || 12} coordinated 11×17 sheets, including paginated connection, stair, and guard schedules, a transparent calculation booklet, and layered CAD derived from this controlled project revision.</p>{framingCurrent && framing && <p className="mt-2 text-[10px] font-bold uppercase tracking-[.1em] text-emerald-700">Issue fingerprint · {currentFingerprint}</p>}</div><FileText className="text-emerald-800" size={22} /></div>
+          <div className="flex items-start justify-between gap-4"><div><h3 className="font-[Manrope] text-lg font-bold text-slate-950">Permit drawing set</h3><p className="mt-1 text-sm text-slate-600">{reviewSheets.length || 12} coordinated 11×17 sheets, including paginated connection, stair, and guard schedules plus one building section per platform, a transparent calculation booklet, and layered CAD derived from this controlled project revision.</p>{framingCurrent && framing && <p className="mt-2 text-[10px] font-bold uppercase tracking-[.1em] text-emerald-700">Issue fingerprint · {currentFingerprint}</p>}</div><FileText className="text-emerald-800" size={22} /></div>
           <ol className="mt-5 grid gap-2">{plannedSheets.map((sheet) => <li key={sheet.id} className="flex min-h-12 items-center gap-3 rounded-lg border border-slate-200 px-3 text-sm text-slate-700"><span className="grid h-7 w-10 place-items-center rounded-md bg-slate-100 text-[10px] font-bold text-slate-600">{sheet.id}</span><span className="flex-1 font-semibold">{sheet.name}</span><SheetStatus status={sheet.status} /></li>)}</ol>
           <div className="mt-4 grid gap-2 sm:grid-cols-2">
             <button type="button" onClick={() => { setPreviewSheetIndex(0); setPreviewZoom(100); setPreviewOpen(true); }} disabled={!framingCurrent} className="flex min-h-11 items-center justify-center gap-2 rounded-lg bg-emerald-800 px-4 text-xs font-bold text-white disabled:opacity-40"><Printer size={15} /> Preview complete set</button>

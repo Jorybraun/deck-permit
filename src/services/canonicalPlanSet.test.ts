@@ -27,8 +27,9 @@ describe('canonical coordinated review set', () => {
     expect(planSet.fingerprint).not.toBe(`DP-${framing.inputFingerprint.slice(-8).toUpperCase()}`);
     const connectionPageCount = Math.max(1, Math.ceil(framing.connections.length / 12));
     const connectionNumbers = Array.from({ length: connectionPageCount }, (_, index) => `S2.${index + 1}`);
-    expect(planSet.sheets).toHaveLength(11 + connectionPageCount);
-    expect(planSet.sheets.map((sheet) => sheet.number)).toEqual(['A0.0', 'C1.0', 'A1.0', 'A2.0', 'S1.0', 'S2.0', ...connectionNumbers, 'A3.0', 'S3.0', 'A4.0', 'A4.1', 'S4.0']);
+    const sectionNumbers = design.platforms.map((_, index) => `S3.${index}`);
+    expect(planSet.sheets).toHaveLength(10 + connectionPageCount + sectionNumbers.length);
+    expect(planSet.sheets.map((sheet) => sheet.number)).toEqual(['A0.0', 'C1.0', 'A1.0', 'A2.0', 'S1.0', 'S2.0', ...connectionNumbers, 'A3.0', ...sectionNumbers, 'A4.0', 'A4.1', 'S4.0']);
     expect(planSet.sheets.every((sheet) => sheet.designFingerprint === planSet.fingerprint)).toBe(true);
     for (const sheet of planSet.sheets) {
       const errors: string[] = [];
@@ -78,6 +79,13 @@ describe('canonical coordinated review set', () => {
     expect(elevationSheet).toContain('STAIR 1 · 3R @ 150 · B → LOWER DECK');
     expect(elevationSheet).toContain('data-platform-id="P1"');
     expect(elevationSheet).toContain('P1-B1-P1-F');
+    const sectionSheets = planSet.sheets.filter((sheet) => sheet.id === 'sections' || sheet.id.startsWith('sections-'));
+    expect(sectionSheets).toHaveLength(2);
+    expect(sectionSheets[0].svg).toContain('UPPER DECK · BUILDING SECTION');
+    expect(sectionSheets[1].svg).toContain('LOWER DECK · BUILDING SECTION');
+    expect(sectionSheets[0].svg).toContain('SECTION KEYNOTES · 1/2');
+    expect(sectionSheets[1].svg).toContain('SECTION KEYNOTES · 2/2');
+    expect(planSet.sheets.find((sheet) => sheet.number === 'A0.0')?.svg).toContain('S3.0–S3.1');
     expect(planSet.sheets.find((sheet) => sheet.number === 'A4.0')?.svg).toContain('3 STRINGERS');
     expect(planSet.sheets.find((sheet) => sheet.number === 'A4.0')?.svg).toContain('355 RUN/GOING');
     expect(planSet.sheets.find((sheet) => sheet.number === 'A4.0')?.svg).toContain('LANDINGS: TOP PASS 900×900 · BOTTOM PASS 900×900');
@@ -126,5 +134,6 @@ describe('canonical coordinated review set', () => {
     expect(connectionSheets.length).toBeGreaterThan(1);
     for (const connection of framing.connections) expect(connectionSheets.filter((sheet) => sheet.svg.includes(connection.id))).toHaveLength(1);
     expect(planSet.sheets.find((sheet) => sheet.number === 'A0.0')?.svg).toContain(`S2.1–S2.${connectionSheets.length}`);
+    expect(planSet.sheets.find((sheet) => sheet.number === 'A0.0')?.svg).toContain('S3.0–S3.3');
   });
 });
