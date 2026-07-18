@@ -683,7 +683,7 @@ function StairShape({ stair, departureEdgeAngleDeg, transform, selected, onSelec
     <g transform={`translate(${labelX - x} ${labelY - y})`} pointerEvents="none">
       <rect x="-88" y="-28" width="176" height="56" rx="6" fill="white" stroke={selected ? '#c26716' : '#9caea4'} strokeWidth={selected ? 2 : 1} />
       <text x="0" y="-12" textAnchor="middle" fontSize="9" fontWeight="900" fill="#6f3d15">A → B · STAIRS TO {destination}</text>
-      <text x="0" y="2" textAnchor="middle" fontSize="8" fontWeight="700" fill="#52665b">{stair.riserCount} RISERS @ {stair.riserHeightMm} · {treadCount} TREADS @ {stair.treadDepthMm}</text>
+      <text x="0" y="2" textAnchor="middle" fontSize="8" fontWeight="700" fill="#52665b">{stair.riserCount} RISERS @ {stair.riserHeightMm} · {treadCount} RUNS @ {stair.treadDepthMm}</text>
       <text x="0" y="16" textAnchor="middle" fontSize="8" fontWeight="700" fill="#52665b">{stringerCount} STRINGERS · PLAN {Math.round(stair.directionDeg)}° · RAIL {handrailSides.toUpperCase()}</text>
     </g>
   </g>;
@@ -708,7 +708,7 @@ function StairDraft({ startMm, endMm, riseMm, directionDeg, targetLabel, transfo
   const valid = geometry.status === 'valid';
   const color = valid ? '#087553' : '#c2412d';
   const status = valid
-    ? `Proposed: ${geometry.riserCount} risers @ ${geometry.riserHeightMm} · ${geometry.treadCount} treads @ ${geometry.treadDepthMm}`
+    ? `Proposed: ${geometry.riserCount} risers @ ${geometry.riserHeightMm} · ${geometry.treadCount} runs/goings @ ${geometry.treadDepthMm}`
     : geometry.status === 'no-stair' ? 'No stair needed at this elevation' : 'Add an intermediate landing';
   return <g pointerEvents="none">
     <g transform={`translate(${startX} ${startY}) rotate(${angle})`}>

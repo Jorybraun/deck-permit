@@ -72,6 +72,10 @@ describe('canonical ten-sheet review set', () => {
     expect(elevationSheet).toContain('data-platform-id="P1"');
     expect(elevationSheet).toContain('P1-B1-P1-F');
     expect(planSet.sheets.find((sheet) => sheet.number === 'A4.0')?.svg).toContain('3 STRINGERS');
+    expect(planSet.sheets.find((sheet) => sheet.number === 'A4.0')?.svg).toContain('355 RUN/GOING');
+    expect(planSet.sheets.find((sheet) => sheet.number === 'A4.0')?.svg).toContain('LANDINGS: TOP PASS 900×900 · BOTTOM PASS 900×900');
+    expect(planSet.sheets.find((sheet) => sheet.number === 'A4.0')?.svg).toContain('HEADROOM 1950 MIN · UNVERIFIED');
+    expect(planSet.sheets.find((sheet) => sheet.number === 'A4.0')?.svg).toContain('450 O.C. / 900 MAX');
     expect(planSet.sheets.find((sheet) => sheet.number === 'A4.0')?.svg).toContain('GUARD CODE SCREEN / INTENT');
     expect(planSet.sheets.find((sheet) => sheet.number === 'A4.0')?.svg).toContain('OPENINGS: MAX 100 mm');
     expect(planSet.sheets.find((sheet) => sheet.number === 'A4.0')?.svg).toContain('TOP: ST1-FROM-CONN');

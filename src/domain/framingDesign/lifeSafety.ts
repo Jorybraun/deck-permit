@@ -1,11 +1,19 @@
 import type { DeckDesign, DeckPlatform, DeckStair, PointMm } from '../deckDesign';
 import { terrainElevationAt, type SiteModel, type TerrainVerificationStatus } from '../siteModel';
-import type { GuardAssembly, LifeSafetyAssessment, PlatformEdgeLifeSafetyAssessment, StairLifeSafetyAssessment } from './types';
+import type { GuardAssembly, LifeSafetyAssessment, PlatformEdgeLifeSafetyAssessment, StairLandingLifeSafetyAssessment, StairLifeSafetyAssessment } from './types';
 
 const GUARD_TRIGGER_DROP_MM = 600;
 const TALL_GUARD_TRIGGER_DROP_MM = 1800;
 const CLIMBABILITY_TRIGGER_DROP_MM = 4200;
 const ADJACENT_SURFACE_SEARCH_MM = 1200;
+const MINIMUM_STAIR_WIDTH_MM = 860;
+const MAXIMUM_FLIGHT_RISE_MM = 3700;
+const MINIMUM_RISER_HEIGHT_MM = 125;
+const MAXIMUM_RISER_HEIGHT_MM = 200;
+const MINIMUM_RUN_MM = 255;
+const MAXIMUM_RUN_MM = 355;
+const MAXIMUM_STRINGER_SPACING_MM = 900;
+const MINIMUM_HEADROOM_MM = 1950;
 
 interface SurfaceSample {
   elevationMm: number;
@@ -23,7 +31,7 @@ export function assessDeckLifeSafety(design: DeckDesign, site: SiteModel): LifeS
   const stairs = design.stairs.map((stair) => assessStair(stair, design, site));
   const statuses = [...platformEdges.map((item) => item.status), ...stairs.map((item) => item.status)];
   return {
-    schema: 'life-safety-screen/v1',
+    schema: 'life-safety-screen/v2',
     occupancyAssumption: 'single-dwelling-exterior-deck',
     adjacentSurfaceSearchMm: ADJACENT_SURFACE_SEARCH_MM,
     platformEdges,
@@ -33,6 +41,8 @@ export function assessDeckLifeSafety(design: DeckDesign, site: SiteModel): LifeS
       'The 1.2 m adjacent-surface screen uses the modeled platform polygons and recorded/interpolated project grade; field grade and accessible adjacent surfaces must be verified.',
       'Generated guard lines are design intent only. Guard loads, posts, blocking, anchorage, openings, climbability, glazing, corrosion resistance, and proprietary product compliance remain unresolved.',
       'Stair handrail intent does not resolve graspability, continuity, termination, clearances, attachment, guard infill, or the relationship between a handrail and a required stair guard.',
+      'The stair plan screen checks modeled width, rise, run/going, flight rise, stringer spacing, and whether a straight-flight landing rectangle fits on a modeled platform. It does not verify tread nosing/depth, doors, landing slope, drainage, slip resistance, or field dimensional uniformity.',
+      'Stair headroom is not represented in the current existing-house and overhead-obstruction model. A minimum 1950 mm clear headroom remains an explicit field and professional-review item.',
       'The screen assumes an exterior stair and deck serving one dwelling. A different occupancy or use requires a new code analysis.',
     ],
   };
@@ -139,12 +149,53 @@ function assessStair(stair: DeckStair, design: DeckDesign, site: SiteModel): Sta
   const handrailRequired = stair.riserCount > 3;
   const handrailIntentCount = stair.handrailSides === 'both' ? 2 : stair.handrailSides === 'none' ? 0 : 1;
   const missingRequiredHandrail = handrailRequired && handrailIntentCount < 1;
-  const status: StairLifeSafetyAssessment['status'] = missingRequiredHandrail ? 'blocked' : guardRequiredSides.length || handrailIntentCount ? 'review' : 'pass';
+  const flightRiseMm = Math.abs(startElevation - endElevation);
+  const modeledStringerSpacingMm = stair.stringerCount > 1 ? Math.round(stair.widthMm / (stair.stringerCount - 1)) : stair.widthMm;
+  const topLanding = assessStairLanding('top', stair.from, stair.startMm, [-dx / length, -dy / length], lateral, stair, design);
+  const bottomLanding = assessStairLanding('bottom', stair.to, stair.endMm, [dx / length, dy / length], lateral, stair, design);
+  const invalidGeometry = stair.widthMm < MINIMUM_STAIR_WIDTH_MM
+    || flightRiseMm > MAXIMUM_FLIGHT_RISE_MM
+    || stair.riserHeightMm < MINIMUM_RISER_HEIGHT_MM
+    || stair.riserHeightMm > MAXIMUM_RISER_HEIGHT_MM
+    || stair.treadDepthMm < MINIMUM_RUN_MM
+    || stair.treadDepthMm > MAXIMUM_RUN_MM
+    || modeledStringerSpacingMm > MAXIMUM_STRINGER_SPACING_MM
+    || topLanding.planClearanceStatus === 'blocked'
+    || bottomLanding.planClearanceStatus === 'blocked';
+  const geometryStatus: StairLifeSafetyAssessment['geometryStatus'] = invalidGeometry ? 'blocked' : 'pass';
+  // Headroom, landing surfaces, field uniformity, connections, and proprietary guard details
+  // remain unresolved even when the deterministic plan geometry passes.
+  const status: StairLifeSafetyAssessment['status'] = missingRequiredHandrail || invalidGeometry ? 'blocked' : 'review';
+  const blockers = [
+    stair.widthMm < MINIMUM_STAIR_WIDTH_MM ? `width ${stair.widthMm} mm is below ${MINIMUM_STAIR_WIDTH_MM} mm` : null,
+    flightRiseMm > MAXIMUM_FLIGHT_RISE_MM ? `flight rise ${flightRiseMm} mm exceeds ${MAXIMUM_FLIGHT_RISE_MM} mm` : null,
+    stair.riserHeightMm < MINIMUM_RISER_HEIGHT_MM || stair.riserHeightMm > MAXIMUM_RISER_HEIGHT_MM ? `riser ${stair.riserHeightMm} mm is outside ${MINIMUM_RISER_HEIGHT_MM}-${MAXIMUM_RISER_HEIGHT_MM} mm` : null,
+    stair.treadDepthMm < MINIMUM_RUN_MM || stair.treadDepthMm > MAXIMUM_RUN_MM ? `modeled run/going ${stair.treadDepthMm} mm is outside ${MINIMUM_RUN_MM}-${MAXIMUM_RUN_MM} mm` : null,
+    modeledStringerSpacingMm > MAXIMUM_STRINGER_SPACING_MM ? `modeled stringer spacing ${modeledStringerSpacingMm} mm exceeds ${MAXIMUM_STRINGER_SPACING_MM} mm` : null,
+    topLanding.planClearanceStatus === 'blocked' ? 'top landing rectangle does not fit its platform' : null,
+    bottomLanding.planClearanceStatus === 'blocked' ? 'bottom landing rectangle does not fit its platform' : null,
+  ].filter((item): item is string => Boolean(item));
   return {
     id: `LS-${stair.id}`,
     stairId: stair.id,
     riserCount: stair.riserCount,
     widthMm: stair.widthMm,
+    minimumWidthMm: MINIMUM_STAIR_WIDTH_MM,
+    flightRiseMm,
+    maximumFlightRiseMm: MAXIMUM_FLIGHT_RISE_MM,
+    permittedRiserHeightRangeMm: [MINIMUM_RISER_HEIGHT_MM, MAXIMUM_RISER_HEIGHT_MM],
+    permittedRunRangeMm: [MINIMUM_RUN_MM, MAXIMUM_RUN_MM],
+    modeledRunMm: stair.treadDepthMm,
+    geometryStatus,
+    modeledStringerSpacingMm,
+    maximumStringerSpacingMm: MAXIMUM_STRINGER_SPACING_MM,
+    topLanding,
+    bottomLanding,
+    requiredHeadroomMm: MINIMUM_HEADROOM_MM,
+    modeledHeadroomMm: null,
+    headroomStatus: 'unresolved',
+    uniformityStatus: 'model-uniform-field-verification-required',
+    treadAndLandingFinishStatus: 'unresolved',
     maximumSideDropMm: Math.max(sideDrops.left, sideDrops.right),
     guardRequiredSides,
     handrailRequired,
@@ -156,7 +207,62 @@ function assessStair(stair: DeckStair, design: DeckDesign, site: SiteModel): Sta
     status,
     basis: missingRequiredHandrail
       ? `Exterior stair has ${stair.riserCount} risers and no handrail intent; at least one handrail is required under the single-dwelling assumption.`
-      : `${stair.riserCount} exterior risers; ${handrailRequired ? 'minimum one handrail required' : 'required handrail threshold not exceeded'}; ${guardRequiredSides.length ? `guard protection screened on ${guardRequiredSides.join(' and ')} side(s)` : 'no stair-side guard trigger found in the modeled surface screen'}.`,
+      : blockers.length
+        ? `Stair plan geometry is blocked: ${blockers.join('; ')}.`
+        : `${stair.riserCount} exterior risers; modeled width, rise, run/going, flight rise, landing footprint, and stringer spacing pass the encoded plan screen. ${handrailRequired ? 'Minimum one handrail is required' : 'Required handrail threshold is not exceeded'}; ${guardRequiredSides.length ? `guard protection is screened on ${guardRequiredSides.join(' and ')} side(s)` : 'no stair-side guard trigger was found in the modeled surface screen'}. Headroom, landing surface, field uniformity, and assemblies still require verification.`,
+  };
+}
+
+function assessStairLanding(
+  endpoint: StairLandingLifeSafetyAssessment['endpoint'],
+  host: DeckStair['from'],
+  point: PointMm,
+  interiorDirection: PointMm,
+  lateral: PointMm,
+  stair: DeckStair,
+  design: DeckDesign,
+): StairLandingLifeSafetyAssessment {
+  const requiredLengthMm = Math.min(stair.widthMm, 1100);
+  if (host.kind === 'terrain') {
+    const planClearanceStatus = stair.landingDepthMm >= requiredLengthMm ? 'generated-intent' as const : 'blocked' as const;
+    return {
+      endpoint,
+      hostKind: 'grade',
+      hostId: 'terrain',
+      requiredWidthMm: stair.widthMm,
+      requiredLengthMm,
+      modeledDepthMm: stair.landingDepthMm,
+      planClearanceStatus,
+      surfaceStatus: 'unresolved',
+      basis: planClearanceStatus === 'generated-intent'
+        ? `${stair.landingDepthMm} mm landing intent is generated at grade; finished grade slope, drainage, support, and obstructions require field verification.`
+        : `${stair.landingDepthMm} mm landing intent is shorter than the ${requiredLengthMm} mm straight-flight screen.`,
+    };
+  }
+  const platform = design.platforms.find((candidate) => candidate.id === host.platformId);
+  if (!platform) {
+    return { endpoint, hostKind: 'platform', hostId: host.platformId, requiredWidthMm: stair.widthMm, requiredLengthMm, modeledDepthMm: null, planClearanceStatus: 'blocked', surfaceStatus: 'unresolved', basis: 'The endpoint platform is missing from the canonical design.' };
+  }
+  const inset = Math.min(25, requiredLengthMm / 4, stair.widthMm / 4);
+  const depths = [inset, requiredLengthMm / 2, requiredLengthMm - inset];
+  const offsets = [-(stair.widthMm / 2 - inset), 0, stair.widthMm / 2 - inset];
+  const samples = depths.flatMap((depth) => offsets.map((offset): PointMm => [
+    point[0] + interiorDirection[0] * depth + lateral[0] * offset,
+    point[1] + interiorDirection[1] * depth + lateral[1] * offset,
+  ]));
+  const fits = samples.every((sample) => pointInBoundary(sample, platform) || pointOnBoundary(sample, platform));
+  return {
+    endpoint,
+    hostKind: 'platform',
+    hostId: platform.id,
+    requiredWidthMm: stair.widthMm,
+    requiredLengthMm,
+    modeledDepthMm: fits ? requiredLengthMm : null,
+    planClearanceStatus: fits ? 'pass' : 'blocked',
+    surfaceStatus: 'unresolved',
+    basis: fits
+      ? `${stair.widthMm} x ${requiredLengthMm} mm straight-flight landing rectangle fits within ${platform.id}; slope, doors, guards, drainage, and finished surface remain unresolved.`
+      : `${stair.widthMm} x ${requiredLengthMm} mm straight-flight landing rectangle does not fit within ${platform.id} at the modeled stair endpoint.`,
   };
 }
 
@@ -185,6 +291,16 @@ function pointInBoundary(point: PointMm, platform: DeckPlatform): boolean {
     if (intersects) inside = !inside;
   }
   return inside;
+}
+
+function pointOnBoundary(point: PointMm, platform: DeckPlatform): boolean {
+  return platform.boundary.vertices.some((start, index, vertices) => {
+    const end = vertices[(index + 1) % vertices.length];
+    const cross = (point[0] - start.xMm) * (end.yMm - start.yMm) - (point[1] - start.yMm) * (end.xMm - start.xMm);
+    if (Math.abs(cross) > 1) return false;
+    return point[0] >= Math.min(start.xMm, end.xMm) - 1 && point[0] <= Math.max(start.xMm, end.xMm) + 1
+      && point[1] >= Math.min(start.yMm, end.yMm) - 1 && point[1] <= Math.max(start.yMm, end.yMm) + 1;
+  });
 }
 
 function endpointElevation(endpoint: DeckStair['from'], design: DeckDesign): number {

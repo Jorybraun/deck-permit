@@ -15,8 +15,8 @@ export function lifeSafetySourceForProfile(profile: FramingCodeProfile): Framing
     title: `${profile.label} · Division B, Section 9.8`,
     edition: `Effective ${profile.effectiveDate}; current profile must be confirmed at issue`,
     url: profile.sourceUrl,
-    scope: 'Requirement-location screen for exterior residential deck guards and stair handrails: adjacent surfaces within 1.2 m, guard height, guard openings, stair handrail count, continuity, and attachment review.',
-    exclusions: ['Professional code interpretation', 'Guard and handrail structural capacity', 'Proprietary system approval', 'Field grade and occupancy verification', 'Alternative solutions and project-specific authority interpretations'],
+    scope: 'Requirement-location and dimensional screen for exterior residential deck stairs and guards: width, rise, run/going, flight rise, landing footprint, stringer spacing, headroom review, adjacent surfaces within 1.2 m, guard height/openings, and handrail intent.',
+    exclusions: ['Professional code interpretation', 'Tread nosing and finished depth', 'Headroom and overhead-obstruction measurement', 'Landing doors, slope, drainage, and slip resistance', 'Field dimensional uniformity', 'Stringer, guard, and handrail structural capacity', 'Proprietary system approval', 'Field grade and occupancy verification', 'Alternative solutions and project-specific authority interpretations'],
   };
 }
 

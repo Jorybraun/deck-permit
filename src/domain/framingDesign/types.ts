@@ -119,6 +119,22 @@ export interface StairLifeSafetyAssessment {
   stairId: string;
   riserCount: number;
   widthMm: number;
+  minimumWidthMm: 860;
+  flightRiseMm: number;
+  maximumFlightRiseMm: 3700;
+  permittedRiserHeightRangeMm: readonly [125, 200];
+  permittedRunRangeMm: readonly [255, 355];
+  modeledRunMm: number;
+  geometryStatus: 'pass' | 'blocked';
+  modeledStringerSpacingMm: number;
+  maximumStringerSpacingMm: 900;
+  topLanding: StairLandingLifeSafetyAssessment;
+  bottomLanding: StairLandingLifeSafetyAssessment;
+  requiredHeadroomMm: 1950;
+  modeledHeadroomMm: null;
+  headroomStatus: 'unresolved';
+  uniformityStatus: 'model-uniform-field-verification-required';
+  treadAndLandingFinishStatus: 'unresolved';
   maximumSideDropMm: number;
   guardRequiredSides: Array<'left' | 'right'>;
   handrailRequired: boolean;
@@ -131,8 +147,20 @@ export interface StairLifeSafetyAssessment {
   basis: string;
 }
 
+export interface StairLandingLifeSafetyAssessment {
+  endpoint: 'top' | 'bottom';
+  hostKind: 'platform' | 'grade';
+  hostId: string;
+  requiredWidthMm: number;
+  requiredLengthMm: number;
+  modeledDepthMm: number | null;
+  planClearanceStatus: 'pass' | 'blocked' | 'generated-intent';
+  surfaceStatus: 'unresolved';
+  basis: string;
+}
+
 export interface LifeSafetyAssessment {
-  schema: 'life-safety-screen/v1';
+  schema: 'life-safety-screen/v2';
   occupancyAssumption: 'single-dwelling-exterior-deck';
   adjacentSurfaceSearchMm: 1200;
   platformEdges: PlatformEdgeLifeSafetyAssessment[];

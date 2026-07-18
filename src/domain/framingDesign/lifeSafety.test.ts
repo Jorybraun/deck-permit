@@ -41,4 +41,71 @@ describe('deck guard and handrail life-safety screen', () => {
     expect(stair).toMatchObject({ handrailRequired: true, minimumHandrailCount: 1, handrailIntentCount: 0, status: 'blocked', continuityResolved: false, guardAssemblyResolved: false });
     expect(stair.basis).toContain('at least one handrail is required');
   });
+
+  it('passes encoded straight-flight geometry when both landing rectangles fit their platforms', () => {
+    let design = addPlatform(createEmptyDesign(), { boundary: rectangularBoundary(0, 0, 4000, 3000), elevationMm: 900 });
+    design = addPlatform(design, { boundary: rectangularBoundary(4710, 900, 2600, 1200), elevationMm: 450 });
+    design = addStair(design, {
+      from: { kind: 'platform', platformId: 'P1' },
+      to: { kind: 'platform', platformId: 'P2' },
+      fromEdgeId: 'P1-E2',
+      toEdgeId: 'P2-E4',
+      startMm: [4000, 1500],
+      endMm: [4710, 1500],
+      directionDeg: 0,
+      widthMm: 900,
+      riserCount: 3,
+      treadDepthMm: 355,
+    });
+    const stair = assessDeckLifeSafety(design, createSiteModel(property)).stairs[0];
+    expect(stair).toMatchObject({
+      geometryStatus: 'pass',
+      minimumWidthMm: 860,
+      flightRiseMm: 450,
+      maximumFlightRiseMm: 3700,
+      permittedRiserHeightRangeMm: [125, 200],
+      permittedRunRangeMm: [255, 355],
+      modeledRunMm: 355,
+      modeledStringerSpacingMm: 450,
+      maximumStringerSpacingMm: 900,
+      requiredHeadroomMm: 1950,
+      modeledHeadroomMm: null,
+      headroomStatus: 'unresolved',
+      status: 'review',
+    });
+    expect(stair.topLanding).toMatchObject({ hostId: 'P1', requiredWidthMm: 900, requiredLengthMm: 900, planClearanceStatus: 'pass' });
+    expect(stair.bottomLanding).toMatchObject({ hostId: 'P2', requiredWidthMm: 900, requiredLengthMm: 900, planClearanceStatus: 'pass' });
+  });
+
+  it('blocks a stair when its required landing width does not fit the destination platform', () => {
+    let design = addPlatform(createEmptyDesign(), { boundary: rectangularBoundary(0, 0, 4000, 3000), elevationMm: 900 });
+    design = addPlatform(design, { boundary: rectangularBoundary(4710, 1200, 2600, 600), elevationMm: 450 });
+    design = addStair(design, {
+      from: { kind: 'platform', platformId: 'P1' },
+      to: { kind: 'platform', platformId: 'P2' },
+      fromEdgeId: 'P1-E2',
+      toEdgeId: 'P2-E4',
+      startMm: [4000, 1500],
+      endMm: [4710, 1500],
+      directionDeg: 0,
+      widthMm: 900,
+      riserCount: 3,
+      treadDepthMm: 355,
+    });
+    const stair = assessDeckLifeSafety(design, createSiteModel(property)).stairs[0];
+    expect(stair.geometryStatus).toBe('blocked');
+    expect(stair.bottomLanding).toMatchObject({ hostId: 'P2', modeledDepthMm: null, planClearanceStatus: 'blocked' });
+    expect(stair.status).toBe('blocked');
+    expect(stair.basis).toContain('bottom landing rectangle does not fit');
+  });
+
+  it('records a grade landing as generated intent without claiming its surface or headroom is verified', () => {
+    let design = addPlatform(createEmptyDesign(), { boundary: rectangularBoundary(0, 0, 4000, 3000), elevationMm: 450 });
+    design = addStair(design, { from: { kind: 'platform', platformId: 'P1' }, to: { kind: 'terrain', elevationMm: 0 }, fromEdgeId: 'P1-E2', startMm: [4000, 1500], directionDeg: 0, widthMm: 900, riserCount: 3 });
+    const stair = assessDeckLifeSafety(design, createSiteModel(property)).stairs[0];
+    expect(stair.bottomLanding).toMatchObject({ hostKind: 'grade', modeledDepthMm: 900, planClearanceStatus: 'generated-intent', surfaceStatus: 'unresolved' });
+    expect(stair.uniformityStatus).toBe('model-uniform-field-verification-required');
+    expect(stair.treadAndLandingFinishStatus).toBe('unresolved');
+    expect(stair.status).toBe('review');
+  });
 });

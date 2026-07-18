@@ -157,7 +157,7 @@ export function framingInputFingerprint(design: DeckDesign, site: SiteModel, inp
 }
 
 export function isFramingStale(framing: FramingDesign | null, design: DeckDesign, site: SiteModel, input: GenerateFramingInput): boolean {
-  return !framing || framing.schema !== 'framing-design/v2' || framing.lifeSafety?.schema !== 'life-safety-screen/v1' || framing.inputFingerprint !== framingInputFingerprint(design, site, input);
+  return !framing || framing.schema !== 'framing-design/v2' || framing.lifeSafety?.schema !== 'life-safety-screen/v2' || framing.inputFingerprint !== framingInputFingerprint(design, site, input);
 }
 
 function resolveJoistAxis(platform: DeckPlatform, housePoints: readonly [PointMm, PointMm] | null): 'x' | 'y' {
@@ -220,12 +220,14 @@ function endpointElevation(design: DeckDesign, endpoint: DeckDesign['stairs'][nu
 function globalChecks(site: SiteModel, footingCount: number, ledgerCount: number, guardCount: number, stringerCount: number, lifeSafety: LifeSafetyAssessment): FramingCheck[] {
   const requiredGuardEdges = lifeSafety.platformEdges.filter((edge) => edge.guardRequired).length;
   const blockedStairs = lifeSafety.stairs.filter((stair) => stair.status === 'blocked');
+  const blockedLandingCount = lifeSafety.stairs.flatMap((stair) => [stair.topLanding, stair.bottomLanding]).filter((landing) => landing.planClearanceStatus === 'blocked').length;
+  const unresolvedHeadroomCount = lifeSafety.stairs.filter((stair) => stair.headroomStatus === 'unresolved').length;
   return [
     { id: 'footing-bearing', title: 'Footings and soil', objectId: 'framing', status: 'review', result: `${footingCount} preliminary bearing-only footing sizes generated.`, basis: 'Assumed soil bearing only; frost depth, soil, uplift, thickness, reinforcement, and setbacks require verification.' },
     { id: 'lateral-load-path', title: 'Lateral load path', objectId: 'framing', status: 'blocked', result: 'No automatic lateral bracing or house lateral-tie design has been certified.', basis: CWC_DECK_GUIDE.exclusions.join(', ') },
     { id: 'ledger-envelope', title: 'Ledger and building envelope', objectId: 'site', status: ledgerCount && site.designWall.selectionStatus === 'field-measured' && site.designWall.rimMaterial !== 'unknown' && site.designWall.flashingFeasible === 'yes' ? 'review' : ledgerCount ? 'blocked' : 'pass', result: ledgerCount ? `${ledgerCount} ledger line(s); wall substrate and flashing inputs ${site.designWall.selectionStatus === 'field-measured' ? 'recorded' : 'not field-confirmed'}.` : 'No ledger lines generated.', basis: 'House attachment and waterproofing are excluded from the span guide and require project-specific review.' },
     { id: 'guards', title: 'Guard location and assemblies', objectId: 'framing', status: guardCount ? 'review' : 'pass', result: `${requiredGuardEdges} edge${requiredGuardEdges === 1 ? '' : 's'} exceed the modeled 600 mm trigger; ${guardCount} guard intent line${guardCount === 1 ? '' : 's'} generated.`, basis: 'Division B 9.8.8 screen. Field grade, 1.2 m adjacent surfaces, guard height, 100 mm openings, loads, posts, anchorage, glazing, climbability, and product compliance require review.' },
-    { id: 'stairs', title: 'Stair structure, guards, and handrails', objectId: 'framing', status: blockedStairs.length ? 'blocked' : stringerCount || lifeSafety.stairs.length ? 'review' : 'pass', result: `${stringerCount} stair stringer line${stringerCount === 1 ? '' : 's'} generated; ${blockedStairs.length} stair flight${blockedStairs.length === 1 ? '' : 's'} missing required handrail intent.`, basis: 'Division B 9.8.7–9.8.8 screen. Stringer design, connections, landings, side guards, handrail height/continuity/graspability, and attachment remain unresolved.' },
+    { id: 'stairs', title: 'Stair geometry, structure, guards, and handrails', objectId: 'framing', status: blockedStairs.length ? 'blocked' : stringerCount || lifeSafety.stairs.length ? 'review' : 'pass', result: `${lifeSafety.stairs.length} flight${lifeSafety.stairs.length === 1 ? '' : 's'} screened; ${stringerCount} stringer line${stringerCount === 1 ? '' : 's'} generated; ${blockedStairs.length} blocked flight${blockedStairs.length === 1 ? '' : 's'}; ${blockedLandingCount} landing fit failure${blockedLandingCount === 1 ? '' : 's'}; ${unresolvedHeadroomCount} headroom check${unresolvedHeadroomCount === 1 ? '' : 's'} unresolved.`, basis: 'Division B 9.8.2–9.8.9 screen. Width, rise, run/going, flight rise, landing footprint, stringer spacing, guards, and handrail intent are screened. Headroom, doors, surface slope/slip resistance, field uniformity, tread/nosing detail, stringer design, and all connections remain review items.' },
   ];
 }
 

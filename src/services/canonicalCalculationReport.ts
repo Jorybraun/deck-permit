@@ -262,7 +262,7 @@ export async function buildCanonicalCalculationPdf(report: CanonicalCalculationR
   heading('4. Footing bearing screen', 17);
   report.postFootingChecks.forEach((item) => { heading(`${item.footingId} / ${item.postId}`, 10.5); keyValue('Post', `${item.postSection} | height ${item.postHeightMm} mm | reaction ${item.reactionKn.toFixed(2)} kN`); keyValue('Bearing areas', `required ${item.requiredBearingAreaSqM.toFixed(4)} m2 | provided ${item.providedBearingAreaSqM.toFixed(4)} m2`); keyValue('Provided pressure', `${item.bearingPressureKpa.toFixed(2)} kPa vs assumed ${report.designBasis.assumedSoilBearingKpa.toFixed(0)} kPa`); keyValue('Footing', `${item.footingSizeMm} mm | depth ${item.footingDepth} | ${item.status.replace(/-/g, ' ')}`); rule(); });
 
-  if (report.stairs.length) { heading('5. Stair geometry and support', 17); report.stairs.forEach((stair) => { heading(stair.id, 11); keyValue('Endpoints', `${stair.from} -> ${stair.to}`); keyValue('Geometry', `${stair.widthMm} mm wide | ${stair.riserCount}R @ ${stair.riserHeightMm} | tread ${stair.treadDepthMm} | run ${stair.totalRunMm}`); keyValue('Framing', `${stair.stringerCount} stringers | ${stair.connectionIds.join(', ') || 'connections unresolved'}`); rule(); }); }
+  if (report.stairs.length) { heading('5. Stair geometry and support', 17); report.stairs.forEach((stair) => { heading(stair.id, 11); keyValue('Endpoints', `${stair.from} -> ${stair.to}`); keyValue('Geometry', `${stair.widthMm} mm wide | ${stair.riserCount}R @ ${stair.riserHeightMm} | modeled run/going ${stair.treadDepthMm} | total run ${stair.totalRunMm}`); keyValue('Tread detail', 'Actual tread depth, nosing/profile, drainage, and slip-resistant finish unresolved'); keyValue('Framing', `${stair.stringerCount} stringers | ${stair.connectionIds.join(', ') || 'connections unresolved'}`); rule(); }); }
 
   heading('6. Guard and handrail life-safety screen', 17);
   keyValue('Screen status', report.lifeSafety.status.toUpperCase());
@@ -275,7 +275,12 @@ export async function buildCanonicalCalculationPdf(report: CanonicalCalculationR
     paragraph(edge.basis, 8.5); rule();
   });
   report.lifeSafety.stairs.forEach((stair) => {
-    heading(`${stair.stairId} - stair guards and handrail`, 10.5);
+    heading(`${stair.stairId} - stair geometry, landings, guards and handrail`, 10.5);
+    keyValue('Plan geometry', `${stair.geometryStatus} | width ${stair.widthMm}/${stair.minimumWidthMm} min | flight rise ${stair.flightRiseMm}/${stair.maximumFlightRiseMm} max`);
+    keyValue('Rise / run screen', `${stair.riserCount} risers | permitted rise ${stair.permittedRiserHeightRangeMm.join('-')} mm | modeled run/going ${stair.modeledRunMm} mm / permitted ${stair.permittedRunRangeMm.join('-')} mm`);
+    keyValue('Landing fit', `top ${stair.topLanding.planClearanceStatus} (${stair.topLanding.requiredWidthMm} x ${stair.topLanding.requiredLengthMm}) | bottom ${stair.bottomLanding.planClearanceStatus} (${stair.bottomLanding.requiredWidthMm} x ${stair.bottomLanding.requiredLengthMm})`);
+    keyValue('Headroom / surfaces', `${stair.requiredHeadroomMm} mm minimum / ${stair.headroomStatus} | tread and landing finish ${stair.treadAndLandingFinishStatus}`);
+    keyValue('Stringer layout', `${stair.modeledStringerSpacingMm} mm modeled spacing / ${stair.maximumStringerSpacingMm} mm maximum screen`);
     keyValue('Handrail', `${stair.handrailRequired ? 'required' : 'not triggered'} | minimum ${stair.minimumHandrailCount} | ${stair.handrailIntentCount} side intent`);
     keyValue('Side protection', `${stair.maximumSideDropMm} mm maximum | ${stair.guardRequiredSides.length ? `${stair.guardRequiredSides.join(' and ')} guard side(s)` : 'no modeled guard side trigger'}`);
     paragraph(stair.basis, 8.5); rule();
