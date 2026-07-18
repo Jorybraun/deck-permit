@@ -38,7 +38,7 @@ export function calculateSiteClearances(geometry: LocalPropertyGeometry | null, 
     }));
     return closest!;
   });
-  const selected = (candidates.length <= 8 ? candidates : [...candidates].sort((a, b) => a.distanceMm - b.distanceMm).slice(0, 6)).sort((a, b) => a.parcelEdgeIndex - b.parcelEdgeIndex);
+  const selected = [...candidates].sort((a, b) => a.parcelEdgeIndex - b.parcelEdgeIndex);
   const minimumDistanceMm = selected.length ? Math.min(...selected.map((item) => item.distanceMm)) : null;
   const crosses = !allDeckVerticesInsideReferenceParcel || candidates.some((item) => item.distanceMm === 0);
   return { schema: SITE_CLEARANCE_SCHEMA, authority: 'municipal-gis-reference', status: crosses ? 'outside-or-crossing' : 'reference-only', dimensions: selected, minimumDistanceMm, allDeckVerticesInsideReferenceParcel, limitation };

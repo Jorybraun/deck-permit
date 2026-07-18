@@ -53,14 +53,26 @@ export interface TerrainSurface {
   gradePoints: TerrainGradePoint[];
 }
 
+export interface ParcelYardReference {
+  schema: 'parcel-yard-reference/v1';
+  status: 'unselected' | 'homeowner-selected' | 'survey-verified';
+  frontEdgeIndex: number | null;
+  rearEdgeIndex: number | null;
+  exteriorSideEdgeIndex: number | null;
+  selectedBy: string;
+  selectedAt: string;
+  notes: string;
+}
+
 export interface SiteModel {
-  schema: 'site-model/v3';
+  schema: 'site-model/v4';
   units: 'mm';
   status: 'reference-unverified' | 'field-input-unverified';
   referenceSource: 'municipal-roofline' | 'estimated' | 'field-measurement';
   houseDepthMm: number;
   designWall: HouseWallReference;
   terrain: TerrainSurface;
+  yardReference: ParcelYardReference;
   capture: ExistingConditionCapture;
   measuredBy: string;
   measuredAt: string;

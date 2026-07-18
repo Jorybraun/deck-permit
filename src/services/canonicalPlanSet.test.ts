@@ -10,7 +10,7 @@ const property: Property = {
   address: { fullAddress: '2433 Lovell Ave, Sidney, BC', civicNumber: '2433', streetName: 'Lovell', streetType: 'Ave', locality: 'Sidney', localityType: 'Town', province: 'BC', postalCode: '', coordinates: [-123.399, 48.659], score: 100 },
   parcel: { pid: '000-111-222', pidRaw: '000111222', parcelName: 'Test parcel', planNumber: 'VIP123', municipality: 'Town of Sidney', ownerType: '', parcelClass: '', areaSqm: 720, polygon: [[-123.400, 48.658], [-123.398, 48.658], [-123.398, 48.660], [-123.400, 48.660], [-123.400, 48.658]], center: [-123.399, 48.659], geometrySource: 'live' },
   buildings: [{ id: 'house', primary: true, areaSqm: 100, kind: 'building-footprint', sourceId: 'sidney-gis', confidence: 'medium', polygon: [[-123.3995, 48.6590], [-123.3988, 48.6590], [-123.3988, 48.6593], [-123.3995, 48.6593], [-123.3995, 48.6590]] }],
-  zoning: null, buildableEnvelope: null, snowLoad: 1,
+  zoning: { zone: 'R2', setbacks: { front: 4.5, rear: 4.5, side: 2, exteriorSide: 3 }, maxLotCoverage: 45, maxHeight: 10.5, source: 'Town of Sidney test fixture', notes: [] }, buildableEnvelope: null, snowLoad: 1,
   evidence: [{ id: 'parcel', label: 'Town parcel layer', url: 'https://example.test/parcel', authority: 'municipal', retrievedAt: '2026-07-18T00:00:00.000Z', status: 'reference' }],
 };
 
@@ -20,7 +20,7 @@ describe('canonical ten-sheet review set', () => {
     design = addPlatform(design, { name: 'Lower deck', boundary: rectangularBoundary(4710, 0, 3500, 3000), elevationMm: 450 });
     design = addStair(design, { from: { kind: 'platform', platformId: 'P1' }, to: { kind: 'platform', platformId: 'P2' }, fromEdgeId: 'P1-E2', toEdgeId: 'P2-E4', startMm: [4000, 1500], endMm: [4710, 1500], directionDeg: 0, riserCount: 3, treadDepthMm: 355 });
     const selectedSite = selectHouseWall(createSiteModel(property), property, 'house', 0);
-    const site = { ...selectedSite, measuredBy: 'Homeowner', designWall: { ...selectedSite.designWall, openings: [{ id: 'D1', kind: 'door' as const, offsetMm: 900, widthMm: 1800, sillHeightMm: 120 }] } };
+    const site = { ...selectedSite, measuredBy: 'Homeowner', yardReference: { ...selectedSite.yardReference, status: 'homeowner-selected' as const, frontEdgeIndex: 0, rearEdgeIndex: 2, selectedBy: 'Homeowner', selectedAt: '2026-07-18T00:00:00.000Z' }, designWall: { ...selectedSite.designWall, openings: [{ id: 'D1', kind: 'door' as const, offsetMm: 900, widthMm: 1800, sillHeightMm: 120 }] } };
     const framing = generateFramingDesign(design, site, { municipality: 'Town of Sidney', snowLoadKpa: 1 }, '2026-07-18T00:00:00.000Z');
     const planSet = generateCanonicalPlanSet({ property, site, design, framing, issuedAt: '2026-07-18T00:00:00.000Z' });
 
@@ -41,7 +41,9 @@ describe('canonical ten-sheet review set', () => {
     }
     const siteSheet = planSet.sheets.find((sheet) => sheet.number === 'A1.0')?.svg || '';
     expect(siteSheet).toContain('SELECTED HOUSE WALL');
-    expect(siteSheet).toContain('REFERENCE CLEARANCE SCHEDULE');
+    expect(siteSheet).toContain('SITE / COVERAGE SCHEDULE');
+    expect(siteSheet).toContain('REFERENCE SETBACK SCREEN');
+    expect(siteSheet).toContain('FRONT · PL-1');
     expect(siteSheet).toContain('GIS REF PL-');
     expect(siteSheet).toContain('Municipal GIS is reference evidence, not a legal survey.');
     const existingSheet = planSet.sheets.find((sheet) => sheet.number === 'C1.0')?.svg || '';

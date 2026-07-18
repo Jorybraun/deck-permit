@@ -1,4 +1,4 @@
-import type { ZoningInfo, Parcel, LatLng } from '../types';
+import type { ZoningInfo, Parcel } from '../types';
 
 /**
  * Sidney BC zoning lookup.
@@ -79,52 +79,6 @@ export function lookupZoning(parcel: Parcel): ZoningInfo {
 
 function normalizeZone(value?: string): string {
   return (value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-}
-
-/**
- * Compute the buildable envelope polygon by inseting the parcel polygon
- * by the setback distances.
- *
- * For simplicity in v1, we compute a bounding-box inset. A proper implementation
- * would do polygon offsetting.
- */
-export function computeBuildableEnvelope(
-  parcel: Parcel,
-  zoning: ZoningInfo
-): LatLng[] {
-  const ring = parcel.polygon;
-  if (ring.length < 3) return [];
-
-  // Get bounding box
-  let minLng = Infinity,
-    maxLng = -Infinity,
-    minLat = Infinity,
-    maxLat = -Infinity;
-  for (const [lng, lat] of ring) {
-    minLng = Math.min(minLng, lng);
-    maxLng = Math.max(maxLng, lng);
-    minLat = Math.min(minLat, lat);
-    maxLat = Math.max(maxLat, lat);
-  }
-
-  // Convert setbacks from meters to degrees
-  // At 48.65°N: 1 degree lng ≈ 73.5km, 1 degree lat ≈ 111km
-  const latDegPerM = 1 / 111000;
-  const lngDegPerM = 1 / (111000 * Math.cos((48.65 * Math.PI) / 180));
-
-  const frontSetback = zoning.setbacks.front * latDegPerM;
-  const rearSetback = zoning.setbacks.rear * latDegPerM;
-  const sideSetback = zoning.setbacks.side * lngDegPerM;
-
-  // Simple inset: assume front = south, rear = north, sides = east/west
-  // (This is a simplification — proper implementation would orient by street frontage)
-  return [
-    [minLng + sideSetback, minLat + frontSetback],
-    [maxLng - sideSetback, minLat + frontSetback],
-    [maxLng - sideSetback, maxLat - rearSetback],
-    [minLng + sideSetback, maxLat - rearSetback],
-    [minLng + sideSetback, minLat + frontSetback],
-  ];
 }
 
 /**

@@ -9,7 +9,7 @@ export function createSiteModel(property: Property, now = new Date()): SiteModel
   const reference = deriveHouseReference(property);
   const lengthMm = Math.round(reference.widthM * 1000);
   return {
-    schema: 'site-model/v3',
+    schema: 'site-model/v4',
     units: 'mm',
     status: 'reference-unverified',
     referenceSource: reference.source,
@@ -29,6 +29,7 @@ export function createSiteModel(property: Property, now = new Date()): SiteModel
       openings: [],
     },
     terrain: createTerrainSurface(),
+    yardReference: { schema: 'parcel-yard-reference/v1', status: 'unselected', frontEdgeIndex: null, rearEdgeIndex: null, exteriorSideEdgeIndex: null, selectedBy: '', selectedAt: '', notes: '' },
     capture: createExistingConditionCapture(),
     measuredBy: '',
     measuredAt: now.toISOString().slice(0, 10),
@@ -58,6 +59,7 @@ export function assessSiteModel(site: SiteModel): SiteAssessment {
   if (site.status !== 'field-input-unverified') warnings.push('House geometry is reference context only. Record field measurements before professional review.');
   if (site.designWall.selectionStatus === 'unselected') errors.push('Select and confirm the house wall used by the deck design.');
   if (site.designWall.selectionStatus !== 'field-measured') warnings.push('The selected house wall has not been confirmed from field measurements.');
+  if (site.yardReference.status === 'unselected' || site.yardReference.frontEdgeIndex === null || site.yardReference.rearEdgeIndex === null) warnings.push('Front and rear parcel edges are unconfirmed; named setback checks remain unavailable.');
   if (site.status === 'field-input-unverified' && !site.measuredBy.trim()) errors.push('Identify who recorded the field measurements.');
   if (site.designWall.rimMaterial === 'unknown') warnings.push('Rim/band substrate is unknown; ledger attachment cannot be designed.');
   if (site.designWall.cladding === 'unknown') warnings.push('Cladding is unknown; flashing integration remains unresolved.');

@@ -3,7 +3,7 @@
 The homeowner Permit stage evaluates submission readiness against one immutable `DP-XXXXXXXX` issue. A project is `ready-to-submit` only when all seven gates are recorded for that exact issue:
 
 1. legal parcel/PID;
-2. municipal zoning evidence;
+2. a recorded zone plus a named-yard setback and coverage screen that does not fail, or a fingerprint-bound municipal confirmation resolving the siting condition;
 3. a dimensioned survey or field-measurement record confirming deck and footing offsets for this exact design;
 4. a field-measured selected house wall plus every required existing-condition capture view;
 5. accepted sealed professional evidence and a structured resolution for every derived member, foundation, stair, and connection work package;

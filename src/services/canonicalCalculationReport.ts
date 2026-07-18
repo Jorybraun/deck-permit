@@ -1,6 +1,6 @@
 import type { DeckDesign } from '../domain/deckDesign';
 import type { FramingDesign, StructuralConnectionGroup } from '../domain/framingDesign';
-import { calculateSiteClearances, projectPropertyToLocal, type SiteClearanceAssessment, type SiteModel } from '../domain/siteModel';
+import { assessSiteCompliance, calculateSiteClearances, projectPropertyToLocal, type SiteClearanceAssessment, type SiteComplianceAssessment, type SiteModel } from '../domain/siteModel';
 import type { Property } from '../types';
 import { canonicalPlanFingerprint } from './canonicalPlanSet';
 
@@ -25,6 +25,7 @@ export interface CanonicalCalculationReport {
     treatment: string;
   };
   siteClearance: SiteClearanceAssessment;
+  siteCompliance: SiteComplianceAssessment;
   platformSystems: Array<{
     platformId: string;
     name: string;
@@ -111,6 +112,7 @@ interface CalculationReportInput {
 export function buildCanonicalCalculationReport(input: CalculationReportInput): CanonicalCalculationReport {
   const { property, design, framing } = input;
   const siteClearance = calculateSiteClearances(projectPropertyToLocal(property, input.site), design);
+  const siteCompliance = assessSiteCompliance(property, projectPropertyToLocal(property, input.site), input.site, design);
   const q = framing.assumptions.governingAreaLoadKpa;
   const joistGroups = groupJoists(framing).map((group) => {
     const spanM = group.governingSpanMm / 1000;
@@ -166,6 +168,7 @@ export function buildCanonicalCalculationReport(input: CalculationReportInput): 
       lumber: `${framing.assumptions.lumberSpecies} ${framing.assumptions.lumberGrade}`, treatment: framing.assumptions.treatment,
     },
     siteClearance,
+    siteCompliance,
     platformSystems: framing.platformSystems.map((system) => {
       const platform = design.platforms.find((candidate) => candidate.id === system.platformId);
       return {
@@ -236,6 +239,12 @@ export async function buildCanonicalCalculationPdf(report: CanonicalCalculationR
   keyValue('Closest written offset', report.siteClearance.minimumDistanceMm === null ? 'unavailable' : `${(report.siteClearance.minimumDistanceMm / 1000).toFixed(2)} m`);
   report.siteClearance.dimensions.forEach((dimension) => keyValue(`PL-${dimension.parcelEdgeIndex + 1} / ${dimension.platformId}`, `${(dimension.distanceMm / 1000).toFixed(2)} m municipal GIS reference`));
   paragraph(report.siteClearance.limitation, 8.5);
+  heading('Zoning and coverage screen', 12);
+  keyValue('Setback screen', report.siteCompliance.setbackStatus.replace(/-/g, ' '));
+  report.siteCompliance.setbackChecks.forEach((check) => keyValue(`${check.yard.replace(/-/g, ' ')} / PL-${check.parcelEdgeIndex + 1}`, `${(check.referenceDistanceMm / 1000).toFixed(2)} m reference / ${(check.requiredMm / 1000).toFixed(2)} m required / ${check.status.replace(/-/g, ' ')}`));
+  keyValue('Reference lot coverage', report.siteCompliance.coverage.referenceCoveragePercent === null ? 'unavailable' : `${report.siteCompliance.coverage.referenceCoveragePercent.toFixed(2)}% / ${report.siteCompliance.coverage.maximumCoveragePercent?.toFixed(2) || 'unconfirmed'}% maximum`);
+  keyValue('Coverage footprint', report.siteCompliance.coverage.combinedReferenceFootprintSqM === null ? 'unavailable' : `${report.siteCompliance.coverage.combinedReferenceFootprintSqM.toFixed(2)} m2 combined reference footprint`);
+  report.siteCompliance.limitations.forEach((item) => paragraph(`- ${item}`, 8, 10));
 
   newPage(); heading('1. Platform systems', 17);
   report.platformSystems.forEach((system) => { heading(`${system.platformId} - ${system.name}`, 12); keyValue('Geometry', `${system.areaSqM.toFixed(2)} m2 | top EL ${system.elevationMm} mm`); keyValue('Framing topology', `${system.supportStrategy} | joists ${system.joistAxis.toUpperCase()} | design span ${system.joistDesignSpanMm} mm`); keyValue('Screening status', system.status.replace(/-/g, ' ')); paragraph(system.explanation); rule(); });

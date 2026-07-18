@@ -9,7 +9,7 @@ const property: Property = {
   address: { fullAddress: '2433 Lovell Ave, Sidney, BC', civicNumber: '2433', streetName: 'Lovell', streetType: 'Ave', locality: 'Sidney', localityType: 'Town', province: 'BC', postalCode: '', coordinates: [-123.399, 48.659], score: 100 },
   parcel: { pid: '000-111-222', pidRaw: '000111222', parcelName: 'Test parcel', planNumber: 'VIP123', municipality: 'Town of Sidney', ownerType: '', parcelClass: '', areaSqm: 720, polygon: [[-123.400, 48.658], [-123.398, 48.658], [-123.398, 48.660], [-123.400, 48.660], [-123.400, 48.658]], center: [-123.399, 48.659], geometrySource: 'live' },
   buildings: [{ id: 'house', primary: true, areaSqm: 100, kind: 'building-footprint', sourceId: 'sidney-gis', confidence: 'medium', polygon: [[-123.3995, 48.6590], [-123.3988, 48.6590], [-123.3988, 48.6593], [-123.3995, 48.6593], [-123.3995, 48.6590]] }],
-  zoning: null, buildableEnvelope: null, snowLoad: 1, evidence: [],
+  zoning: { zone: 'R2', setbacks: { front: 4.5, rear: 4.5, side: 2, exteriorSide: 3 }, maxLotCoverage: 45, maxHeight: 10.5, source: 'Town of Sidney test fixture', notes: [] }, buildableEnvelope: null, snowLoad: 1, evidence: [],
 };
 
 function project() {
@@ -33,6 +33,7 @@ describe('canonical structural calculation report', () => {
     expect(report.platformSystems).toHaveLength(2);
     expect(report.siteClearance).toMatchObject({ authority: 'municipal-gis-reference', status: expect.stringMatching(/reference-only|outside-or-crossing/) });
     expect(report.siteClearance.dimensions.length).toBeGreaterThan(0);
+    expect(report.siteCompliance).toMatchObject({ scope: 'platform-footprints-only', setbackStatus: 'orientation-required', coverage: { referenceCoveragePercent: expect.any(Number) } });
     expect(report.joistGroups.length).toBeGreaterThan(0);
     expect(report.joistGroups[0]).toMatchObject({ lineLoadKnM: expect.any(Number), momentDemandKnM: expect.any(Number), shearDemandKn: expect.any(Number) });
     expect(report.joistGroups[0].momentDemandKnM).toBeGreaterThan(0);

@@ -4,7 +4,7 @@ import { assessDesign } from './domain/deckDesign';
 import { generateFramingDesign, isFramingStale, type GenerateFramingInput } from './domain/framingDesign';
 import { addCaptureEvidence, addTerrainGradePoint, assessExistingConditionCapture, assessSiteModel, createExistingConditionCapture, createSiteModel, flipHouseWallDirection, removeCaptureEvidence, removeTerrainGradePoint, rotateHouseWallAlignment, selectHouseWall, updateCaptureEvidence, updateSiteModel, updateTerrainGradePoint, type CaptureCategory, type CaptureEvidence } from './domain/siteModel';
 import { lookupProperty, lookupPropertyFromAddress, PropertyLookupError, suggestAddresses } from './services/propertyLookup';
-import { computeBuildableEnvelope, lookupSnowLoad, lookupZoning } from './services/zoning';
+import { lookupSnowLoad, lookupZoning } from './services/zoning';
 import { generateCanonicalPlanSet } from './services/canonicalPlanSet';
 import { downloadVectorPlanPdf } from './services/vectorPlanPdf';
 import { downloadProjectCadExchange } from './services/projectCadExchange';
@@ -108,7 +108,9 @@ export function App() {
         buildings: result.buildings,
         evidence: result.evidence,
         zoning,
-        buildableEnvelope: zoning ? computeBuildableEnvelope(result.parcel, zoning) : null,
+        // Yard orientation is selected explicitly from the parcel plan. Do not
+        // invent a front yard from latitude or a rectangular bounding box.
+        buildableEnvelope: null,
         snowLoad: lookupSnowLoad(result.address.coordinates[1], result.address.coordinates[0]),
       };
       project.setProperty(property);

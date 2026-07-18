@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Parcel } from '../types';
-import { computeBuildableEnvelope, lookupZoning } from './zoning';
+import { lookupZoning } from './zoning';
 
 const parcel: Parcel = {
   pid: '007-952-449', pidRaw: '007952449', parcelName: '', planNumber: '1197', municipality: 'Town of Sidney',
@@ -16,13 +16,5 @@ describe('Sidney zoning rules', () => {
       maxLotCoverage: 45,
       maxHeight: 10.5,
     });
-  });
-
-  it('insets front/rear on latitude and side yards on longitude', () => {
-    const envelope = computeBuildableEnvelope(parcel, lookupZoning(parcel));
-    expect(envelope[0][0]).toBeGreaterThan(parcel.polygon[0][0]);
-    expect(envelope[0][1]).toBeGreaterThan(parcel.polygon[0][1]);
-    expect(envelope[2][0]).toBeLessThan(parcel.polygon[2][0]);
-    expect(envelope[2][1]).toBeLessThan(parcel.polygon[2][1]);
   });
 });

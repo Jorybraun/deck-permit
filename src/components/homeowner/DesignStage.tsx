@@ -1,7 +1,7 @@
 import { AlertTriangle, ArrowDown, ArrowRight, ArrowUp, Layers3, Plus, RotateCw, Ruler, ShieldCheck, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { stairDepartureDirection, stairLandingCandidates, suggestedPlatformElevationForBoundary, suggestPointToPointStair, type AddPlatformInput, type AddStairInput, type ClosedBoundary, type DeckDesign, type DesignAssessment, type DeckPlatform, type DeckStair, type PlatformEdgeRole } from '../../domain/deckDesign';
-import { terrainElevationAt, type SiteModel } from '../../domain/siteModel';
+import { assessSiteCompliance, projectPropertyToLocal, terrainElevationAt, type SiteModel } from '../../domain/siteModel';
 import type { Property } from '../../types';
 import { DeckElevationEditor } from '../design/DeckElevationEditor';
 import { DeckPlanEditor } from '../design/DeckPlanEditor';
@@ -45,6 +45,7 @@ interface DesignStageProps {
 export function DesignStage(props: DesignStageProps) {
   const selected = props.design.platforms.find((platform) => platform.id === props.design.selectedObjectId) || null;
   const selectedStair = props.design.stairs.find((stair) => stair.id === props.design.selectedObjectId) || null;
+  const siteCompliance = assessSiteCompliance(props.property, projectPropertyToLocal(props.property, props.site), props.site, props.design);
   const [designView, setDesignView] = useState<'plan' | 'elevation'>('plan');
   return <main className="grid h-full min-h-0 bg-[#edf2ef] lg:grid-cols-[minmax(0,1fr)_330px]">
     <section className="flex min-h-[560px] min-w-0 flex-col overflow-hidden" aria-label="Deck design canvas">
@@ -71,6 +72,8 @@ export function DesignStage(props: DesignStageProps) {
       <div className="border-t border-slate-200 p-5">
         <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-[.12em] text-slate-500"><ShieldCheck size={15} /> Live design checks</h3>
         {props.assessment.errors.length === 0 && props.assessment.warnings.length === 0 ? <p className="mt-3 rounded-lg bg-emerald-50 p-3 text-xs leading-5 text-emerald-900">Platform geometry is valid. Structural framing and site compliance are the next checks.</p> : <ul className="mt-3 grid gap-2">{[...props.assessment.errors, ...props.assessment.warnings].slice(0, 5).map((issue, index) => <li key={`${issue.objectId}-${index}`} className="flex gap-2 rounded-lg bg-amber-50 p-3 text-xs leading-5 text-amber-950"><AlertTriangle size={15} className="mt-0.5 shrink-0" />{issue.message}</li>)}</ul>}
+        {siteCompliance.setbackStatus === 'orientation-required' ? <button type="button" onClick={props.onOpenProperty} className="mt-3 flex w-full items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-left text-xs leading-5 text-amber-950"><AlertTriangle size={15} className="mt-0.5 shrink-0" /><span><strong className="block">Select the front and rear property lines</strong>Front/rear/side setback checks cannot be named from compass direction alone.</span></button> : siteCompliance.setbackStatus === 'reference-fail' ? <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-xs leading-5 text-red-900"><strong className="block">Reference setback conflict</strong>{siteCompliance.setbackChecks.filter((check) => check.status === 'reference-fail').map((check) => <span key={check.parcelEdgeIndex} className="block">{check.yard.replace(/-/g, ' ')} PL-{check.parcelEdgeIndex + 1}: {(check.referenceDistanceMm / 1000).toFixed(2)} m / {(check.requiredMm / 1000).toFixed(2)} m required</span>)}</div> : siteCompliance.setbackStatus === 'reference-pass' ? <p className="mt-3 rounded-lg bg-emerald-50 p-3 text-xs leading-5 text-emerald-900"><strong>Reference siting screen passes.</strong> Coverage {siteCompliance.coverage.referenceCoveragePercent?.toFixed(2) ?? '—'}% / {siteCompliance.coverage.maximumCoveragePercent?.toFixed(1) ?? '—'}% maximum. Survey and municipal interpretation remain required.</p> : null}
+        {siteCompliance.coverage.status === 'reference-exceeds-limit' && <p className="mt-2 rounded-lg bg-red-50 p-3 text-xs leading-5 text-red-900"><strong>Reference lot coverage exceeds the recorded maximum:</strong> {siteCompliance.coverage.referenceCoveragePercent?.toFixed(2)}% / {siteCompliance.coverage.maximumCoveragePercent?.toFixed(2)}%.</p>}
         <div className="mt-4 flex items-center justify-between text-xs text-slate-500"><span>{props.design.platforms.length} platform{props.design.platforms.length === 1 ? '' : 's'} · {props.assessment.areaSqM.toFixed(1)} m²</span><span>{props.design.stairs.length} stair{props.design.stairs.length === 1 ? '' : 's'}</span></div>
         <button type="button" onClick={props.onContinue} disabled={!props.design.platforms.length || props.assessment.errors.length > 0} className="mt-4 flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-emerald-800 px-4 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40">Review permit requirements <ArrowRight size={16} /></button>
       </div>

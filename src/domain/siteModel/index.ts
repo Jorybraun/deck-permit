@@ -4,3 +4,4 @@ export * from './propertyGeometry';
 export * from './terrain';
 export * from './existingConditionCapture';
 export * from './siteClearance';
+export * from './siteCompliance';
