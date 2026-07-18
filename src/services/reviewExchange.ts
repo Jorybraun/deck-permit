@@ -71,7 +71,7 @@ export async function publishReviewExchange(reviewPackage: ReviewPackagePayload)
   const reviewerUrl = new URL(window.location.href);
   reviewerUrl.search = `?reviewProject=${encodeURIComponent(result.id)}`;
   reviewerUrl.hash = `reviewToken=${encodeURIComponent(result.reviewerToken)}`;
-  return { projectId: result.id, ownerToken: result.ownerToken, reviewerUrl: reviewerUrl.toString(), designFingerprint: reviewPackage.manifest.designFingerprint, publishedAt: result.createdAt, expiresAt: result.expiresAt };
+  return { projectId: result.id, ownerToken: result.ownerToken, reviewerUrl: reviewerUrl.toString(), designFingerprint: reviewPackage.manifest.designFingerprint, revision: reviewPackage.manifest.revision, issueIssuedAt: reviewPackage.manifest.generatedAt, publishedAt: result.createdAt, expiresAt: result.expiresAt };
 }
 
 export async function getReviewerExchange(projectId: string, reviewerToken: string): Promise<ReviewerExchangeResult> {

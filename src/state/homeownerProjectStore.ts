@@ -24,6 +24,7 @@ export interface HomeownerProjectState {
   design: DeckDesign;
   framing: FramingDesign | null;
   reviewPublication: ReviewExchangePublication | null;
+  reviewIssueRevision: number;
   professionalReviewCycles: ProfessionalReviewCycle[];
   verificationEvidence: VerificationEvidence[];
   designHistory: DeckDesign[];
@@ -79,6 +80,7 @@ const freshState = () => ({
   design: createEmptyDesign(),
   framing: null as FramingDesign | null,
   reviewPublication: null as ReviewExchangePublication | null,
+  reviewIssueRevision: 0,
   professionalReviewCycles: [] as ProfessionalReviewCycle[],
   verificationEvidence: [] as VerificationEvidence[],
   designHistory: [] as DeckDesign[],
@@ -97,7 +99,10 @@ export const useHomeownerProject = create<HomeownerProjectState>((set) => ({
   updateIntent: (changes) => set((state) => ({ intent: { ...state.intent, ...changes } })),
   replaceDesign: (design) => set((state) => commitDesign(state, design)),
   setFraming: (framing) => set({ framing, reviewPublication: null }),
-  setReviewPublication: (reviewPublication) => set({ reviewPublication }),
+  setReviewPublication: (reviewPublication) => set((state) => ({
+    reviewPublication,
+    reviewIssueRevision: reviewPublication ? Math.max(state.reviewIssueRevision, reviewPublication.revision || state.reviewIssueRevision + 1) : state.reviewIssueRevision,
+  })),
   importProfessionalReview: (evidence, cycle) => set((state) => ({
     verificationEvidence: [...state.verificationEvidence.filter((item) => item.id !== evidence.id), evidence],
     professionalReviewCycles: upsertProfessionalReviewCycle(state.professionalReviewCycles, cycle),
@@ -126,12 +131,12 @@ export const useHomeownerProject = create<HomeownerProjectState>((set) => ({
   undoDesign: () => set((state) => {
     const previous = state.designHistory[state.designHistory.length - 1];
     if (!previous) return state;
-    return { design: previous, designHistory: state.designHistory.slice(0, -1), designFuture: [state.design, ...state.designFuture] };
+    return { design: previous, designHistory: state.designHistory.slice(0, -1), designFuture: [state.design, ...state.designFuture], reviewPublication: null };
   }),
   redoDesign: () => set((state) => {
     const next = state.designFuture[0];
     if (!next) return state;
-    return { design: next, designHistory: [...state.designHistory, state.design].slice(-50), designFuture: state.designFuture.slice(1) };
+    return { design: next, designHistory: [...state.designHistory, state.design].slice(-50), designFuture: state.designFuture.slice(1), reviewPublication: null };
   }),
   setLoading: (loading) => set({ loading }),
   setError: (error) => set({ error }),

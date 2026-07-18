@@ -417,6 +417,8 @@ export interface ReviewExchangePublication {
   ownerToken: string;
   reviewerUrl: string;
   designFingerprint: string;
+  revision?: number;
+  issueIssuedAt?: string;
   publishedAt: string;
   expiresAt: string;
 }
