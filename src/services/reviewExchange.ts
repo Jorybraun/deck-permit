@@ -1,11 +1,13 @@
 import type { Deck, DesignCheck, PermitManifest, PlanSheet, ProfessionalReviewCycle, Property, ReviewExchangePublication, ReviewRedline, StructuralReport, VerificationEvidence } from '../types';
 import { reviewCyclesForPublication } from './reviewRedlines';
+import type { ProjectCadExchange } from './projectCadExchange';
 
 export interface ReviewPackagePayload {
   manifest: PermitManifest;
   property: { address: string; pid: string; legalDescription: string; municipality: string; zone: string };
   deck: ReviewDeckPayload;
   planset: PlanSheet[];
+  cadExchange?: ProjectCadExchange;
   report: ReviewBasisPayload;
   priorReviewCycles: ProfessionalReviewCycle[];
 }

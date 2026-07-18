@@ -109,8 +109,22 @@ function validateReviewPackage(value) {
   if (!value.deck || !Number.isFinite(value.deck.area) || value.deck.area <= 0) throw new ReviewExchangeError(400, 'invalid-deck', 'Deck geometry is required.');
   if (!Array.isArray(value.planset) || value.planset.length < 1 || value.planset.length > 20) throw new ReviewExchangeError(400, 'invalid-planset', 'One to twenty drawing sheets are required.');
   if (value.planset.some((sheet) => typeof sheet?.svg !== 'string' || sheet.svg.length < 20 || sheet.svg.length > 1_500_000)) throw new ReviewExchangeError(400, 'invalid-sheet', 'Each drawing sheet must contain a bounded SVG document.');
+  if (value.cadExchange !== undefined) validateCadExchange(value.cadExchange, value.manifest.designFingerprint);
   if (!value.report || !Array.isArray(value.report.checks)) throw new ReviewExchangeError(400, 'invalid-report', 'A design-basis report is required.');
   if (value.priorReviewCycles !== undefined && (!Array.isArray(value.priorReviewCycles) || value.priorReviewCycles.length > 10)) throw new ReviewExchangeError(400, 'invalid-review-history', 'The review history may contain up to ten cycles.');
+}
+
+function validateCadExchange(value, expectedFingerprint) {
+  if (!value || typeof value !== 'object' || value.schema !== 'permitly-project-cad-exchange/v1' || value.units !== 'mm' || value.coordinateSystem !== 'local-house-wall' || value.notForConstruction !== true) {
+    throw new ReviewExchangeError(400, 'invalid-cad-exchange', 'The CAD exchange contract is invalid.');
+  }
+  if (value.designFingerprint !== expectedFingerprint) throw new ReviewExchangeError(409, 'cad-revision-mismatch', 'The CAD exchange does not match the published drawing revision.');
+  if (typeof value.dxf !== 'string' || value.dxf.length < 100 || value.dxf.length > 5_000_000 || !value.dxf.startsWith('0\nSECTION\n') || !value.dxf.endsWith('0\nEOF\n')) {
+    throw new ReviewExchangeError(400, 'invalid-cad-payload', 'The CAD exchange must contain a bounded ASCII DXF document.');
+  }
+  if (!Array.isArray(value.layers) || value.layers.length < 1 || value.layers.length > 50 || value.layers.some((layer) => typeof layer?.id !== 'string' || !/^[A-Z0-9-]{2,40}$/.test(layer.id) || !Number.isInteger(layer.entityCount) || layer.entityCount < 1 || layer.entityCount > 100_000)) {
+    throw new ReviewExchangeError(400, 'invalid-cad-layers', 'The CAD exchange layer index is invalid.');
+  }
 }
 
 function validateReview(review, expectedFingerprint, publishedSheetIds) {

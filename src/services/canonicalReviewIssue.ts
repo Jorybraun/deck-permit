@@ -5,6 +5,7 @@ import type { PermitManifest, ProfessionalReviewCycle, Property } from '../types
 import { generateCanonicalPlanSet } from './canonicalPlanSet';
 import type { ReviewPackagePayload } from './reviewExchange';
 import { reviewCyclesForPublication } from './reviewRedlines';
+import { buildProjectCadExchange } from './projectCadExchange';
 
 export interface CanonicalReviewIssue {
   manifest: PermitManifest;
@@ -60,6 +61,7 @@ export function buildCanonicalReviewIssue(input: {
       },
     },
     planset: planSet.sheets,
+    cadExchange: buildProjectCadExchange({ property: input.property, site: input.site, design: input.design, framing: input.framing, generatedAt: issuedAt }),
     report: {
       generatedAt: input.framing.generatedAt,
       codeEdition: input.framing.codeProfile.label,

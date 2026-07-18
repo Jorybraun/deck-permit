@@ -7,6 +7,7 @@ import { lookupProperty, lookupPropertyFromAddress, PropertyLookupError, suggest
 import { computeBuildableEnvelope, lookupSnowLoad, lookupZoning } from './services/zoning';
 import { generateCanonicalPlanSet } from './services/canonicalPlanSet';
 import { downloadVectorPlanPdf } from './services/vectorPlanPdf';
+import { downloadProjectCadExchange } from './services/projectCadExchange';
 import { useHomeownerProject, type ProjectStage } from './state/homeownerProjectStore';
 import { IdeaStage } from './components/homeowner/IdeaStage';
 import { PropertyStage, type PropertyResearchState } from './components/homeowner/PropertyStage';
@@ -66,6 +67,16 @@ export function App() {
     try { await downloadVectorPlanPdf(project.property, currentReviewSheets()); }
     catch (reason) {
       const error = reason instanceof Error ? reason : new Error('The review PDF could not be downloaded.');
+      project.setError(error.message);
+      throw error;
+    }
+  };
+
+  const downloadCadExchange = () => {
+    if (!project.site || !project.framing || framingStale) throw new Error('Regenerate the framing graph before exporting the coordinated CAD model.');
+    try { downloadProjectCadExchange({ property: project.property, site: project.site, design: project.design, framing: project.framing }); }
+    catch (reason) {
+      const error = reason instanceof Error ? reason : new Error('The layered DXF could not be downloaded.');
       project.setError(error.message);
       throw error;
     }
@@ -162,7 +173,7 @@ export function App() {
         {activeStage === 'idea' && <IdeaStage intent={project.intent} onChange={project.updateIntent} onContinue={() => navigate('property')} />}
         {activeStage === 'property' && <PropertyStage property={project.property} site={project.site} research={research} onResearch={(address) => void researchProperty(address)} onResearchAddress={(address) => void researchProperty(address.fullAddress, address)} onSuggestAddresses={suggestAddresses} onSelectWall={(buildingId, edgeIndex) => { if (project.site) { try { project.setSite(selectHouseWall(project.site, project.property, buildingId, edgeIndex)); } catch (reason) { project.setError(reason instanceof Error ? reason.message : 'The house wall could not be selected.'); } } }} onUpdateSite={(changes, wallChanges) => { if (project.site) project.setSite(updateSiteModel(project.site, changes, wallChanges)); }} onUpdateTerrainDatum={(changes) => { if (project.site) project.setSite(updateSiteModel(project.site, { terrain: { ...project.site.terrain, datum: { ...project.site.terrain.datum, ...changes } } })); }} onAddTerrainPoint={(point) => { if (project.site) project.setSite(updateSiteModel(project.site, { terrain: addTerrainGradePoint(project.site.terrain, point) })); }} onUpdateTerrainPoint={(pointId, changes) => { if (project.site) project.setSite(updateSiteModel(project.site, { terrain: updateTerrainGradePoint(project.site.terrain, pointId, changes) })); }} onRemoveTerrainPoint={(pointId) => { if (project.site) project.setSite(updateSiteModel(project.site, { terrain: removeTerrainGradePoint(project.site.terrain, pointId) })); }} captureAssessment={captureAssessment} capturePreviewUrls={capturePreviewUrls} onAddCaptureFiles={addCaptureFiles} onUpdateCaptureEvidence={reviseCapture} onRemoveCaptureEvidence={removeCapture} onContinue={() => navigate('design')} />}
         {activeStage === 'design' && project.site && <DesignStage design={project.design} site={project.site} property={project.property} assessment={designAssessment} canUndo={project.designHistory.length > 0} canRedo={project.designFuture.length > 0} onAddPlatform={project.addPlatform} onUpdatePlatformBoundary={project.updatePlatformBoundary} onRotatePlatform={project.rotatePlatform} onSelectObject={project.selectObject} onRenamePlatform={project.renamePlatform} onSetElevation={project.setPlatformElevation} onSetPurpose={project.setPlatformPurpose} onSetFinish={project.setPlatformFinish} onSetFramingIntent={project.setPlatformFramingIntent} onSetEdgeRole={project.setPlatformEdgeRole} onSetEdgeLength={project.setPlatformEdgeLength} onInsertVertex={project.insertPlatformVertex} onAddStair={project.addStair} onMovePlatformLayer={project.movePlatformLayer} onRemovePlatform={project.removePlatform} onRemoveStair={project.removeStair} onMoveStair={project.moveStair} onResizeStairSide={project.resizeStairSide} onSetStairConstruction={project.setStairConstruction} onConnectStairLanding={project.connectStairLanding} onUndo={project.undoDesign} onRedo={project.redoDesign} onOpenProperty={() => navigate('property')} onMirrorProperty={() => project.setSite(flipHouseWallDirection(project.site!))} onRotateProperty={() => project.setSite(rotateHouseWallAlignment(project.site!))} onContinue={() => navigate('permit')} />}
-        {activeStage === 'permit' && project.site && <PermitStage property={project.property} site={project.site} design={project.design} framing={project.framing} framingStale={framingStale} designErrors={designAssessment.errors.map((issue) => issue.message)} siteErrors={siteAssessment.errors} siteWarnings={siteAssessment.warnings} reviewPublication={project.reviewPublication} reviewIssueRevision={project.reviewIssueRevision} professionalReviewCycles={project.professionalReviewCycles} verificationEvidence={project.verificationEvidence} onGenerateFraming={generateFraming} onDownloadReviewSet={downloadReviewSet} onBackToDesign={() => navigate('design')} onContinue={() => navigate('builders')} onPublishReview={project.setReviewPublication} onImportReview={project.importProfessionalReview} onResolveRedline={project.resolveReviewRedline} />}
+        {activeStage === 'permit' && project.site && <PermitStage property={project.property} site={project.site} design={project.design} framing={project.framing} framingStale={framingStale} designErrors={designAssessment.errors.map((issue) => issue.message)} siteErrors={siteAssessment.errors} siteWarnings={siteAssessment.warnings} reviewPublication={project.reviewPublication} reviewIssueRevision={project.reviewIssueRevision} professionalReviewCycles={project.professionalReviewCycles} verificationEvidence={project.verificationEvidence} onGenerateFraming={generateFraming} onDownloadReviewSet={downloadReviewSet} onDownloadCadExchange={downloadCadExchange} onBackToDesign={() => navigate('design')} onContinue={() => navigate('builders')} onPublishReview={project.setReviewPublication} onImportReview={project.importProfessionalReview} onResolveRedline={project.resolveReviewRedline} />}
         {activeStage === 'builders' && <BuildersStage property={project.property} design={project.design} intent={project.intent} onBack={() => navigate('permit')} />}
       </div>
     </div>

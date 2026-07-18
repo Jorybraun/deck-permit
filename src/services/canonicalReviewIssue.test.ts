@@ -24,6 +24,8 @@ describe('canonical professional review issue', () => {
     expect(issue.reviewPackage.planset).toHaveLength(10);
     expect(issue.reviewPackage.planset.every((sheet) => sheet.revision === 4 && sheet.designFingerprint === issue.manifest.designFingerprint)).toBe(true);
     expect(issue.reviewPackage.deck.canonical).toMatchObject({ schema: 'permitly-canonical-review-snapshot/v1', units: 'mm', design: { schema: 'deck-design/v1' }, framing: { schema: 'framing-design/v2' } });
+    expect(issue.reviewPackage.cadExchange).toMatchObject({ schema: 'permitly-project-cad-exchange/v1', units: 'mm', designFingerprint: issue.manifest.designFingerprint, notForConstruction: true });
+    expect(issue.reviewPackage.cadExchange?.dxf).toContain(issue.manifest.designFingerprint);
     expect(issue.reviewPackage.report.checks.length).toBeGreaterThan(0);
   });
 });

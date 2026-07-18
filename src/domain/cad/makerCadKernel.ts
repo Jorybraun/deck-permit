@@ -4,6 +4,36 @@ import type { BoundaryAssessment, ClosedBoundary, PointMm } from '../deckDesign/
 const MIN_EDGE_MM = 100;
 const MIN_AREA_SQ_M = .5;
 
+export interface CadLayerDefinition {
+  id: string;
+  color: number;
+  lineType?: 'CONTINUOUS' | 'DASHED' | 'DOTTED';
+  fontSize?: number;
+}
+
+export interface CadLineEntity {
+  id: string;
+  layer: string;
+  start: PointMm;
+  end: PointMm;
+}
+
+export interface CadCircleEntity {
+  id: string;
+  layer: string;
+  center: PointMm;
+  radiusMm: number;
+}
+
+export interface CadCaptionEntity {
+  id: string;
+  layer: string;
+  text: string;
+  point: PointMm;
+  anchorWidthMm?: number;
+  rotationDeg?: number;
+}
+
 /**
  * CAD adapter v1.
  * Owns low-level Maker.js geometry validation and DXF serialization.
@@ -69,6 +99,45 @@ export function exportBoundariesDxf(boundaries: Array<{ id: string; boundary: Cl
     return [entry.id, path];
   }));
   return makerjs.exporter.toDXF({ units: makerjs.unitType.Millimeter, models, paths }, { units: makerjs.unitType.Millimeter });
+}
+
+/** Serializes domain-neutral model-space entities with explicit AutoCAD layers. */
+export function exportLayeredDxf(input: {
+  layers: CadLayerDefinition[];
+  lines: CadLineEntity[];
+  circles: CadCircleEntity[];
+  captions: CadCaptionEntity[];
+}): string {
+  const paths: MakerJs.IPathMap = {};
+  input.lines.forEach((entry) => {
+    const path: MakerJs.IPathLine = new makerjs.paths.Line([...entry.start], [...entry.end]);
+    path.layer = entry.layer;
+    paths[entry.id] = path;
+  });
+  input.circles.forEach((entry) => {
+    const path: MakerJs.IPathCircle = new makerjs.paths.Circle([...entry.center], entry.radiusMm);
+    path.layer = entry.layer;
+    paths[entry.id] = path;
+  });
+  const models: MakerJs.IModelMap = {};
+  input.captions.forEach((entry) => {
+    const angle = (entry.rotationDeg || 0) * Math.PI / 180;
+    const width = entry.anchorWidthMm || Math.max(600, entry.text.length * 110);
+    const anchor: MakerJs.IPathLine = new makerjs.paths.Line(
+      [...entry.point],
+      [entry.point[0] + Math.cos(angle) * width, entry.point[1] + Math.sin(angle) * width],
+    );
+    models[entry.id] = { layer: entry.layer, caption: { text: entry.text, anchor } };
+  });
+  const layerOptions = Object.fromEntries(input.layers.map((layer) => [layer.id, {
+    color: layer.color,
+    lineType: layer.lineType || 'CONTINUOUS',
+    fontSize: layer.fontSize,
+  }]));
+  return makerjs.exporter.toDXF(
+    { units: makerjs.unitType.Millimeter, models, paths },
+    { units: makerjs.unitType.Millimeter, layerOptions },
+  );
 }
 
 export function boundaryExtents(boundary: ClosedBoundary): { minXmm: number; minYmm: number; maxXmm: number; maxYmm: number } {

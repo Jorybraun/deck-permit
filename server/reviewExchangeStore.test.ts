@@ -43,6 +43,22 @@ describe('ReviewExchangeStore', () => {
       .rejects.toEqual(expect.objectContaining<Partial<ReviewExchangeError>>({ status: 409, code: 'revision-mismatch' }));
   });
 
+  it('accepts only a bounded CAD exchange tied to the published fingerprint', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'deck-review-'));
+    const store = new ReviewExchangeStore(directory);
+    const cadExchange = {
+      schema: 'permitly-project-cad-exchange/v1', units: 'mm', coordinateSystem: 'local-house-wall', designFingerprint: fingerprint,
+      generatedAt: new Date().toISOString(), notForConstruction: true, layers: [{ id: 'A-DECK-EDGE', entityCount: 4 }], entityCounts: {}, warnings: [],
+      dxf: `0\nSECTION\n2\nHEADER\n${'9\n$INSUNITS\n70\n4\n'.repeat(4)}0\nENDSEC\n0\nEOF\n`,
+    };
+    const created = await store.create({ ...reviewPackage, cadExchange });
+    expect((await store.getForReviewer(created.id, created.reviewerToken)).reviewPackage.cadExchange.designFingerprint).toBe(fingerprint);
+    await expect(store.create({ ...reviewPackage, cadExchange: { ...cadExchange, designFingerprint: 'DP-00000000' } }))
+      .rejects.toEqual(expect.objectContaining<Partial<ReviewExchangeError>>({ status: 409, code: 'cad-revision-mismatch' }));
+    await expect(store.create({ ...reviewPackage, cadExchange: { ...cadExchange, dxf: 'not dxf' } }))
+      .rejects.toEqual(expect.objectContaining<Partial<ReviewExchangeError>>({ status: 400, code: 'invalid-cad-payload' }));
+  });
+
   it('requires sheet-specific redlines for a change request and validates their revision', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'deck-review-'));
     const store = new ReviewExchangeStore(directory);
