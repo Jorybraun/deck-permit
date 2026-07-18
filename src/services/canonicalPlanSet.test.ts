@@ -11,7 +11,7 @@ const property: Property = {
   parcel: { pid: '000-111-222', pidRaw: '000111222', parcelName: 'Test parcel', planNumber: 'VIP123', municipality: 'Town of Sidney', ownerType: '', parcelClass: '', areaSqm: 720, polygon: [[-123.400, 48.658], [-123.398, 48.658], [-123.398, 48.660], [-123.400, 48.660], [-123.400, 48.658]], center: [-123.399, 48.659], geometrySource: 'live' },
   buildings: [{ id: 'house', primary: true, areaSqm: 100, kind: 'building-footprint', sourceId: 'sidney-gis', confidence: 'medium', polygon: [[-123.3995, 48.6590], [-123.3988, 48.6590], [-123.3988, 48.6593], [-123.3995, 48.6593], [-123.3995, 48.6590]] }],
   zoning: null, buildableEnvelope: null, snowLoad: 1,
-  evidence: [{ id: 'parcel', label: 'Town parcel layer', url: 'https://example.test/parcel', authority: 'municipal', retrievedAt: '2026-07-18T00:00:00.000Z', status: 'reference' }], existingConditions: null,
+  evidence: [{ id: 'parcel', label: 'Town parcel layer', url: 'https://example.test/parcel', authority: 'municipal', retrievedAt: '2026-07-18T00:00:00.000Z', status: 'reference' }],
 };
 
 describe('canonical ten-sheet review set', () => {

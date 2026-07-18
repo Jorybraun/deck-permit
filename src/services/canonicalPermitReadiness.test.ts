@@ -9,13 +9,13 @@ const issue = { manifest: { designFingerprint: fingerprint }, reviewPackage: { d
 
 describe('canonical permit readiness', () => {
   it('fails closed until property, professional, application, and signed-document gates all match the revision', () => {
-    const incomplete = evaluateCanonicalPermitReadiness({ issue, property: { address: null, parcel: null, zoning: null, buildableEnvelope: null, snowLoad: 1, buildings: [], evidence: [], existingConditions: null }, application, evidence: [], reviewCycles: [] });
+    const incomplete = evaluateCanonicalPermitReadiness({ issue, property: { address: null, parcel: null, zoning: null, buildableEnvelope: null, snowLoad: 1, buildings: [], evidence: [] }, application, evidence: [], reviewCycles: [] });
     expect(incomplete.status).toBe('review-package');
     expect(incomplete.gates.filter((gate) => gate.status === 'required').map((gate) => gate.id)).toEqual(['parcel', 'zoning', 'professional-review', 'signed-application']);
   });
 
   it('reports ready only when the accepted review resolves the exact work-package set and the signed application matches', () => {
-    const property = { address: null, parcel: { pid: '001' }, zoning: { zone: 'R2' }, buildableEnvelope: null, snowLoad: 1, buildings: [], evidence: [], existingConditions: null } as never;
+    const property = { address: null, parcel: { pid: '001' }, zoning: { zone: 'R2' }, buildableEnvelope: null, snowLoad: 1, buildings: [], evidence: [] } as never;
     const structuralResolutions = [{ schema: 'permitly-professional-work-resolution/v1', id: 'resolution-001', designFingerprint: fingerprint, workPackageId: 'SYS:P1', kind: 'platform-system', disposition: 'specified', specification: '2x10 No.2 S-P-F joists and engineered beam schedule', capacityBasis: 'Sealed calculation SC-1 and referenced CWC tables', documentReference: 'SC-1 / S2.0', notes: '', recordedAt: '2026-07-18T12:00:00.000Z' }];
     const reviewCycles = [{ sourceDesignFingerprint: fingerprint, decision: 'accepted', structuralResolutions }];
     const evidence = [{ kind: 'sealed-structural-review', decision: 'accepted', designFingerprint: fingerprint }, { kind: 'application-checklist', gateId: 'signed-application', designFingerprint: fingerprint }];

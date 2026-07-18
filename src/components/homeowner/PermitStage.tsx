@@ -6,7 +6,7 @@ import type { SiteModel } from '../../domain/siteModel';
 import { buildCanonicalReviewIssue } from '../../services/canonicalReviewIssue';
 import { canonicalPlanFingerprint } from '../../services/canonicalPlanSet';
 import { evaluateCanonicalPermitReadiness } from '../../services/canonicalPermitReadiness';
-import type { ProfessionalReviewCycle, Property, ReviewExchangePublication, ReviewRedlineResolution, SidneyApplicationData, VerificationEvidence } from '../../types';
+import type { PermitSubmissionRecord, ProfessionalReviewCycle, Property, ReviewExchangePublication, ReviewRedlineResolution, SidneyApplicationData, VerificationEvidence } from '../../types';
 import { FramingPlanPreview } from './FramingPlanPreview';
 import { CanonicalReviewPanel } from './CanonicalReviewPanel';
 import { CanonicalPermitPackagePanel } from './CanonicalPermitPackagePanel';
@@ -25,6 +25,7 @@ interface PermitStageProps {
   professionalReviewCycles: ProfessionalReviewCycle[];
   verificationEvidence: VerificationEvidence[];
   sidneyApplication: SidneyApplicationData;
+  permitSubmissionHistory: PermitSubmissionRecord[];
   onGenerateFraming: () => void;
   onDownloadReviewSet: () => void | Promise<void>;
   onDownloadCadExchange: () => void;
@@ -35,11 +36,12 @@ interface PermitStageProps {
   onImportReview: (evidence: VerificationEvidence, cycle: ProfessionalReviewCycle) => void;
   onAddVerificationEvidence: (evidence: VerificationEvidence) => void;
   onUpdateSidneyApplication: (changes: Partial<SidneyApplicationData>) => void;
+  onRecordPermitSubmission: (record: PermitSubmissionRecord) => void;
   onResolveRedline: (input: { cycleId: string; redlineId: string; targetDesignFingerprint: string; disposition: ReviewRedlineResolution['disposition']; response: string }) => void;
 }
 
 /** Composes reviewable framing evidence and permit readiness from canonical project state. */
-export function PermitStage({ property, site, design, framing, framingStale, designErrors, siteErrors, siteWarnings, reviewPublication, reviewIssueRevision, professionalReviewCycles, verificationEvidence, sidneyApplication, onGenerateFraming, onDownloadReviewSet, onDownloadCadExchange, onDownloadCalculationReport, onBackToDesign, onContinue, onPublishReview, onImportReview, onAddVerificationEvidence, onUpdateSidneyApplication, onResolveRedline }: PermitStageProps) {
+export function PermitStage({ property, site, design, framing, framingStale, designErrors, siteErrors, siteWarnings, reviewPublication, reviewIssueRevision, professionalReviewCycles, verificationEvidence, sidneyApplication, permitSubmissionHistory, onGenerateFraming, onDownloadReviewSet, onDownloadCadExchange, onDownloadCalculationReport, onBackToDesign, onContinue, onPublishReview, onImportReview, onAddVerificationEvidence, onUpdateSidneyApplication, onRecordPermitSubmission, onResolveRedline }: PermitStageProps) {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewSheetIndex, setPreviewSheetIndex] = useState(0);
   const [previewZoom, setPreviewZoom] = useState(100);
@@ -144,7 +146,7 @@ export function PermitStage({ property, site, design, framing, framingStale, des
         </div>
       </section>
       {reviewIssue && <CanonicalReviewPanel issue={reviewIssue} publication={reviewPublication} reviewCycles={professionalReviewCycles} verificationEvidence={verificationEvidence} onPublish={onPublishReview} onImportReview={onImportReview} onResolveRedline={onResolveRedline} />}
-      {reviewIssue && permitReadiness && <CanonicalPermitPackagePanel issue={reviewIssue} property={property} application={permitApplication} readiness={permitReadiness} evidence={verificationEvidence} reviewCycles={professionalReviewCycles} onUpdateApplication={onUpdateSidneyApplication} onRecordEvidence={onAddVerificationEvidence} />}
+      {reviewIssue && permitReadiness && <CanonicalPermitPackagePanel issue={reviewIssue} property={property} application={permitApplication} readiness={permitReadiness} evidence={verificationEvidence} reviewCycles={professionalReviewCycles} submissionHistory={permitSubmissionHistory} onUpdateApplication={onUpdateSidneyApplication} onRecordEvidence={onAddVerificationEvidence} onSubmission={onRecordPermitSubmission} />}
     </div>
   </main>{previewOpen && reviewSheets.length > 0 && <div className="fixed inset-0 z-[90] flex flex-col bg-[#17211c]/95" role="dialog" aria-modal="true" aria-label="Permit drawing set preview">
     <header className="flex flex-wrap items-center gap-3 border-b border-white/15 bg-[#17211c] px-4 py-3 text-white sm:px-6"><div className="min-w-0 flex-1"><p className="text-[10px] font-bold uppercase tracking-[.14em] text-emerald-300">Complete 11×17 sheet</p><h3 className="truncate text-sm font-bold">{reviewSheets[previewSheetIndex].number} · {reviewSheets[previewSheetIndex].title}</h3></div><label className="flex items-center gap-2 text-xs font-bold"><span>Zoom</span><input aria-label="Drawing preview zoom" type="range" min="60" max="180" step="10" value={previewZoom} onChange={(event) => setPreviewZoom(Number(event.target.value))} /><span className="w-10 text-right tabular-nums">{previewZoom}%</span></label><button type="button" onClick={() => void downloadReviewSet()} disabled={pdfStatus === 'building'} className="flex min-h-10 items-center gap-2 rounded-lg bg-white px-3 text-xs font-bold text-emerald-900 disabled:opacity-50"><Download size={14} /> {pdfStatus === 'building' ? 'Building…' : 'PDF'}</button><button type="button" onClick={() => setPreviewOpen(false)} className="grid h-10 w-10 place-items-center rounded-lg border border-white/20" aria-label="Close drawing preview"><X size={18} /></button></header>

@@ -5,7 +5,7 @@ import { addTerrainGradePoint, createSiteModel } from '../siteModel';
 import type { Property } from '../../types';
 import { createOrthographicProjection, OrthographicProjectionError, projectionAxisForView } from './orthographicProjection';
 
-const property: Property = { address: null, parcel: null, zoning: null, buildableEnvelope: null, snowLoad: 1, buildings: [], evidence: [], existingConditions: null };
+const property: Property = { address: null, parcel: null, zoning: null, buildableEnvelope: null, snowLoad: 1, buildings: [], evidence: [] };
 
 describe('orthographic projection v1 public contract', () => {
   it('projects linked platforms, stairs, structure, guards, and grade on one coordinate system', () => {

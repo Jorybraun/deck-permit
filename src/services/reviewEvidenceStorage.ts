@@ -1,8 +1,8 @@
-import { ProjectRepository } from './projectRepository';
+import { PrivateFileVault } from './privateFileVault';
 
-const repository = new ProjectRepository();
+const repository = new PrivateFileVault();
 
-/** Stores the sealed review bytes locally without importing or mutating the retired application store. */
+/** Stores sealed review and owner-signed application bytes in the private local vault. */
 export async function saveReviewEvidenceFile(id: string, file: File): Promise<void> {
   await repository.putEvidenceFile(id, file, file.name);
 }

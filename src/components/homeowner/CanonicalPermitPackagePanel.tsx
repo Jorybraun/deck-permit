@@ -15,8 +15,10 @@ interface CanonicalPermitPackagePanelProps {
   readiness: SubmissionReadiness;
   evidence: VerificationEvidence[];
   reviewCycles: ProfessionalReviewCycle[];
+  submissionHistory: PermitSubmissionRecord[];
   onUpdateApplication: (changes: Partial<SidneyApplicationData>) => void;
   onRecordEvidence: (evidence: VerificationEvidence) => void;
+  onSubmission: (record: PermitSubmissionRecord) => void;
 }
 
 const APPLICATION_FIELDS: Array<{ key: keyof SidneyApplicationData; label: string; placeholder?: string; type?: string }> = [
@@ -38,13 +40,13 @@ export function CanonicalPermitPackagePanel(props: CanonicalPermitPackagePanelPr
   const [ownerAuthorized, setOwnerAuthorized] = useState(false);
   const [artifact, setArtifact] = useState<CanonicalPermitBundleArtifact | null>(null);
   const [capabilities, setCapabilities] = useState<MunicipalDeliveryCapabilities | null>(null);
-  const [receipt, setReceipt] = useState<PermitSubmissionRecord | null>(null);
   const [error, setError] = useState('');
   const missing = useMemo(() => validateSidneyApplication(props.application), [props.application]);
   const signedEvidence = props.evidence.find((item) => item.gateId === 'signed-application' && item.designFingerprint === props.issue.manifest.designFingerprint);
+  const latestReceipt = [...props.submissionHistory].reverse().find((item) => item.designFingerprint === props.issue.manifest.designFingerprint);
   const ready = props.readiness.status === 'ready-to-submit';
   useEffect(() => { void getMunicipalDeliveryCapabilities().then(setCapabilities).catch(() => setCapabilities(null)); }, []);
-  useEffect(() => { setArtifact(null); setOwnerAuthorized(false); setReceipt(null); }, [props.issue.manifest.designFingerprint]);
+  useEffect(() => { setArtifact(null); setOwnerAuthorized(false); }, [props.issue.manifest.designFingerprint]);
 
   const bundleInput = () => ({ issue: props.issue, property: props.property, application: props.application, readiness: props.readiness, evidence: props.evidence, reviewCycles: props.reviewCycles });
   const download = async () => {
@@ -73,7 +75,7 @@ export function CanonicalPermitPackagePanel(props: CanonicalPermitPackagePanelPr
     setDeliveryBusy(true); setError('');
     try {
       const packageArtifact = await buildCanonicalPermitBundle(bundleInput());
-      setReceipt(await deliverSidneyPermitPackage({ artifact: packageArtifact, manifest: props.issue.manifest, readiness: props.readiness, ownerEmail: props.application.applicantEmail || props.application.ownerEmail, address: props.issue.manifest.address, pid: props.issue.manifest.pid, ownerAuthorized }));
+      props.onSubmission(await deliverSidneyPermitPackage({ artifact: packageArtifact, manifest: props.issue.manifest, readiness: props.readiness, ownerEmail: props.application.applicantEmail || props.application.ownerEmail, address: props.issue.manifest.address, pid: props.issue.manifest.pid, ownerAuthorized }));
       setOwnerAuthorized(false);
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Municipal delivery could not be completed.'); }
     finally { setDeliveryBusy(false); }
@@ -94,7 +96,7 @@ export function CanonicalPermitPackagePanel(props: CanonicalPermitPackagePanelPr
 
         <article className={`rounded-lg border p-4 ${ready ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}><div className="flex items-start gap-3"><PackageCheck size={20} className={ready ? 'text-emerald-800' : 'text-amber-800'} /><div><h4 className="text-sm font-bold text-slate-900">Validated ZIP archive</h4><p className="mt-1 text-xs leading-5 text-slate-600">{ready ? 'The archive may be labelled ready to submit after exact-path and evidence-integrity validation.' : 'You can assemble a clearly marked professional-review package while submission gates remain open.'}</p></div></div><button type="button" onClick={() => void download()} disabled={busy || missing.length > 0} className="mt-4 flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-emerald-800 px-4 text-sm font-bold text-white disabled:opacity-40">{busy ? <LoaderCircle size={16} className="animate-spin" /> : <Download size={16} />}{busy ? 'Validating files and assembling…' : ready ? 'Download permit submission ZIP' : 'Download professional review ZIP'}</button>{artifact && <p role="status" className="mt-3 text-xs font-semibold text-emerald-800">Downloaded {artifact.fileNames.length} files · {formatBytes(artifact.byteSize)} · {artifact.designFingerprint}</p>}</article>
 
-        <article className="rounded-lg border border-slate-200 p-4"><div className="flex items-center justify-between gap-3"><h4 className="flex items-center gap-2 text-sm font-bold text-slate-900"><LockKeyhole size={16} />Municipal delivery</h4><span className="text-[10px] font-bold uppercase text-slate-400">Owner controlled</span></div>{!ready ? <p className="mt-2 text-xs leading-5 text-slate-500">Locked until all six canonical gates match this fingerprint.</p> : capabilities?.configured ? <><label className="mt-3 flex items-start gap-2 rounded-md bg-slate-50 p-3 text-xs leading-5 text-slate-600"><input type="checkbox" checked={ownerAuthorized} onChange={(event) => setOwnerAuthorized(event.target.checked)} className="mt-1" /><span>I am the owner or authorized applicant and authorize delivery of Rev {props.issue.manifest.revision} · {props.issue.manifest.designFingerprint} to {capabilities.recipient}.</span></label><button type="button" onClick={() => void deliver()} disabled={!ownerAuthorized || deliveryBusy} className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-bold text-white disabled:opacity-40">{deliveryBusy ? <LoaderCircle size={16} className="animate-spin" /> : <Send size={16} />}{deliveryBusy ? 'Delivering controlled package…' : 'Submit to Town of Sidney'}</button></> : <p className="mt-2 text-xs leading-5 text-slate-500">Secure direct delivery is not configured. Download the validated ZIP and submit it through the Town’s accepted channel.</p>}{receipt && <p role="status" className="mt-3 rounded-md bg-emerald-100 px-3 py-2 text-xs text-emerald-900">Delivery receipt {receipt.providerMessageId}. This confirms provider delivery only, not permit acceptance.</p>}</article>
+        <article className="rounded-lg border border-slate-200 p-4"><div className="flex items-center justify-between gap-3"><h4 className="flex items-center gap-2 text-sm font-bold text-slate-900"><LockKeyhole size={16} />Municipal delivery</h4><span className="text-[10px] font-bold uppercase text-slate-400">Owner controlled</span></div>{!ready ? <p className="mt-2 text-xs leading-5 text-slate-500">Locked until all six canonical gates match this fingerprint.</p> : capabilities?.configured ? <><label className="mt-3 flex items-start gap-2 rounded-md bg-slate-50 p-3 text-xs leading-5 text-slate-600"><input type="checkbox" checked={ownerAuthorized} onChange={(event) => setOwnerAuthorized(event.target.checked)} className="mt-1" /><span>I am the owner or authorized applicant and authorize delivery of Rev {props.issue.manifest.revision} · {props.issue.manifest.designFingerprint} to {capabilities.recipient}.</span></label><button type="button" onClick={() => void deliver()} disabled={!ownerAuthorized || deliveryBusy} className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-slate-900 px-4 text-sm font-bold text-white disabled:opacity-40">{deliveryBusy ? <LoaderCircle size={16} className="animate-spin" /> : <Send size={16} />}{deliveryBusy ? 'Delivering controlled package…' : 'Submit to Town of Sidney'}</button></> : <p className="mt-2 text-xs leading-5 text-slate-500">Secure direct delivery is not configured. Download the validated ZIP and submit it through the Town’s accepted channel.</p>}{latestReceipt && <p role="status" className="mt-3 rounded-md bg-emerald-100 px-3 py-2 text-xs text-emerald-900">Recorded delivery receipt {latestReceipt.providerMessageId} · {new Date(latestReceipt.submittedAt).toLocaleString()}. This confirms provider delivery only, not permit acceptance.</p>}</article>
       </div>
     </div>{error && <p role="alert" className="mt-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-xs font-semibold text-red-800">{error}</p>}
   </section>;

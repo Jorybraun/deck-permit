@@ -1,9 +1,9 @@
 import type { CaptureCategory, CaptureEvidence } from '../domain/siteModel';
 import { CAPTURE_IMAGE_TYPES, MAX_CAPTURE_FILE_BYTES } from '../domain/siteModel';
 import { sha256File } from './fileDigest';
-import { ProjectRepository, type StoredCaptureFile } from './projectRepository';
+import { PrivateFileVault, type StoredCaptureFile } from './privateFileVault';
 
-const repository = new ProjectRepository();
+const repository = new PrivateFileVault();
 
 /** Validates and hashes a private local photo before it is admitted to canonical metadata. */
 export async function captureEvidenceFromFile(file: File, category: CaptureCategory, now = new Date()): Promise<CaptureEvidence> {

@@ -4,7 +4,7 @@ import { createSiteModel } from '../../domain/siteModel';
 import type { Property } from '../../types';
 import { createElevationViewModel } from './DeckElevationEditor';
 
-const emptyProperty: Property = { address: null, parcel: null, zoning: null, buildableEnvelope: null, snowLoad: 1, buildings: [], evidence: [], existingConditions: null };
+const emptyProperty: Property = { address: null, parcel: null, zoning: null, buildableEnvelope: null, snowLoad: 1, buildings: [], evidence: [] };
 
 describe('DeckElevationEditor view model', () => {
   it('projects canonical platform levels and preliminary assembly depths into a side view', () => {

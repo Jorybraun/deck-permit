@@ -11,7 +11,7 @@ import { sha256Blob } from './fileDigest';
 const property: Property = {
   address: { fullAddress: '2423 Lovell Ave, Sidney, BC', civicNumber: '2423', streetName: 'Lovell', streetType: 'Ave', locality: 'Sidney', localityType: 'Town', province: 'BC', postalCode: 'V8L 2P3', coordinates: [-123.4, 48.6], score: 99 },
   parcel: { pid: '000-111-222', pidRaw: '000111222', parcelName: 'Lot 1', planNumber: 'VIP1', municipality: 'Town of Sidney', ownerType: '', parcelClass: '', areaSqm: 500, polygon: [], center: [-123.4, 48.6] },
-  zoning: null, buildableEnvelope: null, snowLoad: 1, buildings: [], evidence: [], existingConditions: null,
+  zoning: null, buildableEnvelope: null, snowLoad: 1, buildings: [], evidence: [],
 };
 const application: SidneyApplicationData = { civicAddress: property.address!.fullAddress, ownerName: 'Owner', ownerCompany: '', ownerAddress: '2423 Lovell Ave', ownerCityProvince: 'Sidney, BC', ownerPostalCode: 'V8L 2P3', ownerPhone: '250-555-0100', ownerEmail: 'owner@example.com', applicantName: '', applicantCompany: '', applicantBusinessLicence: '', applicantAddress: '', applicantCityProvince: '', applicantPostalCode: '', applicantPhone: '', applicantEmail: '', projectDescription: 'Construct a new residential deck and stairs.', constructionValue: '25000', existingFloorAreaSqm: '', deckAreaSqm: '12' };
 const readiness: SubmissionReadiness = { status: 'review-package', confirmedCount: 2, requiredCount: 6, summary: 'Review package only.', gates: [{ id: 'professional-review', label: 'Professional review', status: 'required', responsibleParty: 'engineer', detail: 'Required.' }] };

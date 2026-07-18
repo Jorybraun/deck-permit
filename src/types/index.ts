@@ -41,28 +41,6 @@ export interface BuildingFootprint {
   confidence: 'high' | 'medium' | 'low';
 }
 
-export interface ExistingHouseConditions {
-  schema: 'existing-house-conditions/v1';
-  status: 'field-input-unverified';
-  houseWidthM: number;
-  houseDepthM: number;
-  wallHeightM: number;
-  attachmentWall: 'north' | 'south' | 'east' | 'west';
-  attachmentWallLengthM: number;
-  proposedLedgerLengthM: number;
-  rimBoardMaterial: 'unknown' | 'solid-sawn' | 'engineered-wood' | 'concrete';
-  rimBoardDepthMm: number | null;
-  cladding: 'unknown' | 'wood-siding' | 'fiber-cement' | 'vinyl' | 'stucco' | 'brick-veneer' | 'other';
-  doorOpeningOffsetM: number;
-  doorOpeningWidthM: number;
-  doorThresholdHeightMm: number;
-  flashingFeasible: 'unknown' | 'yes' | 'no';
-  measuredBy: string;
-  measuredAt: string;
-  notes: string;
-  updatedAt: string;
-}
-
 export interface Address {
   fullAddress: string;
   civicNumber: string;
@@ -98,7 +76,6 @@ export interface Property {
   snowLoad: number; // kPa
   buildings: BuildingFootprint[];
   evidence: EvidenceSource[];
-  existingConditions?: ExistingHouseConditions | null;
 }
 
 export type DeckShape = 'rectangle' | 'l-shape' | 'wraparound' | 'custom';
@@ -214,30 +191,6 @@ export interface Deck {
   area: number; // sqm
 }
 
-export interface ComplianceIssue {
-  id: string;
-  severity: 'error' | 'warning' | 'info';
-  category: 'setback' | 'guard' | 'stair' | 'structure' | 'footing' | 'ledger' | 'zoning';
-  message: string;
-  codeRef: string; // e.g. "BCBC 9.8.8.3"
-  fix?: string;
-  resolved: boolean;
-  canvasMarker?: {
-    type: 'point' | 'line' | 'area';
-    position?: LatLng;
-    edge?: 'north' | 'south' | 'east' | 'west';
-  };
-}
-
-export type StepId = 'land' | 'lot' | 'vision' | 'shape' | 'structure' | 'safety' | 'planset' | 'submit';
-
-export interface Step {
-  id: StepId;
-  title: string;
-  subtitle: string;
-  status: 'pending' | 'active' | 'complete' | 'blocked';
-}
-
 export interface PlanSheet {
   id: 'cover' | 'existing-conditions' | 'site' | 'deck-plan' | 'foundations' | 'framing' | 'elevations' | 'sections' | 'details' | 'calculations';
   number: string;
@@ -248,17 +201,6 @@ export interface PlanSheet {
   issuedAt: string;
   issuePurpose: 'professional-review';
   svg: string; // rendered SVG content
-}
-
-export interface DrawingIssueRecord {
-  id: string;
-  revision: number;
-  designFingerprint: string;
-  issuedAt: string;
-  purpose: 'professional-review';
-  description: string;
-  sheetIds: PlanSheet['id'][];
-  supersedesDesignFingerprint?: string;
 }
 
 export interface PermitSubmissionRecord {
@@ -484,24 +426,4 @@ export interface SidneyApplicationData {
   constructionValue: string;
   existingFloorAreaSqm: string;
   deckAreaSqm: string;
-}
-
-export interface AppState {
-  step: StepId;
-  steps: Step[];
-  property: Property;
-  deck: Deck | null;
-  compliance: ComplianceIssue[];
-  planset: PlanSheet[] | null;
-  structuralReport: StructuralReport | null;
-  submissionReadiness: SubmissionReadiness | null;
-  permitManifest: PermitManifest | null;
-  verificationEvidence: VerificationEvidence[];
-  reviewExchange: ReviewExchangePublication | null;
-  professionalReviewCycles: ProfessionalReviewCycle[];
-  drawingIssueHistory: DrawingIssueRecord[];
-  permitSubmissionHistory: PermitSubmissionRecord[];
-  sidneyApplication: SidneyApplicationData | null;
-  loading: boolean;
-  error: string | null;
 }

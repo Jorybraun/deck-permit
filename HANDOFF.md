@@ -52,7 +52,7 @@ Read these before making product-level decisions:
 - `docs/product-reset.md` — product reset and what to remove.
 - `docs/deck-cad-product-architecture.md` — CAD/domain architecture and Chief Architect research.
 - `docs/homeowner-marketplace-strategy.md` — homeowner-to-builder marketplace strategy.
-- `docs/existing-conditions.md` — existing-condition evidence model.
+- `docs/existing-condition-capture-module.md` — existing-condition evidence model.
 - `docs/structural-review-package.md` — professional review boundary.
 - `docs/permit-bundle.md` — permit package concepts.
 - `docs/municipal-delivery.md` — delivery/submission concepts.

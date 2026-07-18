@@ -7,7 +7,7 @@ import { buildCanonicalReviewIssue } from './canonicalReviewIssue';
 
 const property: Property = {
   address: { fullAddress: '2423 Lovell Ave, Sidney, BC', civicNumber: '2423', streetName: 'Lovell', streetType: 'Ave', locality: 'Sidney', localityType: 'Town', province: 'BC', postalCode: '', coordinates: [-123.4, 48.6], score: 99 },
-  parcel: null, zoning: null, buildableEnvelope: null, snowLoad: 1, buildings: [], evidence: [], existingConditions: null,
+  parcel: null, zoning: null, buildableEnvelope: null, snowLoad: 1, buildings: [], evidence: [],
 };
 
 describe('canonical professional review issue', () => {

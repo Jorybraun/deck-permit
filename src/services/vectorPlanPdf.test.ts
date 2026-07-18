@@ -5,7 +5,7 @@ import { assembleFixedVectorPdf, LEDGER_HEIGHT_POINTS, LEDGER_WIDTH_POINTS } fro
 
 describe('fixed-size vector plan PDF assembly', () => {
   it('creates one complete vector-only 17×11 page for every drawing sheet', async () => {
-    const property = { address: null, parcel: null, zoning: null, buildableEnvelope: null, snowLoad: 1, buildings: [], evidence: [], existingConditions: null } satisfies Property;
+    const property = { address: null, parcel: null, zoning: null, buildableEnvelope: null, snowLoad: 1, buildings: [], evidence: [] } satisfies Property;
     const blob = await assembleFixedVectorPdf(property, 10, (pdf, pageIndex) => {
       pdf.setDrawColor(20, 80, 55);
       pdf.setLineWidth(1.25);
@@ -23,7 +23,7 @@ describe('fixed-size vector plan PDF assembly', () => {
   });
 
   it('rejects an invalid page count before creating a document', async () => {
-    const property = { address: null, parcel: null, zoning: null, buildableEnvelope: null, snowLoad: 1, buildings: [], evidence: [], existingConditions: null } satisfies Property;
+    const property = { address: null, parcel: null, zoning: null, buildableEnvelope: null, snowLoad: 1, buildings: [], evidence: [] } satisfies Property;
     await expect(assembleFixedVectorPdf(property, 0, () => undefined)).rejects.toThrow('At least one vector drawing page');
   });
 });

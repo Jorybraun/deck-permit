@@ -1,31 +1,3 @@
-import type { AppState, ComplianceIssue, Deck, DrawingIssueRecord, PermitManifest, PermitSubmissionRecord, PlanSheet, ProfessionalReviewCycle, Property, ReviewExchangePublication, SidneyApplicationData, Step, StepId, StructuralReport, SubmissionReadiness, VerificationEvidence } from '../types';
-
-export const PROJECT_SNAPSHOT_SCHEMA = 'deck-permit-project/v1' as const;
-
-export interface PersistedProjectState {
-  step: StepId;
-  steps: Step[];
-  property: Property;
-  deck: Deck | null;
-  compliance: ComplianceIssue[];
-  planset: PlanSheet[] | null;
-  structuralReport: StructuralReport | null;
-  submissionReadiness: SubmissionReadiness | null;
-  permitManifest: PermitManifest | null;
-  verificationEvidence: VerificationEvidence[];
-  reviewExchange: ReviewExchangePublication | null;
-  professionalReviewCycles: ProfessionalReviewCycle[];
-  drawingIssueHistory: DrawingIssueRecord[];
-  permitSubmissionHistory: PermitSubmissionRecord[];
-  sidneyApplication: SidneyApplicationData | null;
-}
-
-export interface ProjectSnapshot {
-  schema: typeof PROJECT_SNAPSHOT_SCHEMA;
-  savedAt: string;
-  state: PersistedProjectState;
-}
-
 export interface StoredEvidenceFile {
   id: string;
   fileName: string;
@@ -42,65 +14,14 @@ export interface StoredCaptureFile {
   blob: Blob;
 }
 
-export function createProjectSnapshot(state: AppState): ProjectSnapshot {
-  return {
-    schema: PROJECT_SNAPSHOT_SCHEMA,
-    savedAt: new Date().toISOString(),
-    state: {
-      step: state.step,
-      steps: state.steps,
-      property: state.property,
-      deck: state.deck,
-      compliance: state.compliance,
-      planset: state.planset,
-      structuralReport: state.structuralReport,
-      submissionReadiness: state.submissionReadiness,
-      permitManifest: state.permitManifest,
-      verificationEvidence: state.verificationEvidence,
-      reviewExchange: state.reviewExchange,
-      professionalReviewCycles: state.professionalReviewCycles,
-      drawingIssueHistory: state.drawingIssueHistory,
-      permitSubmissionHistory: state.permitSubmissionHistory,
-      sidneyApplication: state.sidneyApplication,
-    },
-  };
-}
-
-export function isProjectSnapshot(value: unknown): value is ProjectSnapshot {
-  if (!value || typeof value !== 'object') return false;
-  const snapshot = value as Partial<ProjectSnapshot>;
-  const state = snapshot.state as Partial<PersistedProjectState> | undefined;
-  return snapshot.schema === PROJECT_SNAPSHOT_SCHEMA
-    && typeof snapshot.savedAt === 'string'
-    && !!state
-    && typeof state.step === 'string'
-    && Array.isArray(state.steps)
-    && !!state.property
-    && Array.isArray(state.compliance)
-    && Array.isArray(state.verificationEvidence)
-    && (state.reviewExchange === undefined || state.reviewExchange === null || typeof state.reviewExchange === 'object')
-    && (state.professionalReviewCycles === undefined || Array.isArray(state.professionalReviewCycles))
-    && (state.drawingIssueHistory === undefined || Array.isArray(state.drawingIssueHistory))
-    && (state.permitSubmissionHistory === undefined || Array.isArray(state.permitSubmissionHistory))
-    && (state.sidneyApplication === undefined || state.sidneyApplication === null || typeof state.sidneyApplication === 'object');
-}
-
-export class ProjectRepository {
+/** Owns private binary evidence. Canonical project metadata is persisted separately. */
+export class PrivateFileVault {
   private database: Promise<IDBDatabase> | null = null;
 
   constructor(
     private readonly databaseFactory?: IDBFactory,
     private readonly databaseName = 'deck-permit-workspace',
   ) {}
-
-  async loadProject(): Promise<ProjectSnapshot | null> {
-    const value = await this.request('project-snapshots', 'readonly', (store) => store.get('active'));
-    return isProjectSnapshot(value) ? value : null;
-  }
-
-  async saveProject(snapshot: ProjectSnapshot): Promise<void> {
-    await this.request('project-snapshots', 'readwrite', (store) => store.put(snapshot, 'active'));
-  }
 
   async putEvidenceFile(id: string, file: Blob, fileName: string): Promise<void> {
     const record: StoredEvidenceFile = { id, fileName, mimeType: file.type || 'application/pdf', byteSize: file.size, blob: file };
@@ -147,7 +68,6 @@ export class ProjectRepository {
     this.database = new Promise((resolve, reject) => {
       const request = databaseFactory.open(this.databaseName, 2);
       request.onupgradeneeded = () => {
-        if (!request.result.objectStoreNames.contains('project-snapshots')) request.result.createObjectStore('project-snapshots');
         if (!request.result.objectStoreNames.contains('evidence-files')) request.result.createObjectStore('evidence-files');
         if (!request.result.objectStoreNames.contains('capture-files')) request.result.createObjectStore('capture-files');
       };
@@ -158,7 +78,7 @@ export class ProjectRepository {
     return this.database;
   }
 
-  private async request(storeName: 'project-snapshots' | 'evidence-files' | 'capture-files', mode: IDBTransactionMode, operation: (store: IDBObjectStore) => IDBRequest): Promise<unknown> {
+  private async request(storeName: 'evidence-files' | 'capture-files', mode: IDBTransactionMode, operation: (store: IDBObjectStore) => IDBRequest): Promise<unknown> {
     const database = await this.open();
     return new Promise((resolve, reject) => {
       const transaction = database.transaction(storeName, mode);

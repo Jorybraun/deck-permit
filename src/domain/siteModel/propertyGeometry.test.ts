@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Property } from '../../types';
 import { createSiteModel, flipHouseWallDirection, rotateHouseWallAlignment, updateSiteModel } from './siteModel';
 import { addTerrainGradePoint } from './terrain';
-import { projectPropertyToLocal, selectHouseWall } from './propertyGeometry';
+import { deriveHouseReference, projectPropertyToLocal, selectHouseWall } from './propertyGeometry';
 
 const property: Property = {
   address: null,
@@ -11,10 +11,17 @@ const property: Property = {
     polygon: [[-123.001, 49], [-122.999, 49], [-122.999, 49.001], [-123.001, 49.001], [-123.001, 49]], center: [-123, 49.0005], geometrySource: 'live',
   },
   buildings: [{ id: 'house', primary: true, areaSqm: 100, kind: 'building-footprint', sourceId: 'test', confidence: 'medium', polygon: [[-123.0002, 49.0002], [-122.9998, 49.0002], [-122.9998, 49.0003], [-123.0002, 49.0003], [-123.0002, 49.0002]] }],
-  zoning: null, buildableEnvelope: null, snowLoad: 1, evidence: [], existingConditions: null,
+  zoning: null, buildableEnvelope: null, snowLoad: 1, evidence: [],
 };
 
 describe('property-to-deck alignment', () => {
+  it('derives editable reference dimensions without claiming field authority', () => {
+    const reference = deriveHouseReference(property);
+    expect(reference.source).toBe('municipal-roofline');
+    expect(reference.widthM).toBeGreaterThan(20);
+    expect(reference.depthM).toBeGreaterThan(10);
+  });
+
   it('shows the parcel using an honest provisional house edge before selection', () => {
     const site = createSiteModel(property);
     const geometry = projectPropertyToLocal(property, site);

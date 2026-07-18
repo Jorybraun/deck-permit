@@ -4,7 +4,7 @@ import { addTerrainGradePoint, createSiteModel, updateSiteModel } from '../siteM
 import type { Property } from '../../types';
 import { framingInputFingerprint, generateFramingDesign, isFramingStale } from './framingDesign';
 
-const property: Property = { address: null, parcel: null, zoning: null, buildableEnvelope: null, snowLoad: 1, buildings: [], evidence: [], existingConditions: null };
+const property: Property = { address: null, parcel: null, zoning: null, buildableEnvelope: null, snowLoad: 1, buildings: [], evidence: [] };
 
 describe('FramingDesign v2 public contract', () => {
   it('generates explicit ledger, joist, beam, post, and footing members for a supported platform', () => {

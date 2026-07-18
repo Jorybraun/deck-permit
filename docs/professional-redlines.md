@@ -35,6 +35,6 @@ The ZIP contains `04-records/professional-redline-response-log-DP-XXXXXXXX.json`
 
 - Domain tests: `src/services/reviewRedlines.test.ts`
 - Server boundary tests: `server/reviewExchangeStore.test.ts`
-- Persistence: `src/services/projectRepository.test.ts`
+- Private evidence persistence: `src/services/privateFileVault.test.ts`
 - Package records: `src/services/canonicalPermitBundle.test.ts`
 - Browser journey: reviewer places a sheet marker → submits change request → owner imports → response is recorded → next package includes review history

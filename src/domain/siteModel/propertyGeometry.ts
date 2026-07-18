@@ -20,6 +20,22 @@ export interface LocalPropertyGeometry {
   exteriorSideSign: -1 | 1;
 }
 
+export interface HouseReferenceDimensions {
+  widthM: number;
+  depthM: number;
+  source: 'municipal-roofline' | 'estimated';
+}
+
+/** Derives conservative starting dimensions from reference geometry without upgrading its authority. */
+export function deriveHouseReference(property: Property): HouseReferenceDimensions {
+  const primary = property.buildings.find((building) => building.primary);
+  if (!primary || !property.parcel) return { widthM: 7, depthM: 6, source: 'estimated' };
+  const ring = primary.polygon;
+  const bounds = ring.reduce((value, [lng, lat]) => ({ minLng: Math.min(value.minLng, lng), maxLng: Math.max(value.maxLng, lng), minLat: Math.min(value.minLat, lat), maxLat: Math.max(value.maxLat, lat) }), { minLng: Infinity, maxLng: -Infinity, minLat: Infinity, maxLat: -Infinity });
+  const latitude = property.parcel.center[1];
+  return { widthM: (bounds.maxLng - bounds.minLng) * 111000 * Math.cos(latitude * Math.PI / 180), depthM: (bounds.maxLat - bounds.minLat) * 111000, source: 'municipal-roofline' };
+}
+
 /** Aligns independently sourced municipal GIS geometry to the selected house edge. */
 export function projectPropertyToLocal(property: Property, site: SiteModel): LocalPropertyGeometry | null {
   if (!property.parcel) return null;

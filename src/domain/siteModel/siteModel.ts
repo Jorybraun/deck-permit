@@ -1,5 +1,5 @@
 import type { Property } from '../../types';
-import { deriveHouseReference } from '../../services/existingConditions';
+import { deriveHouseReference } from './propertyGeometry';
 import type { SiteAssessment, SiteModel } from './types';
 import { createTerrainSurface } from './terrain';
 import { assessExistingConditionCapture, createExistingConditionCapture } from './existingConditionCapture';
