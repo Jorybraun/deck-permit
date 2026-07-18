@@ -1,0 +1,45 @@
+import { DOMParser } from '@xmldom/xmldom';
+import { describe, expect, it } from 'vitest';
+import { addPlatform, addStair, createEmptyDesign, rectangularBoundary } from '../domain/deckDesign';
+import { generateFramingDesign } from '../domain/framingDesign';
+import { createSiteModel, selectHouseWall } from '../domain/siteModel';
+import type { Property } from '../types';
+import { generateCanonicalPlanSet } from './canonicalPlanSet';
+
+const property: Property = {
+  address: { fullAddress: '2433 Lovell Ave, Sidney, BC', civicNumber: '2433', streetName: 'Lovell', streetType: 'Ave', locality: 'Sidney', localityType: 'Town', province: 'BC', postalCode: '', coordinates: [-123.399, 48.659], score: 100 },
+  parcel: { pid: '000-111-222', pidRaw: '000111222', parcelName: 'Test parcel', planNumber: 'VIP123', municipality: 'Town of Sidney', ownerType: '', parcelClass: '', areaSqm: 720, polygon: [[-123.400, 48.658], [-123.398, 48.658], [-123.398, 48.660], [-123.400, 48.660], [-123.400, 48.658]], center: [-123.399, 48.659], geometrySource: 'live' },
+  buildings: [{ id: 'house', primary: true, areaSqm: 100, kind: 'building-footprint', sourceId: 'sidney-gis', confidence: 'medium', polygon: [[-123.3995, 48.6590], [-123.3988, 48.6590], [-123.3988, 48.6593], [-123.3995, 48.6593], [-123.3995, 48.6590]] }],
+  zoning: null, buildableEnvelope: null, snowLoad: 1,
+  evidence: [{ id: 'parcel', label: 'Town parcel layer', url: 'https://example.test/parcel', authority: 'municipal', retrievedAt: '2026-07-18T00:00:00.000Z', status: 'reference' }], existingConditions: null,
+};
+
+describe('canonical seven-sheet review set', () => {
+  it('derives coordinated, parseable 11×17 sheets from the current design and framing graph', () => {
+    let design = addPlatform(createEmptyDesign(), { name: 'Upper deck', boundary: rectangularBoundary(0, 0, 4000, 3000), elevationMm: 900, houseEdgeIndex: 0 });
+    design = addPlatform(design, { name: 'Lower deck', boundary: rectangularBoundary(4710, 0, 3500, 3000), elevationMm: 450 });
+    design = addStair(design, { from: { kind: 'platform', platformId: 'P1' }, to: { kind: 'platform', platformId: 'P2' }, fromEdgeId: 'P1-E2', toEdgeId: 'P2-E4', startMm: [4000, 1500], endMm: [4710, 1500], directionDeg: 0, riserCount: 3, treadDepthMm: 355 });
+    const site = selectHouseWall(createSiteModel(property), property, 'house', 0);
+    const framing = generateFramingDesign(design, site, { municipality: 'Town of Sidney', snowLoadKpa: 1 }, '2026-07-18T00:00:00.000Z');
+    const planSet = generateCanonicalPlanSet({ property, site, design, framing, issuedAt: '2026-07-18T00:00:00.000Z' });
+
+    expect(planSet.sheets).toHaveLength(7);
+    expect(planSet.sheets.map((sheet) => sheet.number)).toEqual(['A0.0', 'A1.0', 'S1.0', 'A2.0', 'S2.0', 'A3.0', 'S3.0']);
+    expect(planSet.sheets.every((sheet) => sheet.designFingerprint === planSet.fingerprint)).toBe(true);
+    for (const sheet of planSet.sheets) {
+      const errors: string[] = [];
+      const xml = new DOMParser({ onError: (_level, message) => errors.push(message) }).parseFromString(sheet.svg, 'image/svg+xml');
+      expect(errors, sheet.number).toEqual([]);
+      expect(xml.documentElement!.tagName).toBe('svg');
+      expect(xml.documentElement!.getAttribute('width')).toBe('1700');
+      expect(sheet.svg).toContain(planSet.fingerprint);
+      expect(sheet.svg).toContain('PROFESSIONAL REVIEW');
+      expect(sheet.svg).toContain('NOT FOR CONSTRUCTION');
+      expect(sheet.svg).toContain('BLANK UNTIL APPLIED');
+    }
+    expect(planSet.sheets.find((sheet) => sheet.number === 'A1.0')?.svg).toContain('SELECTED HOUSE WALL');
+    expect(planSet.sheets.find((sheet) => sheet.number === 'S1.0')?.svg).toContain('Stringers');
+    expect(planSet.sheets.find((sheet) => sheet.number === 'A3.0')?.svg).toContain('3 STRINGERS');
+    expect(planSet.sheets.find((sheet) => sheet.number === 'S3.0')?.svg).toContain('PROFESSIONAL REVIEW GATES');
+  });
+});

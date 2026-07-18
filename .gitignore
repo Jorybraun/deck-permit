@@ -1,0 +1,6 @@
+node_modules/
+dist/
+.deck-permit-data/
+.env
+.env.local
+.DS_Store

@@ -1,0 +1,47 @@
+{
+  "name": "deck-permit",
+  "private": true,
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "start": "node --env-file-if-exists=.env.local server.mjs",
+    "lint": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@react-three/drei": "^9.122.0",
+    "@react-three/fiber": "^8.18.0",
+    "@types/three": "^0.170.0",
+    "express": "^5.2.1",
+    "fflate": "^0.8.3",
+    "jspdf": "^4.2.1",
+    "lucide-react": "^0.460.0",
+    "makerjs": "^0.19.2",
+    "openai": "^6.48.0",
+    "pdf-lib": "^1.17.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "svg2pdf.js": "^2.7.0",
+    "three": "^0.170.0",
+    "zustand": "^4.5.5"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^6.0.3",
+    "@xmldom/xmldom": "^0.9.10",
+    "autoprefixer": "^10.4.20",
+    "cors": "^2.8.6",
+    "fake-indexeddb": "^6.2.4",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.14",
+    "typescript": "^5.6.3",
+    "vite": "^8.1.5",
+    "vitest": "^4.1.10"
+  }
+}

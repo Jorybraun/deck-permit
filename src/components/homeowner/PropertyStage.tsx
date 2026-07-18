@@ -1,0 +1,114 @@
+import { AlertTriangle, ArrowRight, Building2, CheckCircle2, DoorOpen, ExternalLink, Loader2, MapPin, Plus, Ruler, Search, Trash2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import type { SiteModel } from '../../domain/siteModel';
+import type { Address, Property } from '../../types';
+import { PropertyContextPlan } from './PropertyContextPlan';
+
+export type PropertyResearchState =
+  | { status: 'idle' }
+  | { status: 'loading' }
+  | { status: 'error'; message: string; suggestions: string[] }
+  | { status: 'success' };
+
+interface PropertyStageProps {
+  property: Property;
+  site: SiteModel | null;
+  research: PropertyResearchState;
+  onResearch: (address: string) => void;
+  onResearchAddress: (address: Address) => void;
+  onSuggestAddresses: (query: string, maxResults?: number) => Promise<Address[]>;
+  onSelectWall: (buildingId: string, edgeIndex: number) => void;
+  onUpdateSite: (changes: Partial<Omit<SiteModel, 'schema' | 'units' | 'designWall'>>, wallChanges?: Partial<SiteModel['designWall']>) => void;
+  onContinue: () => void;
+}
+
+/** Lets a homeowner research a parcel and turn reference geometry into explicit field inputs. */
+export function PropertyStage({ property, site, research, onResearch, onResearchAddress, onSuggestAddresses, onSelectWall, onUpdateSite, onContinue }: PropertyStageProps) {
+  const [address, setAddress] = useState(property.address?.fullAddress || '');
+  const [addressOptions, setAddressOptions] = useState<Address[]>([]);
+  const [suggestionStatus, setSuggestionStatus] = useState<'idle' | 'loading' | 'ready'>('idle');
+  const [showAddressOptions, setShowAddressOptions] = useState(false);
+  useEffect(() => { if (property.address?.fullAddress) { setAddress(property.address.fullAddress); setAddressOptions([]); } }, [property.address?.fullAddress]);
+  useEffect(() => {
+    const query = address.trim();
+    if (query.length < 4 || query === property.address?.fullAddress || research.status === 'loading') { setSuggestionStatus('idle'); setAddressOptions([]); return; }
+    let active = true;
+    const timer = window.setTimeout(() => {
+      setSuggestionStatus('loading');
+      void onSuggestAddresses(query, 5).then((options) => { if (active) { setAddressOptions(options); setSuggestionStatus('ready'); setShowAddressOptions(true); } }).catch(() => { if (active) { setAddressOptions([]); setSuggestionStatus('ready'); } });
+    }, 250);
+    return () => { active = false; window.clearTimeout(timer); };
+  }, [address, onSuggestAddresses, property.address?.fullAddress, research.status]);
+  const ready = Boolean(property.address && property.parcel && site);
+  const door = site?.designWall.openings.find((opening) => opening.kind === 'door') || null;
+  const selectAddressOption = (option: Address) => {
+    setAddress(option.fullAddress);
+    setAddressOptions([]);
+    setShowAddressOptions(false);
+    onResearchAddress(option);
+  };
+
+  return <main className="h-full overflow-y-auto bg-[#f7f8f6] px-4 py-6 sm:px-7 lg:px-10">
+    <div className="mx-auto grid max-w-5xl gap-5">
+      <header>
+        <span className="text-xs font-bold uppercase tracking-[.16em] text-emerald-800">Property evidence</span>
+        <h2 className="mt-2 font-[Manrope] text-3xl font-bold tracking-tight text-slate-950">Find the lot, then confirm the house.</h2>
+        <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">Municipal geometry is reference evidence, not a field survey. We show exactly what came from public data and what still needs a measurement.</p>
+      </header>
+
+      <form onSubmit={(event) => { event.preventDefault(); if (address.trim()) onResearch(address.trim()); }} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <label htmlFor="property-address" className="text-sm font-semibold text-slate-800">Property address</label>
+        <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+          <div className="relative z-50 flex-1" onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setShowAddressOptions(false); }}><MapPin size={17} className="absolute left-3 top-3.5 text-slate-400" /><input id="property-address" role="combobox" aria-autocomplete="list" aria-expanded={showAddressOptions && addressOptions.length > 0} aria-controls="property-address-options" value={address} onChange={(event) => { setAddress(event.target.value); setShowAddressOptions(true); }} onFocus={() => setShowAddressOptions(true)} placeholder="Start typing a BC street address" autoComplete="off" disabled={research.status === 'loading'} className="min-h-11 w-full rounded-lg border border-slate-300 pl-10 pr-10 text-sm" />{suggestionStatus === 'loading' && <Loader2 size={15} className="absolute right-3 top-3.5 animate-spin text-slate-400" />}{showAddressOptions && addressOptions.length > 0 && <ul id="property-address-options" role="listbox" className="absolute left-0 right-0 top-[calc(100%+.35rem)] z-50 max-h-64 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1.5 shadow-xl">{addressOptions.map((option) => <li key={`${option.fullAddress}-${option.coordinates.join(',')}`} role="option" aria-selected={false}><button type="button" aria-label={`Use ${option.fullAddress}`} onPointerDown={(event) => { event.preventDefault(); selectAddressOption(option); }} onClick={() => selectAddressOption(option)} className="flex w-full items-start gap-3 rounded-md px-3 py-2.5 text-left hover:bg-emerald-50 focus:bg-emerald-50"><MapPin size={15} className="mt-0.5 shrink-0 text-emerald-700" /><span className="min-w-0 flex-1"><strong className="block truncate text-sm text-slate-900">{option.fullAddress}</strong><small className="mt-0.5 block text-xs text-slate-500">BC Address Geocoder · {option.score}/100 match</small></span></button></li>)}</ul>}</div>
+          <button type="submit" disabled={!address.trim() || research.status === 'loading'} className="flex min-h-11 items-center justify-center gap-2 rounded-lg bg-emerald-800 px-5 text-sm font-bold text-white disabled:opacity-50">{research.status === 'loading' ? <><Loader2 size={16} className="animate-spin" /> Researching sources</> : <><Search size={16} /> Research property</>}</button>
+        </div>
+        {research.status === 'error' && <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800" role="alert"><p className="flex gap-2"><AlertTriangle size={17} className="mt-0.5 shrink-0" />{research.message}</p>{research.suggestions.length > 0 && <div className="mt-3 flex flex-wrap gap-2">{research.suggestions.map((suggestion) => <button key={suggestion} type="button" onClick={() => { setAddress(suggestion); onResearch(suggestion); }} className="rounded-md border border-red-300 bg-white px-3 py-2 text-left font-semibold">Use {suggestion}</button>)}</div>}</div>}
+      </form>
+
+      {ready && site && <>
+        <PropertyContextPlan property={property} site={site} onSelectWall={onSelectWall} />
+        <section className="grid gap-4 lg:grid-cols-[1.1fr_.9fr]">
+          <article className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex items-start gap-3"><span className="grid h-9 w-9 place-items-center rounded-lg bg-emerald-50 text-emerald-800"><Building2 size={18} /></span><div><h3 className="font-[Manrope] text-lg font-bold text-slate-950">Parcel identified</h3><p className="mt-1 text-sm text-slate-600">{property.address?.fullAddress}</p></div><CheckCircle2 size={19} className="ml-auto text-emerald-700" /></div>
+            <dl className="mt-5 grid grid-cols-2 gap-4 text-sm">
+              <Fact label="Parcel / site ID" value={property.parcel?.pid || 'Not supplied'} />
+              <Fact label="Municipality" value={property.parcel?.municipality || 'Unknown'} />
+              <Fact label="Zone" value={property.zoning?.zone || 'Not resolved'} />
+              <Fact label="Lot area" value={property.parcel?.areaSqm ? `${Math.round(property.parcel.areaSqm)} m²` : 'Not supplied'} />
+            </dl>
+            <div className="mt-5 border-t border-slate-200 pt-4"><h4 className="text-xs font-bold uppercase tracking-[.12em] text-slate-500">Evidence pulled</h4><ul className="mt-2 grid gap-2">{property.evidence.map((source) => <li key={source.id} className="flex items-start gap-2 text-xs leading-5 text-slate-600"><span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${source.status === 'authoritative' ? 'bg-emerald-600' : 'bg-amber-500'}`} /><span className="flex-1"><strong className="text-slate-800">{source.label}</strong> · {source.status}<br />{source.notes}</span><a href={source.url} target="_blank" rel="noreferrer" aria-label={`Open ${source.label}`} className="text-emerald-800"><ExternalLink size={14} /></a></li>)}</ul></div>
+          </article>
+
+          <article className="rounded-xl border border-amber-200 bg-amber-50 p-5">
+            <div className="flex items-start gap-3"><Ruler size={20} className="mt-0.5 text-amber-800" /><div><h3 className="font-[Manrope] text-lg font-bold text-amber-950">House reference needs confirmation</h3><p className="mt-1 text-sm leading-6 text-amber-900">{site.referenceSource === 'municipal-roofline' ? 'The outline comes from a municipal roofline and may include eaves.' : 'No usable municipal building outline was found, so starter dimensions are estimated.'}</p></div></div>
+            <p className="mt-4 rounded-lg bg-white/70 p-3 text-xs leading-5 text-amber-950">These measurements locate the deck against the house. They must be field-checked before the drawings are issued for professional review.</p>
+          </article>
+        </section>
+
+        <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between"><div><h3 className="font-[Manrope] text-lg font-bold text-slate-950">Design wall measurements</h3><p className="mt-1 text-sm text-slate-600">Use the exterior wall where the deck will connect or sit beside the house.</p></div><span className={`rounded-full px-3 py-1 text-xs font-bold ${site.status === 'field-input-unverified' ? 'bg-amber-100 text-amber-900' : 'bg-slate-100 text-slate-600'}`}>{site.status === 'field-input-unverified' ? 'Field values recorded · unverified' : 'Reference only'}</span></div>
+          <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <label className="grid gap-1.5 text-xs font-bold uppercase tracking-[.08em] text-slate-500 sm:col-span-2">Selected wall<input value={site.designWall.label} onChange={(event) => onUpdateSite({}, { label: event.target.value, selectionStatus: 'user-selected' })} className="min-h-11 rounded-lg border border-slate-300 px-3 text-sm font-normal normal-case tracking-normal text-slate-800" /></label>
+            <label className="grid gap-1.5 text-xs font-bold uppercase tracking-[.08em] text-slate-500">Wall evidence<select value={site.designWall.selectionStatus} onChange={(event) => onUpdateSite({}, { selectionStatus: event.target.value as SiteModel['designWall']['selectionStatus'] })} className="min-h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm font-normal normal-case tracking-normal text-slate-800"><option value="unselected">Not selected</option><option value="user-selected">Selected from roofline</option><option value="field-measured">Field measured</option></select></label>
+            <NumberField label="Wall length" value={site.designWall.lengthMm} suffix="mm" min={2000} max={30000} onChange={(lengthMm) => onUpdateSite({}, { lengthMm })} />
+            <NumberField label="House depth" value={site.houseDepthMm} suffix="mm" min={2000} max={30000} onChange={(houseDepthMm) => onUpdateSite({ houseDepthMm })} />
+            <label className="grid gap-1.5 text-xs font-bold uppercase tracking-[.08em] text-slate-500">Cladding<select value={site.designWall.cladding} onChange={(event) => onUpdateSite({}, { cladding: event.target.value as SiteModel['designWall']['cladding'] })} className="min-h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm font-normal normal-case tracking-normal text-slate-800"><option value="unknown">Unknown</option><option value="wood-siding">Wood siding</option><option value="fiber-cement">Fiber cement</option><option value="vinyl">Vinyl</option><option value="stucco">Stucco</option><option value="brick-veneer">Brick veneer</option><option value="other">Other</option></select></label>
+            <label className="grid gap-1.5 text-xs font-bold uppercase tracking-[.08em] text-slate-500">Measured by<input value={site.measuredBy} onChange={(event) => onUpdateSite({ measuredBy: event.target.value })} placeholder="Homeowner or surveyor" className="min-h-11 rounded-lg border border-slate-300 px-3 text-sm font-normal normal-case tracking-normal text-slate-800" /></label>
+            <label className="grid gap-1.5 text-xs font-bold uppercase tracking-[.08em] text-slate-500">Measured date<input type="date" value={site.measuredAt} onChange={(event) => onUpdateSite({ measuredAt: event.target.value })} className="min-h-11 rounded-lg border border-slate-300 px-3 text-sm font-normal normal-case tracking-normal text-slate-800" /></label>
+          </div>
+          <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <div className="flex items-start justify-between gap-3"><div className="flex gap-2"><DoorOpen size={18} className="mt-0.5 text-slate-600" /><div><h4 className="text-sm font-bold text-slate-900">Exterior door on this wall</h4><p className="mt-1 text-xs leading-5 text-slate-600">Doors are never inferred from the roofline. Add one only when you can locate it.</p></div></div>{door && <button type="button" onClick={() => onUpdateSite({}, { openings: site.designWall.openings.filter((opening) => opening.id !== door.id) })} aria-label="Remove recorded door" className="grid h-9 w-9 place-items-center rounded-md border border-red-200 bg-white text-red-700"><Trash2 size={15} /></button>}</div>
+            {door ? <div className="mt-4 grid gap-4 sm:grid-cols-3"><NumberField label="Door offset" value={door.offsetMm} suffix="mm" min={0} max={site.designWall.lengthMm} onChange={(offsetMm) => onUpdateSite({}, { openings: site.designWall.openings.map((opening) => opening.id === door.id ? { ...opening, offsetMm } : opening) })} /><NumberField label="Door width" value={door.widthMm} suffix="mm" min={300} max={4000} onChange={(widthMm) => onUpdateSite({}, { openings: site.designWall.openings.map((opening) => opening.id === door.id ? { ...opening, widthMm } : opening) })} /><NumberField label="Sill above grade" value={door.sillHeightMm} suffix="mm" min={100} max={5000} onChange={(sillHeightMm) => onUpdateSite({}, { openings: site.designWall.openings.map((opening) => opening.id === door.id ? { ...opening, sillHeightMm } : opening) })} /></div> : <button type="button" onClick={() => onUpdateSite({}, { openings: [...site.designWall.openings, { id: `D${site.designWall.openings.length + 1}`, kind: 'door', offsetMm: Math.min(600, Math.max(0, site.designWall.lengthMm - 1500)), widthMm: 900, sillHeightMm: 675 }] })} className="mt-4 flex min-h-10 items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 text-xs font-bold text-slate-700"><Plus size={15} /> Add a measured door</button>}
+          </div>
+          <div className="mt-5 flex justify-end"><button type="button" onClick={onContinue} className="flex min-h-11 items-center gap-2 rounded-lg bg-emerald-800 px-5 text-sm font-bold text-white">Open deck designer <ArrowRight size={16} /></button></div>
+        </section>
+      </>}
+    </div>
+  </main>;
+}
+
+function NumberField({ label, value, suffix, min, max, onChange }: { label: string; value: number; suffix: string; min: number; max: number; onChange: (value: number) => void }) {
+  return <label className="grid gap-1.5 text-xs font-bold uppercase tracking-[.08em] text-slate-500">{label}<span className="flex min-h-11 items-center overflow-hidden rounded-lg border border-slate-300 bg-white"><input type="number" value={value} min={min} max={max} step="10" onChange={(event) => onChange(Number(event.target.value))} className="min-w-0 flex-1 px-3 text-sm font-normal text-slate-800 outline-none" /><span className="pr-3 text-xs font-semibold normal-case tracking-normal text-slate-400">{suffix}</span></span></label>;
+}
+
+function Fact({ label, value }: { label: string; value: string }) { return <div><dt className="text-xs font-bold uppercase tracking-[.1em] text-slate-400">{label}</dt><dd className="mt-1 font-semibold text-slate-800">{value}</dd></div>; }
