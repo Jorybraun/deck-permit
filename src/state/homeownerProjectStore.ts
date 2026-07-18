@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { ProfessionalReviewCycle, Property, ReviewExchangePublication, ReviewRedlineResolution, VerificationEvidence } from '../types';
+import type { ProfessionalReviewCycle, Property, ReviewExchangePublication, ReviewRedlineResolution, SidneyApplicationData, VerificationEvidence } from '../types';
 import { addPlatform, addStair, connectStairLanding, createEmptyDesign, insertPlatformVertex, movePlatformLayer, moveStair, removePlatform, removeStair, renamePlatform, resizeStairSide, rotatePlatform, selectDesignObject, setPlatformEdgeLength, setPlatformEdgeRole, setPlatformElevation, setPlatformFinish, setPlatformFramingIntent, setPlatformPurpose, setStairConstruction, updatePlatformBoundary } from '../domain/deckDesign';
 import type { AddPlatformInput, AddStairInput, ClosedBoundary, DeckDesign } from '../domain/deckDesign';
 import type { SiteModel } from '../domain/siteModel';
@@ -27,6 +27,7 @@ export interface HomeownerProjectState {
   reviewIssueRevision: number;
   professionalReviewCycles: ProfessionalReviewCycle[];
   verificationEvidence: VerificationEvidence[];
+  sidneyApplication: SidneyApplicationData;
   designHistory: DeckDesign[];
   designFuture: DeckDesign[];
   loading: boolean;
@@ -41,6 +42,8 @@ export interface HomeownerProjectState {
   setFraming: (framing: FramingDesign | null) => void;
   setReviewPublication: (publication: ReviewExchangePublication | null) => void;
   importProfessionalReview: (evidence: VerificationEvidence, cycle: ProfessionalReviewCycle) => void;
+  addVerificationEvidence: (evidence: VerificationEvidence) => void;
+  updateSidneyApplication: (changes: Partial<SidneyApplicationData>) => void;
   resolveReviewRedline: (input: { cycleId: string; redlineId: string; targetDesignFingerprint: string; disposition: ReviewRedlineResolution['disposition']; response: string }) => void;
   addPlatform: (input: AddPlatformInput) => void;
   updatePlatformBoundary: (platformId: string, boundary: ClosedBoundary) => void;
@@ -71,6 +74,7 @@ export interface HomeownerProjectState {
 
 export const emptyProperty: Property = { address: null, parcel: null, zoning: null, buildableEnvelope: null, snowLoad: 1, buildings: [], evidence: [], existingConditions: null };
 export const emptyIntent: HomeownerIntent = { uses: [], materialPreference: 'unsure', desiredFeatures: [], budgetRange: 'unsure', inspirationNotes: '' };
+export const emptySidneyApplication: SidneyApplicationData = { civicAddress: '', ownerName: '', ownerCompany: '', ownerAddress: '', ownerCityProvince: '', ownerPostalCode: '', ownerPhone: '', ownerEmail: '', applicantName: '', applicantCompany: '', applicantBusinessLicence: '', applicantAddress: '', applicantCityProvince: '', applicantPostalCode: '', applicantPhone: '', applicantEmail: '', projectDescription: '', constructionValue: '', existingFloorAreaSqm: '', deckAreaSqm: '' };
 
 const freshState = () => ({
   stage: 'idea' as ProjectStage,
@@ -83,6 +87,7 @@ const freshState = () => ({
   reviewIssueRevision: 0,
   professionalReviewCycles: [] as ProfessionalReviewCycle[],
   verificationEvidence: [] as VerificationEvidence[],
+  sidneyApplication: emptySidneyApplication,
   designHistory: [] as DeckDesign[],
   designFuture: [] as DeckDesign[],
   loading: false,
@@ -94,7 +99,7 @@ export const useHomeownerProject = create<HomeownerProjectState>((set) => ({
   persistenceStatus: 'loading',
   lastSavedAt: null,
   setStage: (stage) => set({ stage }),
-  setProperty: (property) => set({ property, error: null, reviewPublication: null }),
+  setProperty: (property) => set((state) => ({ property, error: null, reviewPublication: null, sidneyApplication: { ...state.sidneyApplication, civicAddress: property.address?.fullAddress || state.sidneyApplication.civicAddress } })),
   setSite: (site) => set({ site, reviewPublication: null }),
   updateIntent: (changes) => set((state) => ({ intent: { ...state.intent, ...changes } })),
   replaceDesign: (design) => set((state) => commitDesign(state, design)),
@@ -107,6 +112,8 @@ export const useHomeownerProject = create<HomeownerProjectState>((set) => ({
     verificationEvidence: [...state.verificationEvidence.filter((item) => item.id !== evidence.id), evidence],
     professionalReviewCycles: upsertProfessionalReviewCycle(state.professionalReviewCycles, cycle),
   })),
+  addVerificationEvidence: (evidence) => set((state) => ({ verificationEvidence: [...state.verificationEvidence.filter((item) => item.id !== evidence.id), evidence] })),
+  updateSidneyApplication: (changes) => set((state) => ({ sidneyApplication: { ...state.sidneyApplication, ...changes } })),
   resolveReviewRedline: (input) => set((state) => ({ professionalReviewCycles: recordRedlineResolution(state.professionalReviewCycles, input) })),
   addPlatform: (input) => set((state) => commitDesign(state, addPlatform(state.design, input))),
   updatePlatformBoundary: (platformId, boundary) => set((state) => commitDesign(state, updatePlatformBoundary(state.design, platformId, boundary))),

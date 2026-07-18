@@ -5,9 +5,11 @@ import type { FramingCheck, FramingDesign, FramingReviewGate } from '../../domai
 import type { SiteModel } from '../../domain/siteModel';
 import { buildCanonicalReviewIssue } from '../../services/canonicalReviewIssue';
 import { canonicalPlanFingerprint } from '../../services/canonicalPlanSet';
-import type { ProfessionalReviewCycle, Property, ReviewExchangePublication, ReviewRedlineResolution, VerificationEvidence } from '../../types';
+import { evaluateCanonicalPermitReadiness } from '../../services/canonicalPermitReadiness';
+import type { ProfessionalReviewCycle, Property, ReviewExchangePublication, ReviewRedlineResolution, SidneyApplicationData, VerificationEvidence } from '../../types';
 import { FramingPlanPreview } from './FramingPlanPreview';
 import { CanonicalReviewPanel } from './CanonicalReviewPanel';
+import { CanonicalPermitPackagePanel } from './CanonicalPermitPackagePanel';
 
 interface PermitStageProps {
   property: Property;
@@ -22,6 +24,7 @@ interface PermitStageProps {
   reviewIssueRevision: number;
   professionalReviewCycles: ProfessionalReviewCycle[];
   verificationEvidence: VerificationEvidence[];
+  sidneyApplication: SidneyApplicationData;
   onGenerateFraming: () => void;
   onDownloadReviewSet: () => void | Promise<void>;
   onDownloadCadExchange: () => void;
@@ -30,11 +33,13 @@ interface PermitStageProps {
   onContinue: () => void;
   onPublishReview: (publication: ReviewExchangePublication) => void;
   onImportReview: (evidence: VerificationEvidence, cycle: ProfessionalReviewCycle) => void;
+  onAddVerificationEvidence: (evidence: VerificationEvidence) => void;
+  onUpdateSidneyApplication: (changes: Partial<SidneyApplicationData>) => void;
   onResolveRedline: (input: { cycleId: string; redlineId: string; targetDesignFingerprint: string; disposition: ReviewRedlineResolution['disposition']; response: string }) => void;
 }
 
 /** Composes reviewable framing evidence and permit readiness from canonical project state. */
-export function PermitStage({ property, site, design, framing, framingStale, designErrors, siteErrors, siteWarnings, reviewPublication, reviewIssueRevision, professionalReviewCycles, verificationEvidence, onGenerateFraming, onDownloadReviewSet, onDownloadCadExchange, onDownloadCalculationReport, onBackToDesign, onContinue, onPublishReview, onImportReview, onResolveRedline }: PermitStageProps) {
+export function PermitStage({ property, site, design, framing, framingStale, designErrors, siteErrors, siteWarnings, reviewPublication, reviewIssueRevision, professionalReviewCycles, verificationEvidence, sidneyApplication, onGenerateFraming, onDownloadReviewSet, onDownloadCadExchange, onDownloadCalculationReport, onBackToDesign, onContinue, onPublishReview, onImportReview, onAddVerificationEvidence, onUpdateSidneyApplication, onResolveRedline }: PermitStageProps) {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewSheetIndex, setPreviewSheetIndex] = useState(0);
   const [previewZoom, setPreviewZoom] = useState(100);
@@ -48,6 +53,13 @@ export function PermitStage({ property, site, design, framing, framingStale, des
   const publicationIsCurrent = reviewPublication?.designFingerprint === currentFingerprint;
   const issueRevision = publicationIsCurrent ? reviewPublication?.revision || reviewIssueRevision : reviewIssueRevision + 1;
   const reviewIssue = useMemo(() => framingCurrent && framing ? buildCanonicalReviewIssue({ property, site, design, framing, reviewCycles: professionalReviewCycles, revision: issueRevision, issuedAt: publicationIsCurrent ? reviewPublication?.issueIssuedAt : undefined }) : null, [design, framing, framingCurrent, issueRevision, professionalReviewCycles, property, publicationIsCurrent, reviewPublication?.issueIssuedAt, site]);
+  const permitApplication = useMemo(() => ({
+    ...sidneyApplication,
+    civicAddress: sidneyApplication.civicAddress || property.address?.fullAddress || '',
+    projectDescription: sidneyApplication.projectDescription || 'Construct a new residential deck, stairs, guards, and associated foundations as shown on the coordinated drawing set.',
+    deckAreaSqm: sidneyApplication.deckAreaSqm || (reviewIssue?.reviewPackage.calculationReport?.platformSystems.reduce((sum, system) => sum + system.areaSqM, 0).toFixed(1) || ''),
+  }), [property.address?.fullAddress, reviewIssue?.reviewPackage.calculationReport?.platformSystems, sidneyApplication]);
+  const permitReadiness = useMemo(() => reviewIssue ? evaluateCanonicalPermitReadiness({ issue: reviewIssue, property, application: permitApplication, evidence: verificationEvidence, reviewCycles: professionalReviewCycles }) : null, [permitApplication, professionalReviewCycles, property, reviewIssue, verificationEvidence]);
   const reviewSheets = reviewIssue?.reviewPackage.planset || [];
   const plannedSheets = [
     { id: 'A0.0', name: 'Cover, project data & drawing index', status: property.parcel ? 'derived' : 'blocked' },
@@ -132,6 +144,7 @@ export function PermitStage({ property, site, design, framing, framingStale, des
         </div>
       </section>
       {reviewIssue && <CanonicalReviewPanel issue={reviewIssue} publication={reviewPublication} reviewCycles={professionalReviewCycles} verificationEvidence={verificationEvidence} onPublish={onPublishReview} onImportReview={onImportReview} onResolveRedline={onResolveRedline} />}
+      {reviewIssue && permitReadiness && <CanonicalPermitPackagePanel issue={reviewIssue} property={property} application={permitApplication} readiness={permitReadiness} evidence={verificationEvidence} reviewCycles={professionalReviewCycles} onUpdateApplication={onUpdateSidneyApplication} onRecordEvidence={onAddVerificationEvidence} />}
     </div>
   </main>{previewOpen && reviewSheets.length > 0 && <div className="fixed inset-0 z-[90] flex flex-col bg-[#17211c]/95" role="dialog" aria-modal="true" aria-label="Permit drawing set preview">
     <header className="flex flex-wrap items-center gap-3 border-b border-white/15 bg-[#17211c] px-4 py-3 text-white sm:px-6"><div className="min-w-0 flex-1"><p className="text-[10px] font-bold uppercase tracking-[.14em] text-emerald-300">Complete 11×17 sheet</p><h3 className="truncate text-sm font-bold">{reviewSheets[previewSheetIndex].number} · {reviewSheets[previewSheetIndex].title}</h3></div><label className="flex items-center gap-2 text-xs font-bold"><span>Zoom</span><input aria-label="Drawing preview zoom" type="range" min="60" max="180" step="10" value={previewZoom} onChange={(event) => setPreviewZoom(Number(event.target.value))} /><span className="w-10 text-right tabular-nums">{previewZoom}%</span></label><button type="button" onClick={() => void downloadReviewSet()} disabled={pdfStatus === 'building'} className="flex min-h-10 items-center gap-2 rounded-lg bg-white px-3 text-xs font-bold text-emerald-900 disabled:opacity-50"><Download size={14} /> {pdfStatus === 'building' ? 'Building…' : 'PDF'}</button><button type="button" onClick={() => setPreviewOpen(false)} className="grid h-10 w-10 place-items-center rounded-lg border border-white/20" aria-label="Close drawing preview"><X size={18} /></button></header>

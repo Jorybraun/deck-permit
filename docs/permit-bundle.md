@@ -2,14 +2,14 @@
 
 ## Responsibility
 
-`src/services/permitBundle.ts` assembles one revision-bound Town of Sidney deck-permit ZIP from artifacts already owned by the active project. It does not create design decisions, validate professional standing, sign an application, upload files, or submit to the municipality.
+`src/services/canonicalPermitBundle.ts` assembles one revision-bound Town of Sidney deck-permit ZIP directly from the active canonical review issue. It does not create design decisions, validate professional standing, sign an application, upload files, or submit to the municipality. `src/services/permitBundle.ts` remains only for migration compatibility with the retired project shape.
 
 ## Public API and version
 
-- Schema: `deck-permit-bundle/v3`
-- `buildPermitBundle(input) -> PermitBundleArtifact`
-- `downloadPermitBundle(input) -> PermitBundleArtifact`
-- Boundary helpers: `collectEvidenceEntries`, `validateBundleInput`, `validateBundleArchive`, and `buildBundleReadme`
+- Schema: `permitly-canonical-permit-bundle/v1`
+- `buildCanonicalPermitBundle(input) -> CanonicalPermitBundleArtifact`
+- `downloadCanonicalPermitBundle(input) -> CanonicalPermitBundleArtifact`
+- Boundary helpers: `collectCaptureEntries` and `collectProfessionalEntries`
 
 The artifact reports its package kind, exact file list, and byte size. The user-visible package kind is derived from `SubmissionReadiness`; an incomplete project is always labelled a professional review package.
 
@@ -17,7 +17,7 @@ Accepted canonical review cycles also contribute separate machine-readable profe
 
 ## State and dependencies
 
-The module owns no durable state. Project metadata is owned by Zustand and persisted as a versioned IndexedDB snapshot. Evidence PDF bytes are owned by the IndexedDB evidence vault and are read through `loadEvidenceFile`. The module consumes the vector drawing exporter, official Sidney form filler, submission-manifest serializer, evidence assessor, SHA-256 digest service, and `fflate` ZIP codec.
+The module owns no durable state. Canonical project metadata, municipal application data, and evidence metadata are owned by the homeowner Zustand store and persisted in local storage. Private capture and evidence bytes are owned by separate IndexedDB stores. The module consumes the ten-sheet vector exporter, calculation booklet, official Sidney form filler, canonical DXF, SHA-256 digest service, and `fflate` ZIP codec.
 
 Dependency direction is UI → permit bundle → artifact services/evidence read interface. The bundle service must not import React, mutate the project store, write the evidence vault, call the review-exchange server, send email, or contact a professional registry.
 
@@ -25,14 +25,14 @@ Dependency direction is UI → permit bundle → artifact services/evidence read
 
 - `README-FIRST.txt`: readiness, revision, limitations, outstanding gates, and submission contact.
 - `01-application/`: unsigned official prefill and current signed/checklist evidence when recorded.
-- `02-drawings/`: coordinated ten-sheet 11×17 vector PDF. Canonical SVG paths and text are written directly as PDF vector/text operators rather than flattened into page images. C1.0 records existing-condition geometry, measurement/datum provenance, photo coverage, evidence identifiers, and unresolved conditions.
-- `03-professional-and-site-evidence/`: evidence accepted by the app for the current project state.
-- `04-records/`: submission manifest, structural design-basis report, professional redline response log, and a SHA-256 package index covering every other file.
-- `05-rejected-or-stale-evidence/`: retained audit records that do not satisfy the current revision.
+- `02-drawings/`: coordinated ten-sheet 11×17 vector PDF, calculation booklet, and layered millimetre DXF carrying one design fingerprint.
+- `03-evidence/`: integrity-checked site captures, owner-signed application evidence, and current professional evidence.
+- `04-records/`: canonical project, calculation report, canonical submission manifest, professional structural-resolution records, and a SHA-256 package index covering every preceding file.
+- `05-stale-evidence/`: integrity-checked evidence belonging to another design fingerprint. It is retained for audit and never satisfies current readiness.
 
 ## Failure and recovery
 
-Assembly fails closed when the address, PID, ten canonical sheets, or design fingerprint no longer match the manifest; required application fields are incomplete; the official form or drawing conversion fails; evidence bytes are missing; evidence metadata, MIME type, byte count, filename, or SHA-256 digest does not match; or the generated ZIP does not contain the exact expected non-empty paths and bytes. The UI preserves the project and provides a retryable error. Recovery is to regenerate stale drawings, complete the form, reattach evidence, or retry the official form download.
+Assembly fails closed when the ten canonical sheets, calculation report, DXF, or design fingerprint no longer match the manifest; required application fields are incomplete; the official form or drawing conversion fails; capture/evidence bytes are missing; MIME type, byte count, or SHA-256 digest does not match; or the generated ZIP does not contain the exact expected non-empty paths. The UI preserves the project and provides a retryable error. Recovery is to regenerate stale drawings, complete the form, reattach evidence, or retry the official form download.
 
 ## Security and privacy
 
@@ -40,7 +40,7 @@ ZIP generation occurs in the browser. It does not upload owner PII, plans, or ev
 
 ## Verification
 
-- Unit: safe names, missing/tampered evidence, rejected-evidence isolation, exact ZIP paths, empty-entry rejection, and readiness disclosures.
+- Unit: missing/tampered capture and professional evidence, stale-revision isolation, exact ZIP paths, index coverage, and fail-closed readiness disclosures.
 - Integration: official PDF fill and ten-page vector drawing tests, including fixed 17×11 media boxes and an image-XObject regression guard.
 - Journey: complete application fields on Submit, assemble the appropriate package kind, observe a validated file count, and confirm reload persistence.
 - Release: TypeScript, Vitest, Vite production build, and production dependency audit.

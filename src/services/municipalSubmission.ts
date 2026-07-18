@@ -1,6 +1,12 @@
 import type { PermitManifest, PermitSubmissionRecord, SubmissionReadiness } from '../types';
-import type { PermitBundleArtifact } from './permitBundle';
 import { sha256Blob } from './fileDigest';
+
+export interface MunicipalPackageArtifact {
+  blob: Blob;
+  kind: 'professional-review' | 'ready-to-submit';
+  fileNames?: string[];
+  byteSize?: number;
+}
 
 export interface MunicipalDeliveryCapabilities {
   configured: boolean;
@@ -19,7 +25,7 @@ export async function getMunicipalDeliveryCapabilities(fetcher: typeof fetch = f
 }
 
 export async function deliverSidneyPermitPackage(input: {
-  artifact: PermitBundleArtifact;
+  artifact: MunicipalPackageArtifact;
   manifest: PermitManifest;
   readiness: SubmissionReadiness;
   ownerEmail: string;
