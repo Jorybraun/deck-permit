@@ -6,7 +6,7 @@ import { framingInputFingerprint, generateFramingDesign, isFramingStale } from '
 
 const property: Property = { address: null, parcel: null, zoning: null, buildableEnvelope: null, snowLoad: 1, buildings: [], evidence: [], existingConditions: null };
 
-describe('FramingDesign v1 public contract', () => {
+describe('FramingDesign v2 public contract', () => {
   it('generates explicit ledger, joist, beam, post, and footing members for a supported platform', () => {
     let design = addPlatform(createEmptyDesign(), { boundary: rectangularBoundary(0, 0, 4000, 3000), elevationMm: 900, houseEdgeIndex: 0 });
     design = setPlatformFramingIntent(design, 'P1', { supportStrategy: 'ledger', joistSpacingMm: 400 });
@@ -20,6 +20,10 @@ describe('FramingDesign v1 public contract', () => {
     expect(framing.posts.length).toBeGreaterThanOrEqual(3);
     expect(framing.footings).toHaveLength(framing.posts.length);
     expect(framing.joists.every((joist) => joist.section.includes('2×8') && joist.status === 'table-screened')).toBe(true);
+    expect(framing.connections.map((connection) => connection.kind)).toEqual(['ledger-to-house', 'joist-to-ledger', 'joist-to-beam', 'beam-to-post', 'post-to-footing', 'guard-to-frame']);
+    expect(framing.connections.every((connection) => connection.status === 'design-required' && connection.hardware.product === null && connection.hardware.fastenerSchedule === null)).toBe(true);
+    expect(framing.connections.find((connection) => connection.kind === 'joist-to-ledger')).toMatchObject({ actionScope: 'each', designActionKn: expect.any(Number) });
+    expect(framing.connections.find((connection) => connection.kind === 'beam-to-post')!.designActionKn).toBeGreaterThan(0);
     expect(framing.status).toBe('review-required');
   });
 
@@ -52,6 +56,8 @@ describe('FramingDesign v1 public contract', () => {
     expect(framing.stairTrimmers).toHaveLength(4);
     expect(framing.stairConnections).toHaveLength(2);
     expect(framing.stairConnections.map((connection) => connection.connectionType)).toEqual(['stringer-to-header', 'stringer-to-landing-edge']);
+    expect(framing.connections.filter((connection) => connection.kind === 'stair-to-support')).toHaveLength(2);
+    expect(framing.connections.filter((connection) => connection.kind === 'stair-to-support').every((connection) => connection.quantity === 3 && connection.designActionKn === null)).toBe(true);
     expect(framing.stairOpenings[0]).toMatchObject({ stairId: 'ST1', endpoint: 'from', clearWidthMm: 900, projectedWidthMm: 900, skewDeg: 0, headerSection: 'Engineer design' });
     expect(framing.checks.find((check) => check.id === 'stair-connections')).toMatchObject({ status: 'review' });
   });

@@ -5,6 +5,7 @@ import { codeProfileForMunicipality, CWC_DECK_GUIDE, selectPreliminarySections }
 import type { BeamMember, FramingCheck, FramingDesign, FramingReviewGate, FramingStatus, GenerateFramingInput, GuardAssembly, JoistMember, LedgerMember, PlatformFramingSystem, StairStringerMember } from './types';
 import { FramingDesignError } from './types';
 import { generateStairConnectionFraming } from './stairConnections';
+import { generateStructuralConnections } from './connections';
 
 const DEAD_LOAD_KPA = 0.5;
 const LIVE_LOAD_KPA = 1.9;
@@ -12,7 +13,7 @@ const DEFAULT_SOIL_BEARING_KPA = 75;
 const MAX_POST_SPACING_MM = 1800;
 
 /**
- * FramingDesign v1 owns generated structural intent for one canonical DeckDesign input.
+ * FramingDesign v2 owns generated members and keyed connection-design work packages.
  * It produces reviewable member geometry and rule provenance, never professional certification.
  */
 export function generateFramingDesign(design: DeckDesign, site: SiteModel, input: GenerateFramingInput, generatedAt = new Date().toISOString()): FramingDesign {
@@ -123,6 +124,17 @@ export function generateFramingDesign(design: DeckDesign, site: SiteModel, input
 
   const stairStringers = generateStairStringers(design);
   const stairConnectionFraming = generateStairConnectionFraming(design);
+  const connections = generateStructuralConnections({
+    assumptions,
+    joists,
+    beams,
+    ledgers,
+    posts,
+    footings,
+    guards,
+    stairStringers,
+    stairConnections: stairConnectionFraming.connections,
+  });
   const invalidStairCount = design.stairs.filter((stair) => assessStairPlanGeometry(design, stair).status !== 'valid').length;
   if (design.stairs.length) checks.push({
     id: 'stair-connections', title: 'Hosted stair openings and connections', objectId: 'framing', status: invalidStairCount ? 'blocked' : 'review',
@@ -133,9 +145,10 @@ export function generateFramingDesign(design: DeckDesign, site: SiteModel, input
   const hasEngineering = platformSystems.some((system) => system.status === 'engineering-required');
   const reviewGates = buildReviewGates(site, hasEngineering, ledgers.length, guards.length, stairStringers.length);
   return {
-    schema: 'framing-design/v1', units: 'mm', inputFingerprint: framingInputFingerprint(design, site, input), generatedAt,
+    schema: 'framing-design/v2', units: 'mm', inputFingerprint: framingInputFingerprint(design, site, input), generatedAt,
     codeProfile: codeProfileForMunicipality(input.municipality), assumptions, platformSystems, joists, beams, ledgers, posts, footings, guards, stairStringers,
     stairOpenings: stairConnectionFraming.openings, stairTrimmers: stairConnectionFraming.trimmers, stairConnections: stairConnectionFraming.connections,
+    connections,
     checks, reviewGates, sources: [CWC_DECK_GUIDE], status: hasEngineering ? 'engineering-required' : 'review-required',
   };
 }
@@ -151,7 +164,7 @@ export function framingInputFingerprint(design: DeckDesign, site: SiteModel, inp
 }
 
 export function isFramingStale(framing: FramingDesign | null, design: DeckDesign, site: SiteModel, input: GenerateFramingInput): boolean {
-  return !framing || framing.inputFingerprint !== framingInputFingerprint(design, site, input);
+  return !framing || framing.schema !== 'framing-design/v2' || framing.inputFingerprint !== framingInputFingerprint(design, site, input);
 }
 
 function resolveJoistAxis(platform: DeckPlatform, housePoints: readonly [PointMm, PointMm] | null): 'x' | 'y' {

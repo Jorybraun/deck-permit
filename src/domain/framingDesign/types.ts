@@ -150,6 +150,29 @@ export interface StairConnection {
   status: 'review-required';
 }
 
+export type StructuralConnectionKind = 'ledger-to-house' | 'joist-to-ledger' | 'joist-to-beam' | 'beam-to-post' | 'post-to-footing' | 'guard-to-frame' | 'stair-to-support';
+
+/** A keyed connection work package located on S2.0 and resolved on A4.0. */
+export interface StructuralConnectionGroup {
+  id: string;
+  kind: StructuralConnectionKind;
+  platformId?: string;
+  pointMm: PointMm;
+  quantity: number;
+  fromMemberIds: string[];
+  receivingMemberIds: string[];
+  designActionKn: number | null;
+  actionScope: 'each' | 'group' | 'unresolved';
+  demandBasis: string;
+  hardware: {
+    product: null;
+    fastenerSchedule: null;
+    corrosionClass: null;
+  };
+  requirements: string[];
+  status: 'design-required';
+}
+
 export interface PlatformFramingSystem {
   platformId: string;
   joistAxis: 'x' | 'y';
@@ -187,7 +210,7 @@ export interface FramingRuleSource {
 }
 
 export interface FramingDesign {
-  schema: 'framing-design/v1';
+  schema: 'framing-design/v2';
   units: 'mm';
   inputFingerprint: string;
   generatedAt: string;
@@ -204,6 +227,7 @@ export interface FramingDesign {
   stairOpenings: StairOpeningMember[];
   stairTrimmers: StairTrimmerMember[];
   stairConnections: StairConnection[];
+  connections: StructuralConnectionGroup[];
   checks: FramingCheck[];
   reviewGates: FramingReviewGate[];
   sources: FramingRuleSource[];

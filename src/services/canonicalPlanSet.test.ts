@@ -51,6 +51,7 @@ describe('canonical ten-sheet review set', () => {
     expect(planSet.sheets.find((sheet) => sheet.number === 'S1.0')?.svg).toContain('FOUNDATION DESIGN GATE');
     expect(planSet.sheets.find((sheet) => sheet.number === 'S2.0')?.svg).toContain('Stair framing');
     expect(planSet.sheets.find((sheet) => sheet.number === 'S2.0')?.svg).toContain('ST1-FROM-HDR');
+    expect(planSet.sheets.find((sheet) => sheet.number === 'S2.0')?.svg).toContain('P1-C1');
     const elevationSheet = planSet.sheets.find((sheet) => sheet.number === 'A3.0')?.svg || '';
     expect(elevationSheet).toContain('E1 · HOUSE → YARD BUILDING SECTION / ELEVATION');
     expect(elevationSheet).toContain('E2 · SELECTED HOUSE WALL ELEVATION');
@@ -61,6 +62,9 @@ describe('canonical ten-sheet review set', () => {
     expect(elevationSheet).toContain('P1-B1-P1-F');
     expect(planSet.sheets.find((sheet) => sheet.number === 'A4.0')?.svg).toContain('3 STRINGERS');
     expect(planSet.sheets.find((sheet) => sheet.number === 'A4.0')?.svg).toContain('TOP: ST1-FROM-CONN');
+    expect(planSet.sheets.find((sheet) => sheet.number === 'A4.0')?.svg).toContain('KEYED STRUCTURAL CONNECTION SCHEDULE');
+    expect(planSet.sheets.find((sheet) => sheet.number === 'A4.0')?.svg).toContain('ledger to house');
+    expect(planSet.sheets.find((sheet) => sheet.number === 'A4.0')?.svg).toContain('HARDWARE / FASTENERS / CORROSION CLASS UNRESOLVED');
     expect(planSet.sheets.find((sheet) => sheet.number === 'S4.0')?.svg).toContain('PROFESSIONAL REVIEW GATES');
 
     const movedDoorSite = { ...site, designWall: { ...site.designWall, openings: [{ ...site.designWall.openings[0], offsetMm: 1200 }] } };

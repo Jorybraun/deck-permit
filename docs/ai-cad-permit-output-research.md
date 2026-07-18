@@ -116,7 +116,7 @@ Documents issued for permitting that contain professional engineering must be au
 - The active product is deterministic TypeScript, not an AI architect.
 - Its existing AI/Cerebras implementation is disconnected legacy code tied to an older model.
 - Current terrain is one number, not a surface.
-- Framing is heuristic and connections are not designed.
+- Framing remains heuristic. The active v2 model now creates keyed connection work packages with quantities, member interfaces, and coordinated gravity actions, but proprietary hardware, fasteners, lateral/uplift actions, and capacity checks remain professional design work.
 - Elevations, sections, and details are diagrammatic and incomplete.
 - The active canonical exporter now converts SVG paths and searchable text directly to fixed-size 17×11 PDF pages without a canvas or page-image intermediary. Professional review is still required for the design content itself.
 - The active plan set should stay labelled `Professional review — not for construction` until the model, analysis, drawing, and review pipeline above exists.
