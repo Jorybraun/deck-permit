@@ -23,14 +23,44 @@ export interface HouseWallReference {
   openings: HouseOpening[];
 }
 
+export type TerrainEvidenceSource = 'assumed-datum' | 'homeowner-measurement' | 'lidar-scan' | 'survey';
+export type TerrainVerificationStatus = 'reference' | 'recorded' | 'professional-verified';
+
+export interface TerrainDatum {
+  id: 'DATUM-1';
+  label: string;
+  elevationMm: number;
+  source: TerrainEvidenceSource;
+  verificationStatus: TerrainVerificationStatus;
+}
+
+/** A grade observation in the local house-wall coordinate system. */
+export interface TerrainGradePoint {
+  id: string;
+  label: string;
+  xMm: number;
+  yMm: number;
+  elevationMm: number;
+  source: TerrainEvidenceSource;
+  verificationStatus: TerrainVerificationStatus;
+  notes: string;
+}
+
+/** Owns the vertical datum and observations used to derive local grade. */
+export interface TerrainSurface {
+  schema: 'terrain-surface/v1';
+  datum: TerrainDatum;
+  gradePoints: TerrainGradePoint[];
+}
+
 export interface SiteModel {
-  schema: 'site-model/v1';
+  schema: 'site-model/v2';
   units: 'mm';
   status: 'reference-unverified' | 'field-input-unverified';
   referenceSource: 'municipal-roofline' | 'estimated' | 'field-measurement';
   houseDepthMm: number;
   designWall: HouseWallReference;
-  terrainElevationMm: number;
+  terrain: TerrainSurface;
   measuredBy: string;
   measuredAt: string;
   notes: string;
@@ -40,4 +70,12 @@ export interface SiteModel {
 export interface SiteAssessment {
   errors: string[];
   warnings: string[];
+}
+
+export interface TerrainElevationResult {
+  elevationMm: number;
+  method: 'datum' | 'observed' | 'interpolated';
+  sourcePointIds: string[];
+  nearestDistanceMm: number | null;
+  verificationStatus: TerrainVerificationStatus;
 }

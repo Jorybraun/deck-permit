@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Property } from '../../types';
-import { createSiteModel, flipHouseWallDirection, rotateHouseWallAlignment } from './siteModel';
+import { createSiteModel, flipHouseWallDirection, rotateHouseWallAlignment, updateSiteModel } from './siteModel';
+import { addTerrainGradePoint } from './terrain';
 import { projectPropertyToLocal, selectHouseWall } from './propertyGeometry';
 
 const property: Property = {
@@ -46,5 +47,13 @@ describe('property-to-deck alignment', () => {
     const corrected = rotateHouseWallAlignment(createSiteModel(property));
     const selected = selectHouseWall(corrected, property, 'house', 0);
     expect(selected.designWall).toMatchObject({ reverseDirection: true, invertOutward: true, sourceEdgeIndex: 0 });
+  });
+
+  it('keeps wall provenance independent when terrain evidence changes', () => {
+    const site = createSiteModel(property);
+    const terrain = addTerrainGradePoint(site.terrain, { label: 'Yard', xMm: 0, yMm: 1000, elevationMm: 0, source: 'homeowner-measurement', verificationStatus: 'recorded', notes: '' });
+    const updated = updateSiteModel(site, { terrain });
+    expect(updated.referenceSource).toBe('municipal-roofline');
+    expect(updated.terrain.gradePoints).toHaveLength(1);
   });
 });

@@ -1,5 +1,5 @@
 import type { DeckDesign, DeckPlatform, PointMm } from '../deckDesign';
-import type { SiteModel } from '../siteModel';
+import { terrainElevationAt, type SiteModel } from '../siteModel';
 import { boundaryBounds, clipAxisLine, isAxisAlignedRectangle, isHorizontal, lineLength, platformEdgePoints, stationsAlong } from './geometry';
 import { codeProfileForMunicipality, CWC_DECK_GUIDE, selectPreliminarySections } from './rules';
 import type { BeamMember, FramingCheck, FramingDesign, FramingReviewGate, FramingStatus, GenerateFramingInput, GuardAssembly, JoistMember, LedgerMember, PlatformFramingSystem, StairStringerMember } from './types';
@@ -95,7 +95,8 @@ export function generateFramingDesign(design: DeckDesign, site: SiteModel, input
         const reactionKn = round(assumptions.governingAreaLoadKpa * (MAX_POST_SPACING_MM / 1000) * (joistDesignSpanMm / 1000) / 2, 2);
         stationsAlong(start, end, MAX_POST_SPACING_MM).forEach((point, postIndex) => {
           const postId = `${beam.id}-P${postIndex + 1}`;
-          posts.push({ id: postId, platformId: platform.id, beamId: beam.id, pointMm: point, heightMm: Math.max(0, platform.elevationMm - site.terrainElevationMm), section: tableEligible ? '140×140 (6×6)' : 'Engineer design', estimatedReactionKn: reactionKn, status: structuralStatus });
+          const grade = terrainElevationAt(site.terrain, point);
+          posts.push({ id: postId, platformId: platform.id, beamId: beam.id, pointMm: point, heightMm: Math.max(0, platform.elevationMm - grade.elevationMm), section: tableEligible ? '140×140 (6×6)' : 'Engineer design', estimatedReactionKn: reactionKn, status: structuralStatus });
           const footingSide = Math.max(300, Math.ceil(Math.sqrt(reactionKn / soilBearingKpa) * 1000 / 50) * 50);
           footings.push({ id: `${postId}-F`, platformId: platform.id, postId, centerMm: point, widthMm: footingSide, lengthMm: footingSide, depthMm: null, assumedSoilBearingKpa: soilBearingKpa, estimatedReactionKn: reactionKn, status: 'review-required' });
         });
@@ -104,9 +105,11 @@ export function generateFramingDesign(design: DeckDesign, site: SiteModel, input
 
     platform.edges.forEach((edge, edgeIndex) => {
       if (stairEdgeIds.has(edge.id) || edge.role === 'house' || edge.role === 'shared' || edge.role === 'stair') return;
-      if (edge.role !== 'guard' && platform.elevationMm - site.terrainElevationMm <= 600) return;
       const start = platform.boundary.vertices[edgeIndex]; const end = platform.boundary.vertices[(edgeIndex + 1) % platform.boundary.vertices.length];
-      guards.push({ id: `${platform.id}-G${edgeIndex + 1}`, platformId: platform.id, edgeId: edge.id, startMm: [start.xMm, start.yMm], endMm: [end.xMm, end.yMm], heightMm: platform.elevationMm - site.terrainElevationMm > 1800 ? 1070 : 900, system: platform.finish.guardSystem, status: 'review-required' });
+      const edgePoints: PointMm[] = [[start.xMm, start.yMm], [(start.xMm + end.xMm) / 2, (start.yMm + end.yMm) / 2], [end.xMm, end.yMm]];
+      const maximumDropMm = Math.max(...edgePoints.map((point) => platform.elevationMm - terrainElevationAt(site.terrain, point).elevationMm));
+      if (edge.role !== 'guard' && maximumDropMm <= 600) return;
+      guards.push({ id: `${platform.id}-G${edgeIndex + 1}`, platformId: platform.id, edgeId: edge.id, startMm: [start.xMm, start.yMm], endMm: [end.xMm, end.yMm], heightMm: maximumDropMm > 1800 ? 1070 : 900, system: platform.finish.guardSystem, status: 'review-required' });
     });
 
     checks.push({
@@ -132,7 +135,7 @@ export function framingInputFingerprint(design: DeckDesign, site: SiteModel, inp
   const structuralInput = {
     platforms: design.platforms.map((platform) => ({ id: platform.id, boundary: platform.boundary.vertices.map(({ xMm, yMm }) => [xMm, yMm]), elevationMm: platform.elevationMm, edges: platform.edges.map(({ id, role, hostId }) => ({ id, role, hostId })), framingIntent: platform.framingIntent, finish: { decking: platform.finish.decking, deckingThicknessMm: platform.finish.deckingThicknessMm, guardSystem: platform.finish.guardSystem } })),
     stairs: design.stairs.map((stair) => ({ id: stair.id, from: stair.from, to: stair.to, fromEdgeId: stair.fromEdgeId, toEdgeId: stair.toEdgeId, startMm: stair.startMm, endMm: stair.endMm, directionDeg: stair.directionDeg, widthMm: stair.widthMm, riserCount: stair.riserCount, riserHeightMm: stair.riserHeightMm, treadDepthMm: stair.treadDepthMm, totalRunMm: stair.totalRunMm, stringerCount: stair.stringerCount, handrailSides: stair.handrailSides })),
-    site: { terrainElevationMm: site.terrainElevationMm, wall: { selectionStatus: site.designWall.selectionStatus, sourceBuildingId: site.designWall.sourceBuildingId, sourceEdgeIndex: site.designWall.sourceEdgeIndex, lengthMm: site.designWall.lengthMm, rimMaterial: site.designWall.rimMaterial, rimDepthMm: site.designWall.rimDepthMm, cladding: site.designWall.cladding, flashingFeasible: site.designWall.flashingFeasible } },
+    site: { terrain: site.terrain, wall: { selectionStatus: site.designWall.selectionStatus, sourceBuildingId: site.designWall.sourceBuildingId, sourceEdgeIndex: site.designWall.sourceEdgeIndex, lengthMm: site.designWall.lengthMm, rimMaterial: site.designWall.rimMaterial, rimDepthMm: site.designWall.rimDepthMm, cladding: site.designWall.cladding, flashingFeasible: site.designWall.flashingFeasible } },
     input: { municipality: input.municipality, snowLoadKpa: input.snowLoadKpa, treatment: input.treatment || 'incised', soilBearingKpa: input.soilBearingKpa || DEFAULT_SOIL_BEARING_KPA },
   };
   return `fd1-${fnv1a(JSON.stringify(structuralInput))}`;
@@ -209,7 +212,7 @@ function globalChecks(site: SiteModel, footingCount: number, ledgerCount: number
 
 function buildReviewGates(site: SiteModel, engineering: boolean, ledgerCount: number, guardCount: number, stringerCount: number): FramingReviewGate[] {
   return [
-    { id: 'field-geometry', discipline: 'site', title: 'Field-verify house, grade, and property offsets', status: site.designWall.selectionStatus === 'field-measured' ? 'not-required' : 'required', reason: 'Municipal GIS and provisional alignment are not construction measurements.' },
+    { id: 'field-geometry', discipline: 'site', title: 'Field-verify house, grade, and property offsets', status: site.designWall.selectionStatus === 'field-measured' && site.terrain.gradePoints.length >= 3 && site.terrain.gradePoints.every((point) => point.verificationStatus !== 'reference') ? 'not-required' : 'required', reason: 'Municipal GIS, provisional alignment, and an assumed grade datum are not construction measurements.' },
     { id: 'structural-design', discipline: 'structural', title: 'Structural member and load-path review', status: engineering ? 'required' : 'not-required', reason: engineering ? 'At least one platform lies outside the encoded prescriptive table slice.' : 'Gravity member sizes are table-screened, subject to all remaining gates.' },
     { id: 'footing-design', discipline: 'structural', title: 'Footing, frost, soil, uplift, and lateral design', status: 'required', reason: 'The CWC span guide explicitly excludes footings and lateral bracing.' },
     { id: 'connection-design', discipline: 'structural', title: 'Beam, post, joist, and lateral connections', status: 'required', reason: 'Connector types, fastener schedules, splices, bearing, and lateral ties are not automatically certified.' },

@@ -2,7 +2,7 @@ import { Check, ChevronDown, CircleDollarSign, FlipHorizontal2, Footprints, Hand
 import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from 'react';
 import { boundaryCenter, boundaryFromPoints, findHighestPlatformBelowPoint, nearestPlatformEdgePoint, proposePointToPointStairGeometry, rotateBoundary, stairDepartureDirection } from '../../domain/deckDesign';
 import type { AddPlatformInput, ClosedBoundary, DeckDesign, DeckPlatform, DeckStair, PointMm } from '../../domain/deckDesign';
-import { projectPropertyToLocal, type LocalPropertyGeometry, type SiteModel } from '../../domain/siteModel';
+import { projectPropertyToLocal, terrainElevationAt, type LocalPropertyGeometry, type SiteModel } from '../../domain/siteModel';
 import type { Property } from '../../types';
 import { estimateProject } from '../../services/projectEstimate';
 import { ANGLE_SNAP_DEG, constrainDraftPoint, formatAngle, interiorAngleDeg, lineAngleDeg, snapDraggedVertex, snapPointToSmartGuides, type SmartGuideResult } from './draftingGeometry';
@@ -79,9 +79,11 @@ export function DeckPlanEditor({ design, site, property, canUndo, canRedo, onAdd
   const selectedPlatform = design.platforms.find((platform) => platform.id === design.selectedObjectId) || null;
   const stairSourcePlatform = design.platforms.find((platform) => platform.id === stairSource?.platformId) || null;
   const stairSourceEdgeIndex = stairSourcePlatform?.edges.findIndex((edge) => edge.id === stairSource?.edgeId) ?? -1;
-  const stairRiseToGradeMm = stairSourcePlatform ? Math.abs(stairSourcePlatform.elevationMm - site.terrainElevationMm) : 0;
+  const sourceGrade = stairSource ? terrainElevationAt(site.terrain, stairSource.pointMm) : null;
+  const hoverGrade = hoverPoint ? terrainElevationAt(site.terrain, hoverPoint) : null;
+  const stairRiseToGradeMm = stairSourcePlatform ? Math.abs(stairSourcePlatform.elevationMm - (sourceGrade?.elevationMm ?? site.terrain.datum.elevationMm)) : 0;
   const detectedLanding = stairSource && hoverPoint ? findHighestPlatformBelowPoint(design, stairSource.platformId, hoverPoint) : null;
-  const stairPreviewRiseMm = stairSourcePlatform ? Math.abs(stairSourcePlatform.elevationMm - (detectedLanding?.elevationMm ?? site.terrainElevationMm)) : 0;
+  const stairPreviewRiseMm = stairSourcePlatform ? Math.abs(stairSourcePlatform.elevationMm - (detectedLanding?.elevationMm ?? hoverGrade?.elevationMm ?? site.terrain.datum.elevationMm)) : 0;
   const stairPreviewDirectionDeg = stairSourcePlatform && stairSource ? stairDepartureDirection(stairSourcePlatform, stairSource.edgeId) : 0;
 
   const screenPointFromClient = (clientX: number, clientY: number): PointMm => {
@@ -136,7 +138,7 @@ export function DeckPlanEditor({ design, site, property, canUndo, canRedo, onAdd
   const finishDrawing = () => {
     if (draft.length < 3) { setMessage('Place at least three corners before finishing.'); return; }
     try {
-      onAddPlatform({ boundary: boundaryFromPoints(draft, `D${design.platforms.length + 1}-V`), elevationMm: defaultElevation(site), houseEdgeIndex: houseEdgeIndex(draft) });
+      onAddPlatform({ boundary: boundaryFromPoints(draft, `D${design.platforms.length + 1}-V`), elevationMm: defaultElevation(site, draft), houseEdgeIndex: houseEdgeIndex(draft) });
       setDraft([]); setDraftFuture([]); setHoverPoint(null); setMode('select'); setMessage('Platform added. Pull an edge, drag a corner, or type an exact edge length.');
     } catch (reason) { setMessage(reason instanceof Error ? reason.message : 'The platform boundary is invalid.'); }
   };
@@ -468,7 +470,7 @@ export function DeckPlanEditor({ design, site, property, canUndo, canRedo, onAdd
         })}
         {dragRulers && <SmartRulers result={dragRulers} transform={transform} />}
         {draft.length > 0 && <DraftBoundary points={draft} hoverPoint={hoverPoint} transform={transform} onClose={finishDrawing} />}
-        {mode === 'stairs' && stairSource && hoverPoint && <StairDraft startMm={stairSource.pointMm} endMm={hoverPoint} riseMm={stairPreviewRiseMm} directionDeg={stairPreviewDirectionDeg} targetLabel={detectedLanding ? `${detectedLanding.name} · EL. ${detectedLanding.elevationMm} mm` : `GRADE · EL. ${site.terrainElevationMm} mm`} transform={transform} />}
+        {mode === 'stairs' && stairSource && hoverPoint && <StairDraft startMm={stairSource.pointMm} endMm={hoverPoint} riseMm={stairPreviewRiseMm} directionDeg={stairPreviewDirectionDeg} targetLabel={detectedLanding ? `${detectedLanding.name} · EL. ${detectedLanding.elevationMm} mm` : `LOCAL GRADE · EL. ${hoverGrade?.elevationMm ?? site.terrain.datum.elevationMm} mm${hoverGrade?.method === 'interpolated' ? ' · interpolated' : ''}`} transform={transform} />}
       </svg>
       {propertyGeometry && (propertyGeometry.alignmentStatus === 'provisional' ? <button type="button" onClick={onOpenProperty} className="absolute left-4 top-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-left text-[10px] font-bold uppercase tracking-[.08em] text-amber-900 shadow-sm">Property visible · alignment provisional<br /><span className="text-[9px] underline">Choose the correct house edge →</span></button> : <div className="absolute left-4 top-4 rounded-md border border-emerald-300 bg-white/95 px-3 py-2 text-[10px] font-bold uppercase tracking-[.08em] text-emerald-800 shadow-sm">Property visible · {propertyGeometry.alignmentStatus === 'field-measured' ? 'field-measured wall' : 'homeowner-selected house edge'}</div>)}
       {propertyGeometry && <div className="absolute right-4 top-4 flex overflow-hidden rounded-lg border border-slate-300 bg-white/95 shadow-lg"><button type="button" onClick={onRotateProperty} className="flex min-h-10 items-center gap-1.5 border-r border-slate-200 px-3 text-[10px] font-bold text-slate-700" title="Use when the municipal house and yard appear on the opposite side"><RotateCw size={14} /> Rotate site 180°</button><button type="button" onClick={onMirrorProperty} className="flex min-h-10 items-center gap-1.5 px-3 text-[10px] font-bold text-slate-700" title="Reverse the start and end of the selected house wall"><FlipHorizontal2 size={14} /> Reverse wall direction</button></div>}
@@ -501,7 +503,7 @@ export function DeckPlanEditor({ design, site, property, canUndo, canRedo, onAdd
         </div>}
       </section>
       {message && <div aria-live="polite" className="absolute bottom-4 left-1/2 max-w-lg -translate-x-1/2 rounded-lg border border-slate-300 bg-white/95 px-4 py-2 text-center text-xs text-slate-700 shadow-lg">{message}</div>}
-      <div className="absolute bottom-4 left-4 rounded-md bg-white/90 px-2 py-1 text-[10px] text-slate-500"><strong className="text-slate-700">GROUND / GRADE DATUM · EL. {site.terrainElevationMm} mm</strong> · 100 mm grid · {angleSnapEnabled ? `${ANGLE_SNAP_DEG}° angle snap` : 'free angles'} · {smartGuidesEnabled ? 'smart rulers on' : 'smart rulers off'} · Pan tool, Space-drag, or middle-drag</div>
+      <div className="absolute bottom-4 left-4 rounded-md bg-white/90 px-2 py-1 text-[10px] text-slate-500"><strong className="text-slate-700">PROJECT DATUM · EL. {site.terrain.datum.elevationMm} mm</strong> · {site.terrain.gradePoints.length} grade point{site.terrain.gradePoints.length === 1 ? '' : 's'} · 100 mm grid · {angleSnapEnabled ? `${ANGLE_SNAP_DEG}° angle snap` : 'free angles'} · {smartGuidesEnabled ? 'smart rulers on' : 'smart rulers off'} · Pan tool, Space-drag, or middle-drag</div>
     </div>
   </div>;
 }
@@ -513,8 +515,8 @@ function createTransform(design: DeckDesign, site: SiteModel, geometry: LocalPro
   const contextPoints = viewMode === 'property' ? geometry?.parcel || [] : selectedBuilding?.polygon || [];
   const fallbackPoints: PointMm[] = [[0, 0], [site.designWall.lengthMm, 0], [site.designWall.lengthMm, -site.houseDepthMm], [0, -site.houseDepthMm]];
   const visibleContext = contextPoints.length ? contextPoints : fallbackPoints;
-  const xValues = [...visibleContext.map((point) => point[0]), ...design.platforms.flatMap((platform) => platform.boundary.vertices.map((vertex) => vertex.xMm))];
-  const yValues = [...visibleContext.map((point) => point[1]), ...design.platforms.flatMap((platform) => platform.boundary.vertices.map((vertex) => vertex.yMm))];
+  const xValues = [...visibleContext.map((point) => point[0]), ...design.platforms.flatMap((platform) => platform.boundary.vertices.map((vertex) => vertex.xMm)), ...site.terrain.gradePoints.map((point) => point.xMm)];
+  const yValues = [...visibleContext.map((point) => point[1]), ...design.platforms.flatMap((platform) => platform.boundary.vertices.map((vertex) => vertex.yMm)), ...site.terrain.gradePoints.map((point) => point.yMm)];
   const minX = Math.min(...xValues); const maxX = Math.max(...xValues); const minY = Math.min(...yValues); const maxY = Math.max(...yValues);
   const padding = viewMode === 'property' ? 70 : 95;
   const fitScale = Math.min((VIEW_WIDTH - padding * 2) / Math.max(1000, maxX - minX), (VIEW_HEIGHT - padding * 2) / Math.max(1000, maxY - minY));
@@ -538,6 +540,7 @@ function SiteContext({ site, geometry, transform, viewMode }: { site: SiteModel;
     <text x={transform.x(geometry.anchorLengthMm / 2)} y={transform.y(geometry.exteriorSideSign * 900)} textAnchor="middle" fontSize="9" fontWeight="800" fill="#b64b25">HOUSE EXTERIOR / DECK SIDE</text>
     {site.designWall.openings.map((opening) => <g key={opening.id}><rect x={transform.x(opening.offsetMm)} y={transform.y(0) - 42} width={Math.max(12, opening.widthMm * transform.scale)} height="42" fill={opening.kind === 'door' ? '#8db6b0' : '#b6ced0'} stroke="#315e57" strokeWidth="2" /><text x={transform.x(opening.offsetMm + opening.widthMm / 2)} y={transform.y(0) - 16} textAnchor="middle" fontSize="8" fontWeight="700" fill="#183e38">{opening.kind.toUpperCase()} · USER PLACED</text></g>)}
     <text x={transform.x(geometry.parcel[0]?.[0] || 0)} y={transform.y(geometry.parcel[0]?.[1] || 0) - 10} fontSize="9" fontWeight="800" fill="#187456">MUNICIPAL PROPERTY LINE · REFERENCE</text>
+    {site.terrain.gradePoints.map((point) => <g key={point.id}><circle cx={transform.x(point.xMm)} cy={transform.y(point.yMm)} r="6" fill="#fff" stroke="#6d28d9" strokeWidth="2.5" /><path d={`M${transform.x(point.xMm) - 9} ${transform.y(point.yMm)}h18M${transform.x(point.xMm)} ${transform.y(point.yMm) - 9}v18`} stroke="#6d28d9" strokeWidth="1" /><text x={transform.x(point.xMm) + 10} y={transform.y(point.yMm) - 9} fontSize="8" fontWeight="800" fill="#5b21b6">{point.id} · EL. {point.elevationMm}</text></g>)}
   </g>;
 }
 
@@ -725,7 +728,12 @@ function ToolButton({ active, label, icon, onClick }: { active: boolean; label: 
 }
 
 function houseEdgeIndex(points: PointMm[]): number | undefined { const index = points.findIndex((point, i) => { const next = points[(i + 1) % points.length]; return point[1] === 0 && next?.[1] === 0; }); return index >= 0 ? index : undefined; }
-function defaultElevation(site: SiteModel): number { const door = site.designWall.openings.find((opening) => opening.kind === 'door'); return Math.max(150, (door?.sillHeightMm ?? 525) - 75); }
+function defaultElevation(site: SiteModel, boundary: PointMm[]): number {
+  const door = site.designWall.openings.find((opening) => opening.kind === 'door');
+  if (door) return Math.max(site.terrain.datum.elevationMm + 150, door.sillHeightMm - 75);
+  const center: PointMm = boundary.length ? [boundary.reduce((sum, point) => sum + point[0], 0) / boundary.length, boundary.reduce((sum, point) => sum + point[1], 0) / boundary.length] : [0, 0];
+  return terrainElevationAt(site.terrain, center).elevationMm + 450;
+}
 function currentInstruction(count: number): string { return count < 3 ? `Place another corner. The line snaps every ${ANGLE_SNAP_DEG}°; hold Alt for a free angle.` : 'Click the first green point or choose Finish to close the platform.'; }
 function snap(value: number): number { return Math.round(value / GRID_MM) * GRID_MM; }
 function closeTargetMm(scale: number): number { return Math.max(100, Math.min(200, 10 / Math.max(.001, scale))); }

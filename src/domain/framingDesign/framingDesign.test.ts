@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { addPlatform, addStair, createEmptyDesign, rectangularBoundary, selectDesignObject, setPlatformFramingIntent } from '../deckDesign';
-import { createSiteModel, updateSiteModel } from '../siteModel';
+import { addTerrainGradePoint, createSiteModel, updateSiteModel } from '../siteModel';
 import type { Property } from '../../types';
 import { framingInputFingerprint, generateFramingDesign, isFramingStale } from './framingDesign';
 
@@ -59,6 +59,22 @@ describe('FramingDesign v1 public contract', () => {
     expect(isFramingStale(framing, selected, site, input)).toBe(false);
     const changed = { ...selected, platforms: selected.platforms.map((platform) => ({ ...platform, elevationMm: 1200 })) };
     expect(isFramingStale(framing, changed, site, input)).toBe(true);
+  });
+
+  it('derives each post height from local observed grade instead of one global ground value', () => {
+    let design = addPlatform(createEmptyDesign(), { boundary: rectangularBoundary(0, 0, 4000, 3000), elevationMm: 1200, houseEdgeIndex: 0 });
+    design = setPlatformFramingIntent(design, 'P1', { supportStrategy: 'ledger', joistSpacingMm: 400 });
+    const flatSite = measuredSite();
+    const firstPass = generateFramingDesign(design, flatSite, { municipality: 'Town of Sidney', snowLoadKpa: 1 });
+    const low = firstPass.posts[0].pointMm;
+    const high = firstPass.posts[firstPass.posts.length - 1].pointMm;
+    let terrain = addTerrainGradePoint(flatSite.terrain, { label: 'Low grade', xMm: low[0], yMm: low[1], elevationMm: 0, source: 'homeowner-measurement', verificationStatus: 'recorded', notes: '' });
+    terrain = addTerrainGradePoint(terrain, { label: 'High grade', xMm: high[0], yMm: high[1], elevationMm: 300, source: 'homeowner-measurement', verificationStatus: 'recorded', notes: '' });
+    const slopedSite = updateSiteModel(flatSite, { terrain });
+    const framing = generateFramingDesign(design, slopedSite, { municipality: 'Town of Sidney', snowLoadKpa: 1 });
+    expect(framing.posts[0].heightMm).toBe(1200);
+    expect(framing.posts[framing.posts.length - 1].heightMm).toBe(900);
+    expect(framing.inputFingerprint).not.toBe(firstPass.inputFingerprint);
   });
 });
 

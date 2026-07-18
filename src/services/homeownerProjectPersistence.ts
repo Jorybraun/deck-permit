@@ -2,7 +2,7 @@ import { useHomeownerProject } from '../state/homeownerProjectStore';
 import type { HomeownerIntent, ProjectStage } from '../state/homeownerProjectStore';
 import type { ProfessionalReviewCycle, Property, ReviewExchangePublication, VerificationEvidence } from '../types';
 import type { DeckDesign } from '../domain/deckDesign';
-import type { SiteModel } from '../domain/siteModel';
+import { createTerrainSurface, type SiteModel } from '../domain/siteModel';
 import type { FramingDesign } from '../domain/framingDesign';
 
 const STORAGE_KEY = 'permitly-homeowner-project-v1';
@@ -69,6 +69,7 @@ function normalizeDesign(design: DeckDesign): DeckDesign {
 }
 
 function normalizeSite(site: SiteModel): SiteModel {
+  const legacySite = site as SiteModel & { terrainElevationMm?: number };
   const wall = site.designWall as SiteModel['designWall'] & { label?: string; selectionStatus?: SiteModel['designWall']['selectionStatus'] };
   const syntheticStarterDoor = site.status === 'reference-unverified'
     && wall.openings.length === 1
@@ -77,6 +78,8 @@ function normalizeSite(site: SiteModel): SiteModel {
     && wall.openings[0].sillHeightMm === 675;
   return {
     ...site,
+    schema: 'site-model/v2',
+    terrain: site.terrain?.schema === 'terrain-surface/v1' ? site.terrain : createTerrainSurface(legacySite.terrainElevationMm || 0),
     designWall: {
       ...wall,
       label: wall.label || 'Unconfirmed house side',

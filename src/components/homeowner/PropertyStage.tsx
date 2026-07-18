@@ -1,8 +1,9 @@
 import { AlertTriangle, ArrowRight, Building2, CheckCircle2, DoorOpen, ExternalLink, Loader2, MapPin, Plus, Ruler, Search, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import type { SiteModel } from '../../domain/siteModel';
+import type { AddTerrainGradePointInput, SiteModel, TerrainDatum, TerrainGradePoint } from '../../domain/siteModel';
 import type { Address, Property } from '../../types';
 import { PropertyContextPlan } from './PropertyContextPlan';
+import { TerrainCapturePanel } from './TerrainCapturePanel';
 
 export type PropertyResearchState =
   | { status: 'idle' }
@@ -19,11 +20,15 @@ interface PropertyStageProps {
   onSuggestAddresses: (query: string, maxResults?: number) => Promise<Address[]>;
   onSelectWall: (buildingId: string, edgeIndex: number) => void;
   onUpdateSite: (changes: Partial<Omit<SiteModel, 'schema' | 'units' | 'designWall'>>, wallChanges?: Partial<SiteModel['designWall']>) => void;
+  onUpdateTerrainDatum: (changes: Partial<Omit<TerrainDatum, 'id'>>) => void;
+  onAddTerrainPoint: (point: AddTerrainGradePointInput) => void;
+  onUpdateTerrainPoint: (pointId: string, changes: Partial<Omit<TerrainGradePoint, 'id'>>) => void;
+  onRemoveTerrainPoint: (pointId: string) => void;
   onContinue: () => void;
 }
 
 /** Lets a homeowner research a parcel and turn reference geometry into explicit field inputs. */
-export function PropertyStage({ property, site, research, onResearch, onResearchAddress, onSuggestAddresses, onSelectWall, onUpdateSite, onContinue }: PropertyStageProps) {
+export function PropertyStage({ property, site, research, onResearch, onResearchAddress, onSuggestAddresses, onSelectWall, onUpdateSite, onUpdateTerrainDatum, onAddTerrainPoint, onUpdateTerrainPoint, onRemoveTerrainPoint, onContinue }: PropertyStageProps) {
   const [address, setAddress] = useState(property.address?.fullAddress || '');
   const [addressOptions, setAddressOptions] = useState<Address[]>([]);
   const [suggestionStatus, setSuggestionStatus] = useState<'idle' | 'loading' | 'ready'>('idle');
@@ -80,7 +85,7 @@ export function PropertyStage({ property, site, research, onResearch, onResearch
           </article>
 
           <article className="rounded-xl border border-amber-200 bg-amber-50 p-5">
-            <div className="flex items-start gap-3"><Ruler size={20} className="mt-0.5 text-amber-800" /><div><h3 className="font-[Manrope] text-lg font-bold text-amber-950">House reference needs confirmation</h3><p className="mt-1 text-sm leading-6 text-amber-900">{site.referenceSource === 'municipal-roofline' ? 'The outline comes from a municipal roofline and may include eaves.' : 'No usable municipal building outline was found, so starter dimensions are estimated.'}</p></div></div>
+            <div className="flex items-start gap-3"><Ruler size={20} className="mt-0.5 text-amber-800" /><div><h3 className="font-[Manrope] text-lg font-bold text-amber-950">House reference needs confirmation</h3><p className="mt-1 text-sm leading-6 text-amber-900">{site.referenceSource === 'municipal-roofline' ? 'The outline comes from a municipal roofline and may include eaves.' : site.referenceSource === 'field-measurement' ? 'Field measurements have been recorded but still need evidence and professional review.' : 'No usable municipal building outline was found, so starter dimensions are estimated.'}</p></div></div>
             <p className="mt-4 rounded-lg bg-white/70 p-3 text-xs leading-5 text-amber-950">These measurements locate the deck against the house. They must be field-checked before the drawings are issued for professional review.</p>
           </article>
         </section>
@@ -100,6 +105,7 @@ export function PropertyStage({ property, site, research, onResearch, onResearch
             <div className="flex items-start justify-between gap-3"><div className="flex gap-2"><DoorOpen size={18} className="mt-0.5 text-slate-600" /><div><h4 className="text-sm font-bold text-slate-900">Exterior door on this wall</h4><p className="mt-1 text-xs leading-5 text-slate-600">Doors are never inferred from the roofline. Add one only when you can locate it.</p></div></div>{door && <button type="button" onClick={() => onUpdateSite({}, { openings: site.designWall.openings.filter((opening) => opening.id !== door.id) })} aria-label="Remove recorded door" className="grid h-9 w-9 place-items-center rounded-md border border-red-200 bg-white text-red-700"><Trash2 size={15} /></button>}</div>
             {door ? <div className="mt-4 grid gap-4 sm:grid-cols-3"><NumberField label="Door offset" value={door.offsetMm} suffix="mm" min={0} max={site.designWall.lengthMm} onChange={(offsetMm) => onUpdateSite({}, { openings: site.designWall.openings.map((opening) => opening.id === door.id ? { ...opening, offsetMm } : opening) })} /><NumberField label="Door width" value={door.widthMm} suffix="mm" min={300} max={4000} onChange={(widthMm) => onUpdateSite({}, { openings: site.designWall.openings.map((opening) => opening.id === door.id ? { ...opening, widthMm } : opening) })} /><NumberField label="Sill above grade" value={door.sillHeightMm} suffix="mm" min={100} max={5000} onChange={(sillHeightMm) => onUpdateSite({}, { openings: site.designWall.openings.map((opening) => opening.id === door.id ? { ...opening, sillHeightMm } : opening) })} /></div> : <button type="button" onClick={() => onUpdateSite({}, { openings: [...site.designWall.openings, { id: `D${site.designWall.openings.length + 1}`, kind: 'door', offsetMm: Math.min(600, Math.max(0, site.designWall.lengthMm - 1500)), widthMm: 900, sillHeightMm: 675 }] })} className="mt-4 flex min-h-10 items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 text-xs font-bold text-slate-700"><Plus size={15} /> Add a measured door</button>}
           </div>
+          <TerrainCapturePanel terrain={site.terrain} onUpdateDatum={onUpdateTerrainDatum} onAddPoint={onAddTerrainPoint} onUpdatePoint={onUpdateTerrainPoint} onRemovePoint={onRemoveTerrainPoint} />
           <div className="mt-5 flex justify-end"><button type="button" onClick={onContinue} className="flex min-h-11 items-center gap-2 rounded-lg bg-emerald-800 px-5 text-sm font-bold text-white">Open deck designer <ArrowRight size={16} /></button></div>
         </section>
       </>}

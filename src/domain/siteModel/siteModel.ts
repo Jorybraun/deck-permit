@@ -1,13 +1,14 @@
 import type { Property } from '../../types';
 import { deriveHouseReference } from '../../services/existingConditions';
 import type { SiteAssessment, SiteModel } from './types';
+import { createTerrainSurface } from './terrain';
 
 /** Owns the editable house/terrain reference used by deck construction coordinates. */
 export function createSiteModel(property: Property, now = new Date()): SiteModel {
   const reference = deriveHouseReference(property);
   const lengthMm = Math.round(reference.widthM * 1000);
   return {
-    schema: 'site-model/v1',
+    schema: 'site-model/v2',
     units: 'mm',
     status: 'reference-unverified',
     referenceSource: reference.source,
@@ -26,7 +27,7 @@ export function createSiteModel(property: Property, now = new Date()): SiteModel
       flashingFeasible: 'unknown',
       openings: [],
     },
-    terrainElevationMm: 0,
+    terrain: createTerrainSurface(),
     measuredBy: '',
     measuredAt: now.toISOString().slice(0, 10),
     notes: '',
@@ -59,6 +60,8 @@ export function assessSiteModel(site: SiteModel): SiteAssessment {
   if (site.designWall.rimMaterial === 'unknown') warnings.push('Rim/band substrate is unknown; ledger attachment cannot be designed.');
   if (site.designWall.cladding === 'unknown') warnings.push('Cladding is unknown; flashing integration remains unresolved.');
   if (site.designWall.flashingFeasible === 'unknown') warnings.push('Continuous ledger flashing feasibility is unconfirmed.');
+  if (!site.terrain.gradePoints.length) warnings.push('No grade observations are recorded; stairs, post heights, guards, and footing elevations use an assumed project datum.');
+  else if (site.terrain.gradePoints.some((point) => point.verificationStatus === 'reference')) warnings.push('At least one grade point is reference-only and must be field-verified.');
   return { errors, warnings };
 }
 
@@ -68,7 +71,7 @@ export function updateSiteModel(site: SiteModel, changes: Partial<Omit<SiteModel
     ...changes,
     designWall: { ...site.designWall, ...wallChanges },
     status: changes.status || 'field-input-unverified',
-    referenceSource: changes.referenceSource || 'field-measurement',
+    referenceSource: changes.referenceSource || (wallChanges.selectionStatus === 'field-measured' ? 'field-measurement' : site.referenceSource),
     updatedAt: new Date().toISOString(),
   };
 }
