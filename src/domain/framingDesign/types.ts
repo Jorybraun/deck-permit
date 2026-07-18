@@ -88,8 +88,57 @@ export interface GuardAssembly {
   startMm: PointMm;
   endMm: PointMm;
   heightMm: 900 | 1070;
+  maximumDropMm: number;
+  requirement: 'code-required' | 'owner-selected';
+  openingLimitMm: 100;
+  climbabilityReviewRequired: boolean;
+  gradeBasis: 'datum' | 'observed' | 'interpolated' | 'modeled-platform' | 'mixed';
   system: string;
   status: 'review-required';
+}
+
+export interface PlatformEdgeLifeSafetyAssessment {
+  id: string;
+  platformId: string;
+  edgeId: string;
+  edgeRole: 'house' | 'open' | 'guard' | 'stair' | 'shared';
+  maximumDropMm: number;
+  gradeBasis: GuardAssembly['gradeBasis'];
+  gradeVerificationStatus: 'reference' | 'recorded' | 'professional-verified';
+  guardRequired: boolean;
+  guardIntent: 'generated-required' | 'owner-selected-optional' | 'not-required' | 'protected-by-wall' | 'stair-opening' | 'shared-edge';
+  requiredHeightMm: 900 | 1070 | null;
+  openingLimitMm: 100 | null;
+  climbabilityReviewRequired: boolean;
+  status: 'pass' | 'review' | 'blocked';
+  basis: string;
+}
+
+export interface StairLifeSafetyAssessment {
+  id: string;
+  stairId: string;
+  riserCount: number;
+  widthMm: number;
+  maximumSideDropMm: number;
+  guardRequiredSides: Array<'left' | 'right'>;
+  handrailRequired: boolean;
+  minimumHandrailCount: 0 | 1;
+  handrailIntentCount: 0 | 1 | 2;
+  handrailHeightRangeMm: readonly [865, 1070] | null;
+  continuityResolved: false;
+  guardAssemblyResolved: false;
+  status: 'pass' | 'review' | 'blocked';
+  basis: string;
+}
+
+export interface LifeSafetyAssessment {
+  schema: 'life-safety-screen/v1';
+  occupancyAssumption: 'single-dwelling-exterior-deck';
+  adjacentSurfaceSearchMm: 1200;
+  platformEdges: PlatformEdgeLifeSafetyAssessment[];
+  stairs: StairLifeSafetyAssessment[];
+  status: 'pass' | 'review' | 'blocked';
+  limitations: string[];
 }
 
 export interface StairStringerMember {
@@ -223,6 +272,7 @@ export interface FramingDesign {
   posts: PostMember[];
   footings: FootingMember[];
   guards: GuardAssembly[];
+  lifeSafety: LifeSafetyAssessment;
   stairStringers: StairStringerMember[];
   stairOpenings: StairOpeningMember[];
   stairTrimmers: StairTrimmerMember[];

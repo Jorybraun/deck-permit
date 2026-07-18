@@ -89,9 +89,11 @@ export interface CanonicalCalculationReport {
     treadDepthMm: number;
     totalRunMm: number;
     stringerCount: number;
+    handrailSides: DeckDesign['stairs'][number]['handrailSides'];
     connectionIds: string[];
     status: 'review-required';
   }>;
+  lifeSafety: FramingDesign['lifeSafety'];
   connections: Array<Pick<StructuralConnectionGroup, 'id' | 'kind' | 'platformId' | 'quantity' | 'designActionKn' | 'actionScope' | 'demandBasis' | 'fromMemberIds' | 'receivingMemberIds' | 'requirements' | 'status'>>;
   checks: FramingDesign['checks'];
   reviewGates: FramingDesign['reviewGates'];
@@ -182,8 +184,9 @@ export function buildCanonicalCalculationReport(input: CalculationReportInput): 
     stairs: design.stairs.map((stair) => ({
       id: stair.id, from: endpointLabel(stair.from), to: endpointLabel(stair.to), widthMm: stair.widthMm,
       riserCount: stair.riserCount, riserHeightMm: stair.riserHeightMm, treadDepthMm: stair.treadDepthMm, totalRunMm: stair.totalRunMm,
-      stringerCount: stair.stringerCount, connectionIds: framing.stairConnections.filter((connection) => connection.stairId === stair.id).map((connection) => connection.id), status: 'review-required',
+      stringerCount: stair.stringerCount, handrailSides: stair.handrailSides, connectionIds: framing.stairConnections.filter((connection) => connection.stairId === stair.id).map((connection) => connection.id), status: 'review-required',
     })),
+    lifeSafety: framing.lifeSafety,
     connections: framing.connections.map((connection) => ({
       id: connection.id, kind: connection.kind, platformId: connection.platformId, quantity: connection.quantity,
       designActionKn: connection.designActionKn, actionScope: connection.actionScope, demandBasis: connection.demandBasis,
@@ -261,13 +264,31 @@ export async function buildCanonicalCalculationPdf(report: CanonicalCalculationR
 
   if (report.stairs.length) { heading('5. Stair geometry and support', 17); report.stairs.forEach((stair) => { heading(stair.id, 11); keyValue('Endpoints', `${stair.from} -> ${stair.to}`); keyValue('Geometry', `${stair.widthMm} mm wide | ${stair.riserCount}R @ ${stair.riserHeightMm} | tread ${stair.treadDepthMm} | run ${stair.totalRunMm}`); keyValue('Framing', `${stair.stringerCount} stringers | ${stair.connectionIds.join(', ') || 'connections unresolved'}`); rule(); }); }
 
-  heading('6. Structural connection work packages', 17);
+  heading('6. Guard and handrail life-safety screen', 17);
+  keyValue('Screen status', report.lifeSafety.status.toUpperCase());
+  keyValue('Occupancy assumption', report.lifeSafety.occupancyAssumption.replace(/-/g, ' '));
+  keyValue('Adjacent surface search', `${report.lifeSafety.adjacentSurfaceSearchMm} mm outward from each platform edge`);
+  report.lifeSafety.platformEdges.forEach((edge) => {
+    heading(`${edge.platformId} / ${edge.edgeId} - ${edge.guardIntent.replace(/-/g, ' ')}`, 10.5);
+    keyValue('Drop / grade basis', `${edge.maximumDropMm} mm | ${edge.gradeBasis.replace(/-/g, ' ')} | ${edge.gradeVerificationStatus.replace(/-/g, ' ')}`);
+    keyValue('Guard requirement', edge.guardRequired ? `${edge.requiredHeightMm} mm minimum intent | ${edge.openingLimitMm} mm opening screen` : edge.guardIntent === 'owner-selected-optional' ? `${edge.requiredHeightMm} mm owner-selected optional intent` : 'not triggered by modeled drop');
+    paragraph(edge.basis, 8.5); rule();
+  });
+  report.lifeSafety.stairs.forEach((stair) => {
+    heading(`${stair.stairId} - stair guards and handrail`, 10.5);
+    keyValue('Handrail', `${stair.handrailRequired ? 'required' : 'not triggered'} | minimum ${stair.minimumHandrailCount} | ${stair.handrailIntentCount} side intent`);
+    keyValue('Side protection', `${stair.maximumSideDropMm} mm maximum | ${stair.guardRequiredSides.length ? `${stair.guardRequiredSides.join(' and ')} guard side(s)` : 'no modeled guard side trigger'}`);
+    paragraph(stair.basis, 8.5); rule();
+  });
+  report.lifeSafety.limitations.forEach((item) => paragraph(`- ${item}`, 8.5, 10));
+
+  heading('7. Structural connection work packages', 17);
   report.connections.forEach((connection) => { heading(`${connection.id} - ${connection.kind.replace(/-/g, ' ')}`, 10.5); keyValue('Quantity / action', `${connection.quantity} | ${connection.designActionKn === null ? 'action unresolved' : `${connection.designActionKn.toFixed(2)} kN ${connection.actionScope}`}`); keyValue('Member interface', `${summarizeIds(connection.fromMemberIds)} -> ${summarizeIds(connection.receivingMemberIds)}`); paragraph(connection.demandBasis); connection.requirements.forEach((requirement) => paragraph(`- ${requirement}`, 8.5, 10)); rule(); });
 
-  heading('7. Automated checks', 17); report.checks.forEach((check) => { heading(`${check.status.toUpperCase()} - ${check.title}`, 10.5); paragraph(check.result); paragraph(`Basis: ${check.basis}`, 8.5); rule(); });
-  heading('8. Professional review gates', 17); report.reviewGates.forEach((gate) => { heading(`${gate.status.toUpperCase()} - ${gate.title}`, 10.5); paragraph(`${gate.discipline}: ${gate.reason}`); rule(); });
-  heading('9. Sources and scope', 17); report.sources.forEach((source) => { heading(source.title, 10.5); paragraph(`${source.edition} | ${source.scope}`); paragraph(source.url, 8); source.exclusions.forEach((item) => paragraph(`- Excluded: ${item}`, 8.5, 10)); rule(); });
-  heading('10. Limitations', 17); report.limitations.forEach((item) => paragraph(`- ${item}`, 9, 10));
+  heading('8. Automated checks', 17); report.checks.forEach((check) => { heading(`${check.status.toUpperCase()} - ${check.title}`, 10.5); paragraph(check.result); paragraph(`Basis: ${check.basis}`, 8.5); rule(); });
+  heading('9. Professional review gates', 17); report.reviewGates.forEach((gate) => { heading(`${gate.status.toUpperCase()} - ${gate.title}`, 10.5); paragraph(`${gate.discipline}: ${gate.reason}`); rule(); });
+  heading('10. Sources and scope', 17); report.sources.forEach((source) => { heading(source.title, 10.5); paragraph(`${source.edition} | ${source.scope}`); paragraph(source.url, 8); source.exclusions.forEach((item) => paragraph(`- Excluded: ${item}`, 8.5, 10)); rule(); });
+  heading('11. Limitations', 17); report.limitations.forEach((item) => paragraph(`- ${item}`, 9, 10));
 
   const pageCount = pdf.getNumberOfPages();
   for (let page = 1; page <= pageCount; page += 1) {

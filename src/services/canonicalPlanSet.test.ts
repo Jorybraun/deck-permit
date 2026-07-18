@@ -57,6 +57,7 @@ describe('canonical ten-sheet review set', () => {
     expect(existingSheet).toContain('EXISTING-CONDITION EVIDENCE REGISTER');
     expect(planSet.sheets.find((sheet) => sheet.number === 'A2.0')?.svg).toContain('DECK, LANDING, STAIR AND GUARD PLAN');
     expect(planSet.sheets.find((sheet) => sheet.number === 'A2.0')?.svg).toContain('STAIR 1 · 900 WIDE · 3R');
+    expect(planSet.sheets.find((sheet) => sheet.number === 'A2.0')?.svg).toContain('900H · DROP 900');
     expect(planSet.sheets.find((sheet) => sheet.number === 'S1.0')?.svg).toContain('FOOTING / POST COORDINATE SCHEDULE');
     expect(planSet.sheets.find((sheet) => sheet.number === 'S1.0')?.svg).toContain('FOUNDATION DESIGN GATE');
     expect(planSet.sheets.find((sheet) => sheet.number === 'S2.0')?.svg).toContain('Stair framing');
@@ -71,6 +72,8 @@ describe('canonical ten-sheet review set', () => {
     expect(elevationSheet).toContain('data-platform-id="P1"');
     expect(elevationSheet).toContain('P1-B1-P1-F');
     expect(planSet.sheets.find((sheet) => sheet.number === 'A4.0')?.svg).toContain('3 STRINGERS');
+    expect(planSet.sheets.find((sheet) => sheet.number === 'A4.0')?.svg).toContain('GUARD CODE SCREEN / INTENT');
+    expect(planSet.sheets.find((sheet) => sheet.number === 'A4.0')?.svg).toContain('OPENINGS: MAX 100 mm');
     expect(planSet.sheets.find((sheet) => sheet.number === 'A4.0')?.svg).toContain('TOP: ST1-FROM-CONN');
     expect(planSet.sheets.find((sheet) => sheet.number === 'A4.0')?.svg).toContain('KEYED STRUCTURAL CONNECTION SCHEDULE');
     expect(planSet.sheets.find((sheet) => sheet.number === 'A4.0')?.svg).toContain('ledger to house');

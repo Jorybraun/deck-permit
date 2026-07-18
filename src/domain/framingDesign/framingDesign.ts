@@ -1,11 +1,12 @@
 import { assessStairPlanGeometry, type DeckDesign, type DeckPlatform, type PointMm } from '../deckDesign';
 import { assessExistingConditionCapture, terrainElevationAt, type SiteModel } from '../siteModel';
 import { boundaryBounds, clipAxisLine, isAxisAlignedRectangle, isHorizontal, lineLength, platformEdgePoints, stationsAlong } from './geometry';
-import { codeProfileForMunicipality, CWC_DECK_GUIDE, selectPreliminarySections } from './rules';
-import type { BeamMember, FramingCheck, FramingDesign, FramingReviewGate, FramingStatus, GenerateFramingInput, GuardAssembly, JoistMember, LedgerMember, PlatformFramingSystem, StairStringerMember } from './types';
+import { codeProfileForMunicipality, CWC_DECK_GUIDE, lifeSafetySourceForProfile, selectPreliminarySections } from './rules';
+import type { BeamMember, FramingCheck, FramingDesign, FramingReviewGate, FramingStatus, GenerateFramingInput, JoistMember, LedgerMember, LifeSafetyAssessment, PlatformFramingSystem, StairStringerMember } from './types';
 import { FramingDesignError } from './types';
 import { generateStairConnectionFraming } from './stairConnections';
 import { generateStructuralConnections } from './connections';
+import { assessDeckLifeSafety, guardAssembliesFromLifeSafety } from './lifeSafety';
 
 const DEAD_LOAD_KPA = 0.5;
 const LIVE_LOAD_KPA = 1.9;
@@ -19,6 +20,8 @@ const MAX_POST_SPACING_MM = 1800;
 export function generateFramingDesign(design: DeckDesign, site: SiteModel, input: GenerateFramingInput, generatedAt = new Date().toISOString()): FramingDesign {
   if (!design.platforms.length) throw new FramingDesignError('empty-design', 'Draw at least one platform before generating framing.');
   const treatment = input.treatment || 'incised';
+  const codeProfile = codeProfileForMunicipality(input.municipality);
+  const lifeSafety = assessDeckLifeSafety(design, site);
   const soilBearingKpa = input.soilBearingKpa || DEFAULT_SOIL_BEARING_KPA;
   const assumptions = {
     deadLoadKpa: DEAD_LOAD_KPA,
@@ -37,9 +40,8 @@ export function generateFramingDesign(design: DeckDesign, site: SiteModel, input
   const ledgers: LedgerMember[] = [];
   const posts: FramingDesign['posts'] = [];
   const footings: FramingDesign['footings'] = [];
-  const guards: GuardAssembly[] = [];
+  const guards = guardAssembliesFromLifeSafety(design, lifeSafety);
   const checks: FramingCheck[] = [];
-  const stairEdgeIds = new Set(design.stairs.flatMap((stair) => [stair.fromEdgeId, stair.toEdgeId].filter((value): value is string => Boolean(value))));
 
   design.platforms.forEach((platform) => {
     if (platform.boundary.vertices.length < 3) throw new FramingDesignError('invalid-platform', `${platform.name} does not have a closed platform boundary.`);
@@ -105,15 +107,6 @@ export function generateFramingDesign(design: DeckDesign, site: SiteModel, input
       });
     });
 
-    platform.edges.forEach((edge, edgeIndex) => {
-      if (stairEdgeIds.has(edge.id) || edge.role === 'house' || edge.role === 'shared' || edge.role === 'stair') return;
-      const start = platform.boundary.vertices[edgeIndex]; const end = platform.boundary.vertices[(edgeIndex + 1) % platform.boundary.vertices.length];
-      const edgePoints: PointMm[] = [[start.xMm, start.yMm], [(start.xMm + end.xMm) / 2, (start.yMm + end.yMm) / 2], [end.xMm, end.yMm]];
-      const maximumDropMm = Math.max(...edgePoints.map((point) => platform.elevationMm - terrainElevationAt(site.terrain, point).elevationMm));
-      if (edge.role !== 'guard' && maximumDropMm <= 600) return;
-      guards.push({ id: `${platform.id}-G${edgeIndex + 1}`, platformId: platform.id, edgeId: edge.id, startMm: [start.xMm, start.yMm], endMm: [end.xMm, end.yMm], heightMm: maximumDropMm > 1800 ? 1070 : 900, system: platform.finish.guardSystem, status: 'review-required' });
-    });
-
     checks.push({
       id: `${platform.id}-member-sizing`, title: `${platform.name} member sizing`, objectId: platform.id,
       status: tableEligible ? 'pass' : 'blocked',
@@ -141,15 +134,15 @@ export function generateFramingDesign(design: DeckDesign, site: SiteModel, input
     result: `${stairConnectionFraming.openings.length} header opening(s), ${stairConnectionFraming.trimmers.length} trimmer line(s), and ${stairConnectionFraming.connections.length} endpoint connection(s) generated.${invalidStairCount ? ` ${invalidStairCount} stair flight(s) have unresolved A→B geometry.` : ''}`,
     basis: 'Connection geometry is coordinated to hosted platform edges. Header capacity, stringer hardware, fasteners, reactions, and landing support remain project-specific structural design.',
   });
-  checks.push(...globalChecks(site, footings.length, ledgers.length, guards.length, stairStringers.length));
+  checks.push(...globalChecks(site, footings.length, ledgers.length, guards.length, stairStringers.length, lifeSafety));
   const hasEngineering = platformSystems.some((system) => system.status === 'engineering-required');
   const reviewGates = buildReviewGates(site, hasEngineering, ledgers.length, guards.length, stairStringers.length);
   return {
     schema: 'framing-design/v2', units: 'mm', inputFingerprint: framingInputFingerprint(design, site, input), generatedAt,
-    codeProfile: codeProfileForMunicipality(input.municipality), assumptions, platformSystems, joists, beams, ledgers, posts, footings, guards, stairStringers,
+    codeProfile, assumptions, platformSystems, joists, beams, ledgers, posts, footings, guards, lifeSafety, stairStringers,
     stairOpenings: stairConnectionFraming.openings, stairTrimmers: stairConnectionFraming.trimmers, stairConnections: stairConnectionFraming.connections,
     connections,
-    checks, reviewGates, sources: [CWC_DECK_GUIDE], status: hasEngineering ? 'engineering-required' : 'review-required',
+    checks, reviewGates, sources: [CWC_DECK_GUIDE, lifeSafetySourceForProfile(codeProfile)], status: hasEngineering ? 'engineering-required' : 'review-required',
   };
 }
 
@@ -164,7 +157,7 @@ export function framingInputFingerprint(design: DeckDesign, site: SiteModel, inp
 }
 
 export function isFramingStale(framing: FramingDesign | null, design: DeckDesign, site: SiteModel, input: GenerateFramingInput): boolean {
-  return !framing || framing.schema !== 'framing-design/v2' || framing.inputFingerprint !== framingInputFingerprint(design, site, input);
+  return !framing || framing.schema !== 'framing-design/v2' || framing.lifeSafety?.schema !== 'life-safety-screen/v1' || framing.inputFingerprint !== framingInputFingerprint(design, site, input);
 }
 
 function resolveJoistAxis(platform: DeckPlatform, housePoints: readonly [PointMm, PointMm] | null): 'x' | 'y' {
@@ -224,13 +217,15 @@ function endpointElevation(design: DeckDesign, endpoint: DeckDesign['stairs'][nu
   return endpoint.kind === 'terrain' ? endpoint.elevationMm : design.platforms.find((platform) => platform.id === endpoint.platformId)?.elevationMm || 0;
 }
 
-function globalChecks(site: SiteModel, footingCount: number, ledgerCount: number, guardCount: number, stringerCount: number): FramingCheck[] {
+function globalChecks(site: SiteModel, footingCount: number, ledgerCount: number, guardCount: number, stringerCount: number, lifeSafety: LifeSafetyAssessment): FramingCheck[] {
+  const requiredGuardEdges = lifeSafety.platformEdges.filter((edge) => edge.guardRequired).length;
+  const blockedStairs = lifeSafety.stairs.filter((stair) => stair.status === 'blocked');
   return [
     { id: 'footing-bearing', title: 'Footings and soil', objectId: 'framing', status: 'review', result: `${footingCount} preliminary bearing-only footing sizes generated.`, basis: 'Assumed soil bearing only; frost depth, soil, uplift, thickness, reinforcement, and setbacks require verification.' },
     { id: 'lateral-load-path', title: 'Lateral load path', objectId: 'framing', status: 'blocked', result: 'No automatic lateral bracing or house lateral-tie design has been certified.', basis: CWC_DECK_GUIDE.exclusions.join(', ') },
     { id: 'ledger-envelope', title: 'Ledger and building envelope', objectId: 'site', status: ledgerCount && site.designWall.selectionStatus === 'field-measured' && site.designWall.rimMaterial !== 'unknown' && site.designWall.flashingFeasible === 'yes' ? 'review' : ledgerCount ? 'blocked' : 'pass', result: ledgerCount ? `${ledgerCount} ledger line(s); wall substrate and flashing inputs ${site.designWall.selectionStatus === 'field-measured' ? 'recorded' : 'not field-confirmed'}.` : 'No ledger lines generated.', basis: 'House attachment and waterproofing are excluded from the span guide and require project-specific review.' },
-    { id: 'guards', title: 'Guards', objectId: 'framing', status: guardCount ? 'review' : 'pass', result: `${guardCount} guard edge${guardCount === 1 ? '' : 's'} generated from platform elevation and edge roles.`, basis: 'Guard system capacity, posts, anchorage, openings, and climbability require code/product review.' },
-    { id: 'stairs', title: 'Stair structure', objectId: 'framing', status: stringerCount ? 'review' : 'pass', result: `${stringerCount} stair stringer line${stringerCount === 1 ? '' : 's'} generated.`, basis: 'Stringer sizing, connections, landings, guards, and handrails require structural and code review.' },
+    { id: 'guards', title: 'Guard location and assemblies', objectId: 'framing', status: guardCount ? 'review' : 'pass', result: `${requiredGuardEdges} edge${requiredGuardEdges === 1 ? '' : 's'} exceed the modeled 600 mm trigger; ${guardCount} guard intent line${guardCount === 1 ? '' : 's'} generated.`, basis: 'Division B 9.8.8 screen. Field grade, 1.2 m adjacent surfaces, guard height, 100 mm openings, loads, posts, anchorage, glazing, climbability, and product compliance require review.' },
+    { id: 'stairs', title: 'Stair structure, guards, and handrails', objectId: 'framing', status: blockedStairs.length ? 'blocked' : stringerCount || lifeSafety.stairs.length ? 'review' : 'pass', result: `${stringerCount} stair stringer line${stringerCount === 1 ? '' : 's'} generated; ${blockedStairs.length} stair flight${blockedStairs.length === 1 ? '' : 's'} missing required handrail intent.`, basis: 'Division B 9.8.7–9.8.8 screen. Stringer design, connections, landings, side guards, handrail height/continuity/graspability, and attachment remain unresolved.' },
   ];
 }
 

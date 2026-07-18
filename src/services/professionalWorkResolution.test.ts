@@ -9,6 +9,7 @@ const report = {
   beams: [{ platformId: 'P1' }],
   postFootingChecks: [{ platformId: 'P1', reactionKn: 5.2 }],
   stairs: [{ id: 'ST1', riserCount: 3, riserHeightMm: 150, stringerCount: 3, widthMm: 900 }],
+  lifeSafety: { platformEdges: [{ platformId: 'P1', guardIntent: 'generated-required', guardRequired: true, maximumDropMm: 900 }] },
   connections: [{ id: 'C-P1-B1', kind: 'beam-to-post', designActionKn: 5.2, actionScope: 'each', requirements: ['Specify post cap and fasteners.'] }],
 } as unknown as CanonicalCalculationReport;
 
@@ -18,11 +19,11 @@ function resolution(workPackageId: string, kind: ProfessionalWorkResolution['kin
 
 describe('professional structural work resolutions', () => {
   it('derives compact member, foundation, stair, and connection work packages', () => {
-    expect(buildProfessionalWorkPackages(report).map((item) => item.id)).toEqual(['SYS:P1', 'FND:P1', 'STAIR:ST1', 'C-P1-B1']);
+    expect(buildProfessionalWorkPackages(report).map((item) => item.id)).toEqual(['SYS:P1', 'FND:P1', 'STAIR:ST1', 'GUARD:P1', 'C-P1-B1']);
   });
 
   it('requires every work package for an accepted review and binds each resolution to the fingerprint', () => {
-    const complete = [resolution('SYS:P1', 'platform-system'), resolution('FND:P1', 'foundation-system'), resolution('STAIR:ST1', 'stair-system'), resolution('C-P1-B1', 'connection')];
+    const complete = [resolution('SYS:P1', 'platform-system'), resolution('FND:P1', 'foundation-system'), resolution('STAIR:ST1', 'stair-system'), resolution('GUARD:P1', 'guard-system'), resolution('C-P1-B1', 'connection')];
     expect(() => validateProfessionalWorkResolutions(complete, report, 'accepted')).not.toThrow();
     expect(() => validateProfessionalWorkResolutions(complete.slice(1), report, 'accepted')).toThrow(/remain unanswered/);
     expect(() => validateProfessionalWorkResolutions([{ ...complete[0], designFingerprint: 'DP-00000000' }], report, 'changes-requested')).toThrow(/published design revision/);

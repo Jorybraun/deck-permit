@@ -42,6 +42,8 @@ describe('canonical structural calculation report', () => {
     expect(report.postFootingChecks).toHaveLength(framing.footings.length);
     expect(report.postFootingChecks.every((item) => item.requiredBearingAreaSqM > 0 && item.providedBearingAreaSqM > 0 && item.footingDepth === 'unresolved')).toBe(true);
     expect(report.stairs[0]).toMatchObject({ id: 'ST1', riserCount: 3, stringerCount: 3, status: 'review-required' });
+    expect(report.lifeSafety).toMatchObject({ schema: 'life-safety-screen/v1', adjacentSurfaceSearchMm: 1200, status: expect.stringMatching(/review|blocked/) });
+    expect(report.lifeSafety.platformEdges.some((edge) => edge.guardRequired && edge.requiredHeightMm === 900 && edge.openingLimitMm === 100)).toBe(true);
     expect(report.connections).toHaveLength(framing.connections.length);
     expect(report.connections.every((connection) => connection.status === 'design-required')).toBe(true);
     expect(report.reviewGates.some((gate) => gate.status === 'required')).toBe(true);

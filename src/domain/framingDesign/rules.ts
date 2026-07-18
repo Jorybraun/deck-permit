@@ -9,6 +9,17 @@ export const CWC_DECK_GUIDE: FramingRuleSource = {
   exclusions: ['Footings', 'Railings and guards', 'House attachment', 'Lateral bracing', 'Irregular or multi-span framing outside the tabulated configurations'],
 };
 
+export function lifeSafetySourceForProfile(profile: FramingCodeProfile): FramingRuleSource {
+  return {
+    id: `${profile.id}-part9-life-safety`,
+    title: `${profile.label} · Division B, Section 9.8`,
+    edition: `Effective ${profile.effectiveDate}; current profile must be confirmed at issue`,
+    url: profile.sourceUrl,
+    scope: 'Requirement-location screen for exterior residential deck guards and stair handrails: adjacent surfaces within 1.2 m, guard height, guard openings, stair handrail count, continuity, and attachment review.',
+    exclusions: ['Professional code interpretation', 'Guard and handrail structural capacity', 'Proprietary system approval', 'Field grade and occupancy verification', 'Alternative solutions and project-specific authority interpretations'],
+  };
+}
+
 const JOIST_SPANS = {
   'not-incised': [{ section: '38×89 (2×4)', spanMm: 1770 }, { section: '38×140 (2×6)', spanMm: 2780 }, { section: '38×184 (2×8)', spanMm: 3650 }, { section: '38×235 (2×10)', spanMm: 4620 }, { section: '38×286 (2×12)', spanMm: 5370 }],
   incised: [{ section: '38×89 (2×4)', spanMm: 1740 }, { section: '38×140 (2×6)', spanMm: 2730 }, { section: '38×184 (2×8)', spanMm: 3490 }, { section: '38×235 (2×10)', spanMm: 4260 }, { section: '38×286 (2×12)', spanMm: 4950 }],

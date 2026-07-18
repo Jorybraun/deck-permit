@@ -3,7 +3,7 @@ import type { ProfessionalReviewCycle } from '../types';
 
 export const PROFESSIONAL_WORK_RESOLUTION_SCHEMA = 'permitly-professional-work-resolution/v1' as const;
 
-export type ProfessionalWorkPackageKind = 'platform-system' | 'foundation-system' | 'stair-system' | 'connection';
+export type ProfessionalWorkPackageKind = 'platform-system' | 'foundation-system' | 'stair-system' | 'guard-system' | 'connection';
 
 export interface ProfessionalWorkPackage {
   id: string;
@@ -57,6 +57,17 @@ export function buildProfessionalWorkPackages(report: CanonicalCalculationReport
     demandSummary: `${stair.riserCount} risers @ ${stair.riserHeightMm} mm, ${stair.stringerCount} stringers, ${stair.widthMm} mm width`,
     requirementSummary: 'Resolve stringer size/notching, header and landing support, attachment hardware, guards, handrails, load path, and code geometry.',
   }));
+  unique((report.lifeSafety?.platformEdges || []).filter((edge) => ['generated-required', 'owner-selected-optional'].includes(edge.guardIntent)).map((edge) => edge.platformId)).forEach((platformId) => {
+    const edges = report.lifeSafety.platformEdges.filter((edge) => edge.platformId === platformId && ['generated-required', 'owner-selected-optional'].includes(edge.guardIntent));
+    const required = edges.filter((edge) => edge.guardRequired);
+    packages.push({
+      id: `GUARD:${platformId}`,
+      kind: 'guard-system',
+      title: `${platformId} guard system`,
+      demandSummary: `${edges.length} guard edge(s), ${required.length} code-triggered, maximum modeled drop ${maximum(edges.map((edge) => edge.maximumDropMm)).toFixed(0)} mm`,
+      requirementSummary: 'Resolve guard height, loads, post spacing, rim/blocking/hold-down anchorage, 100 mm opening limit, climbability where applicable, glazing/product approval, corrosion resistance, and transitions at stairs and walls.',
+    });
+  });
   report.connections.forEach((connection) => packages.push({
     id: connection.id,
     kind: 'connection',
