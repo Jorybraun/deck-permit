@@ -1,6 +1,6 @@
 import { AlertTriangle, ArrowRight, Building2, CheckCircle2, DoorOpen, ExternalLink, Loader2, MapPin, Plus, Ruler, Search, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { applyPhotoWallCalibration, recordExistingConditionFieldSurvey, type AddTerrainGradePointInput, type ApplyPhotoWallCalibrationInput, type CaptureCategory, type CaptureEvidenceChanges, type ExistingConditionCaptureAssessment, type RecordExistingConditionFieldSurveyInput, type SiteModel, type TerrainDatum, type TerrainGradePoint } from '../../domain/siteModel';
+import { applyPhotoWallCalibration, recordExistingConditionFieldSurvey, recordTerrainFieldSurvey, type AddTerrainGradePointInput, type ApplyPhotoWallCalibrationInput, type CaptureCategory, type CaptureEvidenceChanges, type ExistingConditionCaptureAssessment, type RecordExistingConditionFieldSurveyInput, type RecordTerrainFieldInput, type SiteModel, type TerrainDatum, type TerrainGradePoint } from '../../domain/siteModel';
 import type { Address, Property } from '../../types';
 import { PropertyContextPlan } from './PropertyContextPlan';
 import { TerrainCapturePanel } from './TerrainCapturePanel';
@@ -124,7 +124,7 @@ export function PropertyStage({ property, site, research, onResearch, onResearch
             onUpdateSite({ houseDepthMm: recorded.houseDepthMm, fieldSurvey: recorded.fieldSurvey, status: recorded.status, measuredBy: recorded.measuredBy, measuredAt: recorded.measuredAt, referenceSource: recorded.referenceSource }, { selectionStatus: recorded.designWall.selectionStatus, lengthMm: recorded.designWall.lengthMm, wallHeightMm: recorded.designWall.wallHeightMm, openings: recorded.designWall.openings });
           }} />
           <WallOpeningEditor site={site} onUpdateOpenings={(openings) => { const openingIds = new Set(openings.map((opening) => opening.id)); onUpdateSite({ capture: { ...site.capture, wallCalibrations: (site.capture.wallCalibrations || []).filter((record) => openingIds.has(record.openingId)) } }, { openings }); }} />
-          <TerrainCapturePanel terrain={site.terrain} onUpdateDatum={onUpdateTerrainDatum} onAddPoint={onAddTerrainPoint} onUpdatePoint={onUpdateTerrainPoint} onRemovePoint={onRemoveTerrainPoint} />
+          <TerrainCapturePanel terrain={site.terrain} captureEvidence={site.capture.evidence} onUpdateDatum={onUpdateTerrainDatum} onAddPoint={onAddTerrainPoint} onUpdatePoint={onUpdateTerrainPoint} onRemovePoint={onRemoveTerrainPoint} onRecord={(input: RecordTerrainFieldInput) => onUpdateSite({ terrain: recordTerrainFieldSurvey(site.terrain, input, site.capture.evidence.map((record) => record.id)) })} />
           <div className="mt-5 flex justify-end"><button type="button" onClick={onContinue} className="flex min-h-11 items-center gap-2 rounded-lg bg-emerald-800 px-5 text-sm font-bold text-white">Open deck designer <ArrowRight size={16} /></button></div>
         </section>
       </>}

@@ -97,7 +97,7 @@ function normalizeSite(site: SiteModel): SiteModel {
   return {
     ...site,
     schema: 'site-model/v4',
-    terrain: site.terrain?.schema === 'terrain-surface/v1' ? site.terrain : createTerrainSurface(legacySite.terrainElevationMm || 0),
+    terrain: site.terrain?.schema === 'terrain-surface/v1' ? { ...site.terrain, fieldRecord: site.terrain.fieldRecord?.schema === 'terrain-field-record/v1' ? site.terrain.fieldRecord : null } : createTerrainSurface(legacySite.terrainElevationMm || 0),
     yardReference: site.yardReference?.schema === 'parcel-yard-reference/v1' ? { ...site.yardReference, rearEdgeIndex: site.yardReference.rearEdgeIndex ?? null } : { schema: 'parcel-yard-reference/v1', status: 'unselected', frontEdgeIndex: null, rearEdgeIndex: null, exteriorSideEdgeIndex: null, selectedBy: '', selectedAt: '', notes: '' },
     capture: site.capture?.schema === 'existing-condition-capture/v1' ? { ...site.capture, wallCalibrations: site.capture.wallCalibrations || [] } : createExistingConditionCapture(),
     fieldSurvey: site.fieldSurvey?.schema === 'existing-condition-field-survey/v1' ? site.fieldSurvey : null,

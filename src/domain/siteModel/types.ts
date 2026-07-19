@@ -58,6 +58,38 @@ export interface TerrainSurface {
   schema: 'terrain-surface/v1';
   datum: TerrainDatum;
   gradePoints: TerrainGradePoint[];
+  fieldRecord?: TerrainFieldRecord | null;
+}
+
+export type TerrainMeasurementInstrument = 'laser-level' | 'rotary-laser' | 'optical-level' | 'total-station';
+
+export interface TerrainFieldPointMeasurement {
+  pointId: string;
+  label: string;
+  xMm: number;
+  yMm: number;
+  elevationMm: number;
+  notes: string;
+}
+
+/** Controlled local-grade observations tied to one explicit project benchmark. */
+export interface TerrainFieldRecord {
+  schema: 'terrain-field-record/v1';
+  id: string;
+  status: 'homeowner-recorded-unverified' | 'professional-verified';
+  recordedBy: string;
+  recordedAt: string;
+  instrument: TerrainMeasurementInstrument;
+  benchmark: { datumId: 'DATUM-1'; label: string; elevationMm: number; description: string };
+  points: TerrainFieldPointMeasurement[];
+  sourceEvidenceIds: string[];
+  notes: string;
+}
+
+export interface TerrainFieldRecordAssessment {
+  status: 'missing' | 'stale' | 'current-homeowner-unverified' | 'current-professional-verified';
+  current: boolean;
+  messages: string[];
 }
 
 export interface ParcelYardReference {

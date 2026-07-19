@@ -105,6 +105,7 @@ function existingConditionsSheet(input: CanonicalPlanSetInput, issue: IssueMeta)
   const capture = assessExistingConditionCapture(site.capture, { hasDoor: site.designWall.openings.some((opening) => opening.kind === 'door') });
   const assessment = assessSiteModel(site);
   const fieldSurvey = site.fieldSurvey;
+  const terrainField = site.terrain.fieldRecord;
   const provenanceRows = [
     ['House reference', `${site.referenceSource} · ${site.status}`],
     ['Selected wall', `${site.designWall.label} · ${site.designWall.selectionStatus}`],
@@ -112,7 +113,7 @@ function existingConditionsSheet(input: CanonicalPlanSetInput, issue: IssueMeta)
     ['Wall orientation', `reverse ${site.designWall.reverseDirection ? 'yes' : 'no'} · outward inverted ${site.designWall.invertOutward ? 'yes' : 'no'}`],
     ['Field worksheet', fieldSurvey ? `${fieldSurvey.id} · ${fieldSurvey.status} · ${fieldSurvey.instrument} · ${fieldSurvey.recordedBy} ${fieldSurvey.recordedAt}` : 'not recorded'],
     ['Project datum', `${site.terrain.datum.label} · EL. ${site.terrain.datum.elevationMm} · ${site.terrain.datum.source} · ${site.terrain.datum.verificationStatus}`],
-    ['Grade observations', `${site.terrain.gradePoints.length} point(s)`],
+    ['Grade worksheet', terrainField ? `${terrainField.id} · ${terrainField.status} · ${terrainField.instrument} · ${terrainField.points.length} point(s)` : `not recorded · ${site.terrain.gradePoints.length} provisional point(s)`],
     ['Photo coverage', `${capture.recordedRequiredCount}/${capture.requiredCount} required recorded · ${capture.confirmedRequiredCount}/${capture.requiredCount} confirmed`],
     ['Photo calibrations', `${site.capture.wallCalibrations?.length || 0} two-axis homeowner measurement record(s)`],
   ];

@@ -13,12 +13,14 @@ It does not automatically infer dimensions, decide structural facts, or claim th
 - `existingConditionCapture.ts` owns validation, immutable metadata commands, category requirements, and readiness assessment.
 - `photoWallCalibration.ts` owns the two-axis affine calculation, validation, source binding, measurement provenance, and admission of `scaled-photo-derived` openings.
 - `fieldSurvey.ts` owns the controlled direct-measurement worksheet, validation, admission of `field-measured` geometry, and stale-record assessment.
+- `terrain.ts` owns the controlled benchmark/grade worksheet, point validation, local interpolation, and stale-record assessment.
 - `captureFileStorage.ts` owns file hashing and local byte persistence.
 - `ExistingConditionCapturePanel.tsx` presents the checklist and emits typed add, update, and remove intents. It does not mutate the site model directly.
 - Framing and plan-generation modules may consume evidence identifiers and readiness results, but may not reinterpret an image as a verified measurement.
 - `SiteModel.designWall.openings` owns the editable door/window register. A record carries an evidence status: `photo-observed` proves presence only; `scaled-photo-derived` records a two-axis homeowner calibration but still requires tape/laser verification; `field-measured` and `professional-verified` describe progressively stronger evidence.
 - `SiteModel.capture.wallCalibrations` preserves both normalized reference axes, both homeowner-entered distances, the traced image box, the derived opening geometry, source photo, measurer, date, method, and limitations. Changing any controlled calibration fact changes the project fingerprint and makes generated framing stale.
 - `SiteModel.fieldSurvey` preserves the measurer, date, instrument, wall and house dimensions, project datum snapshot, every opening dimension, corroborating evidence IDs, and notes. It is the only homeowner workflow allowed to set `field-measured`; manually changing controlled geometry or the datum makes the worksheet stale.
+- `SiteModel.terrain.fieldRecord` preserves the recoverable benchmark, level instrument, measurer, date, every local X/Y/elevation observation, corroborating evidence IDs, and notes. Grade points remain provisional until this complete record is saved; manually changing the benchmark or any point makes it stale.
 - `sourceEvidenceIds` and `sourceAiObservationRefs` bind an admitted provisional opening to the exact photo and homeowner-accepted Cerebras observation. Re-admitting the same observation is rejected.
 - `wallOpeningCoordination.ts` consumes that register with the deck geometry. It blocks surface/sill and ledger intersections and routes door access, low-window, evidence, and wall-alignment conditions to the professional-review package.
 
@@ -36,7 +38,8 @@ It does not automatically infer dimensions, decide structural facts, or claim th
 10. The homeowner then completes the field worksheet using a tape, laser distance meter, or survey instrument. The record must include the selected wall, house depth, wall height, the current project datum, and every modeled opening; a wall with no openings must be explicitly confirmed as such.
 11. Saving the worksheet admits those values as `field-measured` but `homeowner-recorded-unverified`. A status dropdown cannot manufacture this evidence, and subsequent geometry or datum changes make the worksheet stale automatically.
 12. C1.x schedules print the accepted AI observation, calibration distances/results, and field worksheet identity/provenance. The same evidence state enters the existing-condition elevation, layered DXF, framing fingerprint, and professional-review gates.
-13. Readiness is derived from current evidence. Required categories depend on known conditions, such as whether a door exists. Framing's field-geometry gate closes only when the controlled worksheet is current and at least three non-reference grade observations are recorded; property-boundary survey evidence remains a separate permit requirement.
+13. The homeowner creates at least three distinct local grade observations, identifies a recoverable project benchmark and the level instrument used, and confirms that every value was directly measured. Saving creates one controlled local-grade record; the interface cannot label a point as survey or professionally verified.
+14. Readiness is derived from current evidence. Required categories depend on known conditions, such as whether a door exists. Framing's field-geometry gate closes only when both the existing-wall and local-grade worksheets are current; property-boundary survey evidence remains a separate permit requirement.
 
 ## Photo-calibration geometry
 
@@ -73,4 +76,4 @@ None of these states alone establishes a survey coordinate, elevation, concealed
 
 Domain tests cover conditional requirements, recorded-versus-confirmed readiness, validation, removal, affine derivation, invalid axes/boxes, wall bounds, source binding, and calibrated opening admission. Storage tests cover hashing, file-store round trips, deletion, and invalid file rejection. The application build and browser review cover the integrated homeowner checklist, real Lovell photo selection, AI-outline seeding, six-point calibration interaction, derived dimension preview, application to W1, warning propagation, persistence, and console errors.
 
-Field-worksheet tests additionally cover complete-record admission, missing/unknown openings, wall-bound validation, stale geometry and datum detection, the rejection of label-only evidence, framing review-gate behavior, and door-threshold-driven platform elevation guidance.
+Field-worksheet tests additionally cover complete-record admission, missing/unknown openings, wall-bound validation, local-grade benchmark and point control, duplicate/incomplete grade rejection, stale geometry and datum detection, the rejection of label-only evidence, framing review-gate behavior, and door-threshold-driven platform elevation guidance.

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { addPlatform, addStair, createEmptyDesign, rectangularBoundary, selectDesignObject, setPlatformFramingIntent } from '../deckDesign';
-import { addTerrainGradePoint, createSiteModel, recordExistingConditionFieldSurvey, updateSiteModel } from '../siteModel';
+import { addTerrainGradePoint, createSiteModel, recordExistingConditionFieldSurvey, recordTerrainFieldSurvey, updateSiteModel } from '../siteModel';
 import type { Property } from '../../types';
 import { framingInputFingerprint, generateFramingDesign, isFramingStale } from './framingDesign';
 
@@ -111,7 +111,7 @@ describe('FramingDesign v2 public contract', () => {
     let terrain = addTerrainGradePoint(surveyed.terrain, { label: 'G1', xMm: 0, yMm: 0, elevationMm: 0, source: 'homeowner-measurement', verificationStatus: 'recorded', notes: '' });
     terrain = addTerrainGradePoint(terrain, { label: 'G2', xMm: 2000, yMm: 0, elevationMm: 20, source: 'homeowner-measurement', verificationStatus: 'recorded', notes: '' });
     terrain = addTerrainGradePoint(terrain, { label: 'G3', xMm: 4000, yMm: 0, elevationMm: 40, source: 'homeowner-measurement', verificationStatus: 'recorded', notes: '' });
-    const complete = updateSiteModel(surveyed, { terrain });
+    const complete = updateSiteModel(surveyed, { terrain: recordTerrainFieldSurvey(terrain, { id: 'GR-TEST', recordedBy: 'Homeowner', recordedAt: '2026-07-18', instrument: 'laser-level', benchmarkDescription: 'Foundation datum mark.', sourceEvidenceIds: [], notes: '' }) });
     expect(generateFramingDesign(design, complete, { municipality: 'Town of Sidney', snowLoadKpa: 1 }).reviewGates.find((gate) => gate.id === 'field-geometry')).toMatchObject({ status: 'not-required', reason: expect.stringContaining('controlled field worksheet') });
   });
 });
