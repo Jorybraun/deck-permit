@@ -9,6 +9,8 @@ export interface HouseOpening {
   /** A photograph can establish presence, but not construction dimensions without a scale workflow. */
   evidenceStatus?: 'photo-observed' | 'field-measured' | 'professional-verified';
   sourceEvidenceIds?: string[];
+  /** Stable analysis/observation references preserve the explicit AI-to-model admission decision. */
+  sourceAiObservationRefs?: string[];
 }
 
 export interface HouseWallReference {

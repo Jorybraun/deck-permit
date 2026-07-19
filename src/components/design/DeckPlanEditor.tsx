@@ -570,10 +570,15 @@ function SiteContext({ site, geometry, setbackGuides, transform, viewMode }: { s
     <text x={transform.x(0) + 12} y={transform.y(0) - 16} fontSize={viewMode === 'property' ? 9 : 11} fontWeight="800" fill="#38483f">{geometry.alignmentStatus === 'provisional' ? 'PROVISIONAL LONGEST HOUSE EDGE' : site.designWall.selectionStatus === 'field-measured' ? 'FIELD-MEASURED HOUSE WALL' : 'SELECTED MUNICIPAL HOUSE EDGE'} · {formatM(geometry.anchorLengthMm)}</text>
     <text x={transform.x(0) + 12} y={transform.y(0) - 3} fontSize="8" fontWeight="600" fill="#62726a">{geometry.alignmentStatus === 'provisional' ? 'Choose the yard-facing house edge in Property before relying on deck position.' : site.designWall.label}</text>
     <text x={transform.x(geometry.anchorLengthMm / 2)} y={transform.y(geometry.exteriorSideSign * 900)} textAnchor="middle" fontSize="9" fontWeight="800" fill="#b64b25">HOUSE EXTERIOR / DECK SIDE</text>
-    {site.designWall.openings.map((opening) => <g key={opening.id}><rect x={transform.x(opening.offsetMm)} y={transform.y(0) - 42} width={Math.max(12, opening.widthMm * transform.scale)} height="42" fill={opening.kind === 'door' ? '#8db6b0' : '#b6ced0'} stroke="#315e57" strokeWidth="2" /><text x={transform.x(opening.offsetMm + opening.widthMm / 2)} y={transform.y(0) - 16} textAnchor="middle" fontSize="8" fontWeight="700" fill="#183e38">{opening.kind.toUpperCase()} · USER PLACED</text></g>)}
+    {site.designWall.openings.map((opening) => <g key={opening.id}><rect x={transform.x(opening.offsetMm)} y={transform.y(0) - 42} width={Math.max(12, opening.widthMm * transform.scale)} height="42" fill={opening.kind === 'door' ? '#8db6b0' : '#b6ced0'} stroke="#315e57" strokeWidth="2" /><text x={transform.x(opening.offsetMm + opening.widthMm / 2)} y={transform.y(0) - 16} textAnchor="middle" fontSize="8" fontWeight="700" fill="#183e38">{openingPlanLabel(opening)}</text></g>)}
     <text x={transform.x(geometry.parcel[0]?.[0] || 0)} y={transform.y(geometry.parcel[0]?.[1] || 0) - 10} fontSize="9" fontWeight="800" fill="#187456">MUNICIPAL PROPERTY LINE · REFERENCE</text>
     {site.terrain.gradePoints.map((point) => <g key={point.id}><circle cx={transform.x(point.xMm)} cy={transform.y(point.yMm)} r="6" fill="#fff" stroke="#6d28d9" strokeWidth="2.5" /><path d={`M${transform.x(point.xMm) - 9} ${transform.y(point.yMm)}h18M${transform.x(point.xMm)} ${transform.y(point.yMm) - 9}v18`} stroke="#6d28d9" strokeWidth="1" /><text x={transform.x(point.xMm) + 10} y={transform.y(point.yMm) - 9} fontSize="8" fontWeight="800" fill="#5b21b6">{point.id} · EL. {point.elevationMm}</text></g>)}
   </g>;
+}
+
+export function openingPlanLabel(opening: SiteModel['designWall']['openings'][number]): string {
+  const provenance = opening.sourceAiObservationRefs?.length ? 'AI / PHOTO OBSERVED' : opening.evidenceStatus === 'photo-observed' ? 'PHOTO OBSERVED' : opening.evidenceStatus === 'professional-verified' ? 'PROFESSIONAL VERIFIED' : 'FIELD MEASURED';
+  return `${opening.kind.toUpperCase()} ${opening.id} · ${provenance}`;
 }
 
 function FallbackHouseReference({ site, transform }: { site: SiteModel; transform: Transform }) {

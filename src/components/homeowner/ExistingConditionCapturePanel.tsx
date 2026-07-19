@@ -1,4 +1,4 @@
-import { Bot, Camera, Check, Circle, Image as ImageIcon, Loader2, ShieldCheck, Sparkles, Trash2, Upload } from 'lucide-react';
+import { Bot, Camera, Check, Circle, Image as ImageIcon, Loader2, Plus, ShieldCheck, Sparkles, Trash2, Upload } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { CAPTURE_OBSERVATION_TAGS, defaultObservationTag, type CaptureCategory, type CaptureEvidenceChanges, type CaptureObservationTag, type ExistingConditionCapture, type ExistingConditionCaptureAssessment } from '../../domain/siteModel';
 import { fetchAiDesignCapabilities } from '../../services/aiDesignStudio';
@@ -12,10 +12,12 @@ interface ExistingConditionCapturePanelProps {
   onRemoveEvidence: (evidenceId: string) => Promise<void>;
   onAnalyze: () => Promise<void>;
   onReviewAiObservation: (analysisId: string, observationId: string, decision: 'homeowner-accepted' | 'homeowner-rejected') => void;
+  linkedAiOpeningRefs: string[];
+  onPromoteAiOpening: (analysisId: string, observationId: string) => void;
 }
 
 /** Guides a homeowner through the minimum visual evidence needed to model existing conditions. */
-export function ExistingConditionCapturePanel({ capture, assessment, previewUrls, onAddFiles, onUpdateEvidence, onRemoveEvidence, onAnalyze, onReviewAiObservation }: ExistingConditionCapturePanelProps) {
+export function ExistingConditionCapturePanel({ capture, assessment, previewUrls, onAddFiles, onUpdateEvidence, onRemoveEvidence, onAnalyze, onReviewAiObservation, linkedAiOpeningRefs, onPromoteAiOpening }: ExistingConditionCapturePanelProps) {
   const [busyCategory, setBusyCategory] = useState<CaptureCategory | null>(null);
   const [aiConfigured, setAiConfigured] = useState(false);
   const [aiBusy, setAiBusy] = useState(false);
@@ -38,7 +40,7 @@ export function ExistingConditionCapturePanel({ capture, assessment, previewUrls
       <button type="button" disabled={!aiConfigured || !capture.evidence.length || aiBusy} onClick={() => { setAiBusy(true); setError(''); void onAnalyze().catch((reason) => setError(reason instanceof Error ? reason.message : 'Photo analysis failed.')).finally(() => setAiBusy(false)); }} className="mt-3 flex min-h-10 w-full items-center justify-center gap-2 rounded-lg bg-violet-800 px-4 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-40">{aiBusy ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}{aiBusy ? 'Cerebras is analyzing source-bound observations…' : aiConfigured ? `Analyze ${capture.evidence.length} photo${capture.evidence.length === 1 ? '' : 's'} with Cerebras` : 'Cerebras photo analysis needs server setup'}</button>
     </header>
 
-    {(capture.aiAnalyses?.length || 0) > 0 && <AiObservationReview capture={capture} onDecision={onReviewAiObservation} />}
+    {(capture.aiAnalyses?.length || 0) > 0 && <AiObservationReview capture={capture} linkedOpeningRefs={linkedAiOpeningRefs} onDecision={onReviewAiObservation} onPromote={onPromoteAiOpening} onError={setError} />}
 
     <div className="grid gap-3 p-4">
       {assessment.requirements.map((requirement) => {
@@ -75,11 +77,14 @@ export function ExistingConditionCapturePanel({ capture, assessment, previewUrls
   </section>;
 }
 
-function AiObservationReview({ capture, onDecision }: { capture: ExistingConditionCapture; onDecision: ExistingConditionCapturePanelProps['onReviewAiObservation'] }) {
+function AiObservationReview({ capture, linkedOpeningRefs, onDecision, onPromote, onError }: { capture: ExistingConditionCapture; linkedOpeningRefs: string[]; onDecision: ExistingConditionCapturePanelProps['onReviewAiObservation']; onPromote: ExistingConditionCapturePanelProps['onPromoteAiOpening']; onError: (message: string) => void }) {
   const analysis = capture.aiAnalyses![capture.aiAnalyses!.length - 1];
   return <section className="border-b border-violet-200 bg-violet-50 p-4" aria-label="AI photo observation draft"><div className="flex gap-3"><span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-violet-100 text-violet-800"><Bot size={15} /></span><div><h5 className="text-xs font-bold text-slate-950">AI observation draft · homeowner review required</h5><p className="mt-1 text-[10px] leading-4 text-slate-600">{analysis.summary}</p><span className="mt-1 block text-[8px] font-semibold text-slate-400">{analysis.generation.model} · {analysis.generation.responseId || 'response not retained'}</span></div></div><div className="mt-3 grid gap-2">{analysis.observations.map((observation) => {
     const source = capture.evidence.find((record) => record.id === observation.sourceEvidenceId);
-    return <article key={observation.id} className="rounded-lg border border-violet-200 bg-white p-3"><div className="flex flex-wrap items-center gap-2"><strong className="text-[10px] uppercase tracking-[.08em] text-violet-900">{observation.kind.replace(/-/g, ' ')}</strong><span className="rounded-full bg-slate-100 px-2 py-0.5 text-[8px] font-bold text-slate-600">{Math.round(observation.confidence * 100)}% visual confidence</span><span className="text-[8px] text-slate-400">Source: {source?.label || observation.sourceEvidenceId}</span></div><p className="mt-1 text-[10px] leading-4 text-slate-700">{observation.description}</p><p className="mt-1 text-[8px] font-bold uppercase tracking-[.08em] text-amber-800">Not measured · cannot set geometry</p>{observation.uncertainties.length > 0 && <p className="mt-1 text-[8px] leading-3 text-slate-500">Uncertain: {observation.uncertainties.join(' · ')}</p>}<div className="mt-2 grid grid-cols-2 gap-2"><button type="button" onClick={() => onDecision(analysis.id, observation.id, 'homeowner-accepted')} className={`min-h-8 rounded-md border text-[9px] font-bold ${observation.decision === 'homeowner-accepted' ? 'border-emerald-600 bg-emerald-50 text-emerald-900' : 'border-slate-300 text-slate-700'}`}>Accept observation</button><button type="button" onClick={() => onDecision(analysis.id, observation.id, 'homeowner-rejected')} className={`min-h-8 rounded-md border text-[9px] font-bold ${observation.decision === 'homeowner-rejected' ? 'border-red-500 bg-red-50 text-red-900' : 'border-slate-300 text-slate-700'}`}>Reject</button></div></article>;
+    const sourceRef = `${analysis.id}:${observation.id}`;
+    const supportsOpening = observation.kind === 'door' || observation.kind === 'window';
+    const linked = linkedOpeningRefs.includes(sourceRef);
+    return <article key={observation.id} className="rounded-lg border border-violet-200 bg-white p-3"><div className="flex flex-wrap items-center gap-2"><strong className="text-[10px] uppercase tracking-[.08em] text-violet-900">{observation.kind.replace(/-/g, ' ')}</strong><span className="rounded-full bg-slate-100 px-2 py-0.5 text-[8px] font-bold text-slate-600">{Math.round(observation.confidence * 100)}% visual confidence</span><span className="text-[8px] text-slate-400">Source: {source?.label || observation.sourceEvidenceId}</span></div><p className="mt-1 text-[10px] leading-4 text-slate-700">{observation.description}</p><p className="mt-1 text-[8px] font-bold uppercase tracking-[.08em] text-amber-800">Not measured · cannot set geometry</p>{observation.uncertainties.length > 0 && <p className="mt-1 text-[8px] leading-3 text-slate-500">Uncertain: {observation.uncertainties.join(' · ')}</p>}<div className="mt-2 grid grid-cols-2 gap-2"><button type="button" onClick={() => onDecision(analysis.id, observation.id, 'homeowner-accepted')} className={`min-h-8 rounded-md border text-[9px] font-bold ${observation.decision === 'homeowner-accepted' ? 'border-emerald-600 bg-emerald-50 text-emerald-900' : 'border-slate-300 text-slate-700'}`}>Accept observation</button><button type="button" onClick={() => onDecision(analysis.id, observation.id, 'homeowner-rejected')} className={`min-h-8 rounded-md border text-[9px] font-bold ${observation.decision === 'homeowner-rejected' ? 'border-red-500 bg-red-50 text-red-900' : 'border-slate-300 text-slate-700'}`}>Reject</button></div>{supportsOpening && observation.decision === 'homeowner-accepted' && <button type="button" disabled={linked} onClick={() => { try { onPromote(analysis.id, observation.id); onError(''); } catch (reason) { onError(reason instanceof Error ? reason.message : 'The observed opening could not be added.'); } }} className="mt-2 flex min-h-9 w-full items-center justify-center gap-2 rounded-md bg-violet-800 px-3 text-[9px] font-bold text-white disabled:bg-emerald-100 disabled:text-emerald-900"><Plus size={12} />{linked ? 'Added to wall measurement list' : `Add provisional ${observation.kind} to wall measurement list`}</button>}</article>;
   })}</div>{analysis.unknowns.length > 0 && <p className="mt-3 rounded-lg bg-white p-2 text-[9px] leading-4 text-slate-600"><strong>Still unknown:</strong> {analysis.unknowns.join(' · ')}</p>}</section>;
 }
 

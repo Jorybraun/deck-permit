@@ -32,11 +32,12 @@ interface PropertyStageProps {
   onRemoveCaptureEvidence: (evidenceId: string) => Promise<void>;
   onAnalyzeCapture: () => Promise<void>;
   onReviewAiObservation: (analysisId: string, observationId: string, decision: 'homeowner-accepted' | 'homeowner-rejected') => void;
+  onPromoteAiOpening: (analysisId: string, observationId: string) => void;
   onContinue: () => void;
 }
 
 /** Lets a homeowner research a parcel and turn reference geometry into explicit field inputs. */
-export function PropertyStage({ property, site, research, onResearch, onResearchAddress, onSuggestAddresses, onSelectWall, onUpdateSite, onUpdateTerrainDatum, onAddTerrainPoint, onUpdateTerrainPoint, onRemoveTerrainPoint, captureAssessment, capturePreviewUrls, onAddCaptureFiles, onUpdateCaptureEvidence, onRemoveCaptureEvidence, onAnalyzeCapture, onReviewAiObservation, onContinue }: PropertyStageProps) {
+export function PropertyStage({ property, site, research, onResearch, onResearchAddress, onSuggestAddresses, onSelectWall, onUpdateSite, onUpdateTerrainDatum, onAddTerrainPoint, onUpdateTerrainPoint, onRemoveTerrainPoint, captureAssessment, capturePreviewUrls, onAddCaptureFiles, onUpdateCaptureEvidence, onRemoveCaptureEvidence, onAnalyzeCapture, onReviewAiObservation, onPromoteAiOpening, onContinue }: PropertyStageProps) {
   const [address, setAddress] = useState(property.address?.fullAddress || '');
   const [addressOptions, setAddressOptions] = useState<Address[]>([]);
   const [suggestionStatus, setSuggestionStatus] = useState<'idle' | 'loading' | 'ready'>('idle');
@@ -115,7 +116,7 @@ export function PropertyStage({ property, site, research, onResearch, onResearch
             <label className="grid gap-1.5 text-xs font-bold uppercase tracking-[.08em] text-slate-500">Measured date<input type="date" value={site.measuredAt} onChange={(event) => onUpdateSite({ measuredAt: event.target.value })} className="min-h-11 rounded-lg border border-slate-300 px-3 text-sm font-normal normal-case tracking-normal text-slate-800" /></label>
           </div>
           <WallOpeningEditor site={site} onUpdateOpenings={(openings) => onUpdateSite({}, { openings })} />
-          <ExistingConditionCapturePanel capture={site.capture} assessment={captureAssessment} previewUrls={capturePreviewUrls} onAddFiles={onAddCaptureFiles} onUpdateEvidence={onUpdateCaptureEvidence} onRemoveEvidence={onRemoveCaptureEvidence} onAnalyze={onAnalyzeCapture} onReviewAiObservation={onReviewAiObservation} />
+          <ExistingConditionCapturePanel capture={site.capture} assessment={captureAssessment} previewUrls={capturePreviewUrls} onAddFiles={onAddCaptureFiles} onUpdateEvidence={onUpdateCaptureEvidence} onRemoveEvidence={onRemoveCaptureEvidence} onAnalyze={onAnalyzeCapture} onReviewAiObservation={onReviewAiObservation} linkedAiOpeningRefs={site.designWall.openings.flatMap((opening) => opening.sourceAiObservationRefs || [])} onPromoteAiOpening={onPromoteAiOpening} />
           <TerrainCapturePanel terrain={site.terrain} onUpdateDatum={onUpdateTerrainDatum} onAddPoint={onAddTerrainPoint} onUpdatePoint={onUpdateTerrainPoint} onRemovePoint={onRemoveTerrainPoint} />
           <div className="mt-5 flex justify-end"><button type="button" onClick={onContinue} className="flex min-h-11 items-center gap-2 rounded-lg bg-emerald-800 px-5 text-sm font-bold text-white">Open deck designer <ArrowRight size={16} /></button></div>
         </section>
@@ -159,6 +160,7 @@ function WallOpeningEditor({ site, onUpdateOpenings }: { site: SiteModel; onUpda
           <NumberField label="Opening height" value={opening.heightMm ?? (opening.kind === 'door' ? 2100 : 1200)} suffix="mm" min={300} max={4000} onChange={(heightMm) => update(opening.id, { heightMm })} />
         </div>
         {!measured && <p className="mt-2 text-[9px] leading-4 text-amber-800">Starter numbers only keep the symbol editable; they are not derived from the photograph. Measure from the selected wall start, local grade, sill and head before relying on clearance checks.</p>}
+        {(opening.sourceEvidenceIds?.length || 0) > 0 && <p className="mt-2 rounded-md bg-violet-50 px-2 py-1.5 text-[9px] leading-4 text-violet-900">Source-bound photo observation · {opening.sourceEvidenceIds!.map((id) => site.capture.evidence.find((record) => record.id === id)?.label || id).join(', ')} · {opening.sourceAiObservationRefs?.length || 0} accepted AI observation{opening.sourceAiObservationRefs?.length === 1 ? '' : 's'}.</p>}
       </article>;
     })}</div>}
   </div>;

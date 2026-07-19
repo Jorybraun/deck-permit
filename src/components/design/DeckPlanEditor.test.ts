@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { existingLayersPointerEvents } from './DeckPlanEditor';
+import { existingLayersPointerEvents, openingPlanLabel } from './DeckPlanEditor';
 
 describe('DeckPlanEditor layer hit testing', () => {
   it('lets a new platform place corners over every existing design layer', () => {
@@ -11,5 +11,9 @@ describe('DeckPlanEditor layer hit testing', () => {
     expect(existingLayersPointerEvents('insert')).toBeUndefined();
     expect(existingLayersPointerEvents('remove')).toBeUndefined();
     expect(existingLayersPointerEvents('stairs')).toBeUndefined();
+  });
+
+  it('labels an admitted Cerebras observation by its real photo provenance', () => {
+    expect(openingPlanLabel({ id: 'W1', kind: 'window', offsetMm: 600, widthMm: 1200, sillHeightMm: 900, evidenceStatus: 'photo-observed', sourceAiObservationRefs: ['analysis-1:observation-1'] })).toBe('WINDOW W1 · AI / PHOTO OBSERVED');
   });
 });

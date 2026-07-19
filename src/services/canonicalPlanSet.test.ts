@@ -2,7 +2,7 @@ import { DOMParser } from '@xmldom/xmldom';
 import { describe, expect, it } from 'vitest';
 import { addPlatform, addStair, createEmptyDesign, rectangularBoundary } from '../domain/deckDesign';
 import { generateFramingDesign } from '../domain/framingDesign';
-import { addCaptureEvidence, createSiteModel, selectHouseWall } from '../domain/siteModel';
+import { addCaptureEvidence, createSiteModel, recordAiPhotoAnalysis, selectHouseWall } from '../domain/siteModel';
 import type { Property } from '../types';
 import { canonicalPlanFingerprint, generateCanonicalPlanSet } from './canonicalPlanSet';
 
@@ -20,8 +20,9 @@ describe('canonical coordinated review set', () => {
     design = addPlatform(design, { name: 'Lower deck', boundary: rectangularBoundary(4710, 0, 3500, 3000), elevationMm: 450 });
     design = addStair(design, { from: { kind: 'platform', platformId: 'P1' }, to: { kind: 'platform', platformId: 'P2' }, fromEdgeId: 'P1-E2', toEdgeId: 'P2-E4', startMm: [4000, 1500], endMm: [4710, 1500], directionDeg: 0, riserCount: 3, treadDepthMm: 355 });
     const selectedSite = selectHouseWall(createSiteModel(property), property, 'house', 0);
-    const capture = addCaptureEvidence(selectedSite.capture, { id: 'capture-wall', category: 'design-wall', label: 'Complete wall', fileName: 'wall.jpg', mimeType: 'image/jpeg', byteSize: 1200, sha256: 'a'.repeat(64), recordedAt: '2026-07-18T00:00:00.000Z', status: 'homeowner-confirmed', notes: 'Cladding appears intact.', viewpoint: 'Rear yard looking toward house', observationTags: ['complete-wall', 'wall-corners', 'scale-reference'], referenceLabel: 'tape', referenceDimensionMm: 1000 });
-    const site = { ...selectedSite, capture, measuredBy: 'Homeowner', yardReference: { ...selectedSite.yardReference, status: 'homeowner-selected' as const, frontEdgeIndex: 0, rearEdgeIndex: 2, selectedBy: 'Homeowner', selectedAt: '2026-07-18T00:00:00.000Z' }, designWall: { ...selectedSite.designWall, openings: [{ id: 'D1', kind: 'door' as const, offsetMm: 900, widthMm: 1800, sillHeightMm: 120 }] } };
+    let capture = addCaptureEvidence(selectedSite.capture, { id: 'capture-wall', category: 'design-wall', label: 'Complete wall', fileName: 'wall.jpg', mimeType: 'image/jpeg', byteSize: 1200, sha256: 'a'.repeat(64), recordedAt: '2026-07-18T00:00:00.000Z', status: 'homeowner-confirmed', notes: 'Cladding appears intact.', viewpoint: 'Rear yard looking toward house', observationTags: ['complete-wall', 'wall-corners', 'scale-reference'], referenceLabel: 'tape', referenceDimensionMm: 1000 });
+    capture = recordAiPhotoAnalysis(capture, { schema: 'ai-photo-observation-draft/v1', id: 'analysis-1', summary: 'Door visible.', unknowns: ['Exact dimensions'], generation: { model: 'gemma-4-31b', responseId: 'response', generatedAt: '2026-07-18T00:00:00.000Z' }, observations: [{ id: 'observation-1', sourceEvidenceId: 'capture-wall', kind: 'door', confidence: .94, description: 'Exterior door is visible on the selected wall.', measurementStatus: 'not-measured', boundingBox: null, uncertainties: ['Perspective'], decision: 'homeowner-accepted' }] });
+    const site = { ...selectedSite, capture, measuredBy: 'Homeowner', yardReference: { ...selectedSite.yardReference, status: 'homeowner-selected' as const, frontEdgeIndex: 0, rearEdgeIndex: 2, selectedBy: 'Homeowner', selectedAt: '2026-07-18T00:00:00.000Z' }, designWall: { ...selectedSite.designWall, openings: [{ id: 'D1', kind: 'door' as const, offsetMm: 900, widthMm: 1800, sillHeightMm: 120, evidenceStatus: 'field-measured' as const, sourceEvidenceIds: ['capture-wall'], sourceAiObservationRefs: ['analysis-1:observation-1'] }] } };
     const framing = generateFramingDesign(design, site, { municipality: 'Town of Sidney', snowLoadKpa: 1 }, '2026-07-18T00:00:00.000Z');
     const planSet = generateCanonicalPlanSet({ property, site, design, framing, issuedAt: '2026-07-18T00:00:00.000Z' });
 
@@ -64,6 +65,7 @@ describe('canonical coordinated review set', () => {
     const existingSheet = planSet.sheets.find((sheet) => sheet.number === 'C1.0')?.svg || '';
     expect(existingSheet).toContain('EXISTING HOUSE WALL AND OPENING RECORD');
     expect(existingSheet).toContain('D1 · 1800 W × 2100 H · SILL 120 · FIELD-MEASURED');
+    expect(existingSheet).toContain('AI REF analysis-1:observation-1');
     expect(existingSheet).toContain('MEASUREMENT / DATUM PROVENANCE');
     expect(existingSheet).toContain('EXISTING-CONDITION EVIDENCE REGISTER');
     expect(existingSheet).toContain('fully scheduled on C1.1+');
@@ -74,6 +76,7 @@ describe('canonical coordinated review set', () => {
     expect(captureSchedules[0].svg).toContain('complete-wall, wall-corners, scale-reference');
     expect(captureSchedules[0].svg).toContain('tape · 1000 mm');
     expect(captureSchedules[0].svg).toContain('SHA aaaaaaaaaaaaaaaa…');
+    expect(captureSchedules[0].svg).toContain('AI ACCEPTED DOOR observation-1');
     expect(planSet.sheets.find((sheet) => sheet.number === 'A2.0')?.svg).toContain('DECK, LANDING, STAIR AND GUARD PLAN');
     expect(planSet.sheets.find((sheet) => sheet.number === 'A2.0')?.svg).toContain('STAIR 1 · 900 WIDE · 3R');
     expect(planSet.sheets.find((sheet) => sheet.number === 'A2.0')?.svg).toContain('900H · DROP 900');

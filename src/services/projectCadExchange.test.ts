@@ -18,7 +18,7 @@ describe('project CAD exchange', () => {
     design = addPlatform(design, { boundary: rectangularBoundary(4710, 0, 3500, 3000), elevationMm: 450 });
     design = addStair(design, { from: { kind: 'platform', platformId: 'P1' }, to: { kind: 'platform', platformId: 'P2' }, fromEdgeId: 'P1-E2', toEdgeId: 'P2-E4', startMm: [4000, 1500], endMm: [4710, 1500], directionDeg: 0, riserCount: 3 });
     const selectedSite = selectHouseWall(createSiteModel(property), property, 'house', 0);
-    const site = { ...selectedSite, designWall: { ...selectedSite.designWall, openings: [{ id: 'D1', kind: 'door' as const, offsetMm: 900, widthMm: 1800, sillHeightMm: 120 }] } };
+    const site = { ...selectedSite, designWall: { ...selectedSite.designWall, openings: [{ id: 'D1', kind: 'door' as const, offsetMm: 900, widthMm: 1800, sillHeightMm: 120, evidenceStatus: 'field-measured' as const, sourceAiObservationRefs: ['analysis-1:observation-1'] }] } };
     const framing = generateFramingDesign(design, site, { municipality: 'Town of Sidney', snowLoadKpa: 1 }, '2026-07-18T00:00:00.000Z');
     const exchange = buildProjectCadExchange({ property, site, design, framing, generatedAt: '2026-07-18T01:00:00.000Z' });
 
@@ -38,6 +38,7 @@ describe('project CAD exchange', () => {
     expect(exchange.dxf).toContain('\n0\nTEXT\n');
     expect(exchange.dxf).toContain(exchange.designFingerprint);
     expect(exchange.dxf).toContain('NOT FOR CONSTRUCTION');
+    expect(exchange.dxf).toContain('AI-REF analysis-1:observation-1');
     expect(exchange.dxf).toContain('\n11\n4000\n');
   });
 

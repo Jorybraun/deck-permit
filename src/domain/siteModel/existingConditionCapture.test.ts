@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { addCaptureEvidence, assessExistingConditionCapture, captureObservationSummary, createExistingConditionCapture, recordAiPhotoAnalysis, removeCaptureEvidence, reviewAiPhotoObservation, updateCaptureEvidence } from './existingConditionCapture';
+import { addCaptureEvidence, assessExistingConditionCapture, captureObservationSummary, createExistingConditionCapture, promoteAcceptedAiOpening, recordAiPhotoAnalysis, removeCaptureEvidence, reviewAiPhotoObservation, updateCaptureEvidence } from './existingConditionCapture';
+import { createSiteModel } from './siteModel';
+import { emptyProperty } from '../../state/homeownerProjectStore';
 import type { CaptureCategory } from './types';
 
 const evidence = (id: string, category: CaptureCategory) => ({
@@ -44,5 +46,14 @@ describe('ExistingConditionCapture public contract', () => {
     expect(capture.aiAnalyses?.[0].observations[0].decision).toBe('homeowner-accepted');
     expect(removeCaptureEvidence(capture, '1').aiAnalyses?.[0].observations).toHaveLength(0);
     expect(() => recordAiPhotoAnalysis(capture, { ...capture.aiAnalyses![0], id: 'bad', observations: [{ ...capture.aiAnalyses![0].observations[0], sourceEvidenceId: 'missing' }] })).toThrow(/admitted source photo/);
+  });
+
+  it('explicitly promotes an accepted door or window observation into one source-bound provisional opening', () => {
+    let capture = addCaptureEvidence(createExistingConditionCapture(), evidence('1', 'design-wall'));
+    capture = recordAiPhotoAnalysis(capture, { schema: 'ai-photo-observation-draft/v1', id: 'analysis-1', summary: 'Rear wall visible', generation: { model: 'test', responseId: 'response', generatedAt: '2026-07-18T12:00:00.000Z' }, unknowns: ['Exact opening size'], observations: [{ id: 'observation-1', sourceEvidenceId: '1', kind: 'window', confidence: .88, description: 'Window visible', measurementStatus: 'not-measured', boundingBox: null, uncertainties: ['Perspective'], decision: 'proposed' }] });
+    capture = reviewAiPhotoObservation(capture, 'analysis-1', 'observation-1', 'homeowner-accepted');
+    const site = promoteAcceptedAiOpening({ ...createSiteModel(emptyProperty), capture }, 'analysis-1', 'observation-1');
+    expect(site.designWall.openings).toContainEqual(expect.objectContaining({ id: 'W1', kind: 'window', evidenceStatus: 'photo-observed', sourceEvidenceIds: ['1'], sourceAiObservationRefs: ['analysis-1:observation-1'] }));
+    expect(() => promoteAcceptedAiOpening(site, 'analysis-1', 'observation-1')).toThrow(/already linked/);
   });
 });

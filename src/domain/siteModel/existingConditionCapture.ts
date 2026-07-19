@@ -1,4 +1,4 @@
-import type { AiPhotoAnalysisDraft, CaptureCategory, CaptureEvidence, CaptureEvidenceChanges, CaptureObservationTag, ExistingConditionCapture, ExistingConditionCaptureAssessment } from './types';
+import type { AiPhotoAnalysisDraft, CaptureCategory, CaptureEvidence, CaptureEvidenceChanges, CaptureObservationTag, ExistingConditionCapture, ExistingConditionCaptureAssessment, HouseOpening, SiteModel } from './types';
 
 export const MAX_CAPTURE_FILE_BYTES = 30 * 1024 * 1024;
 export const CAPTURE_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'] as const;
@@ -70,6 +70,28 @@ export function reviewAiPhotoObservation(capture: ExistingConditionCapture, anal
   return { ...capture, aiAnalyses };
 }
 
+/**
+ * Admits one homeowner-accepted visual observation into the editable wall model.
+ * Dimensions are deliberately starter values and remain photo-observed until measured.
+ */
+export function promoteAcceptedAiOpening(site: SiteModel, analysisId: string, observationId: string): SiteModel {
+  const analysis = (site.capture.aiAnalyses || []).find((candidate) => candidate.id === analysisId);
+  const observation = analysis?.observations.find((candidate) => candidate.id === observationId);
+  if (!analysis || !observation) throw new Error(`AI photo observation ${observationId} was not found.`);
+  if (observation.decision !== 'homeowner-accepted') throw new Error('Accept the AI photo observation before adding it to the wall model.');
+  if (observation.kind !== 'door' && observation.kind !== 'window') throw new Error('Only accepted door and window observations can become wall openings.');
+  if (!site.capture.evidence.some((record) => record.id === observation.sourceEvidenceId)) throw new Error('The source photo for this AI observation is no longer available.');
+  const sourceRef = `${analysisId}:${observationId}`;
+  if (site.designWall.openings.some((opening) => opening.sourceAiObservationRefs?.includes(sourceRef))) throw new Error('This AI photo observation is already linked to a wall opening.');
+  const opening = provisionalOpeningFromObservation(site, observation.kind, observation.sourceEvidenceId, sourceRef);
+  return {
+    ...site,
+    status: 'field-input-unverified',
+    designWall: { ...site.designWall, openings: [...site.designWall.openings, opening] },
+    updatedAt: new Date().toISOString(),
+  };
+}
+
 export function assessExistingConditionCapture(capture: ExistingConditionCapture, options: { hasDoor: boolean }): ExistingConditionCaptureAssessment {
   const definitions: Array<{ category: CaptureCategory; title: string; reason: string; required: boolean }> = [
     { category: 'house-overview', title: 'House and yard overview', reason: 'Orients the wall, yard, grade, roof, and nearby constraints.', required: true },
@@ -132,4 +154,28 @@ function normalizeReferenceDimension(value: number | null | undefined): number |
   if (value === null || value === undefined || value === 0) return null;
   if (!Number.isFinite(value) || value < 1 || value > 100_000) throw new Error('Photo scale reference must be between 1 mm and 100,000 mm.');
   return Math.round(value);
+}
+
+function provisionalOpeningFromObservation(site: SiteModel, kind: HouseOpening['kind'], sourceEvidenceId: string, sourceRef: string): HouseOpening {
+  const widthMm = kind === 'door' ? 900 : 1200;
+  const sameKindCount = site.designWall.openings.filter((opening) => opening.kind === kind).length;
+  const starterOffset = Math.min(Math.max(0, sameKindCount * 1600 + 600), Math.max(0, site.designWall.lengthMm - widthMm));
+  return {
+    id: nextOpeningId(site.designWall.openings.map((opening) => opening.id), kind),
+    kind,
+    offsetMm: starterOffset,
+    widthMm,
+    sillHeightMm: kind === 'door' ? 750 : 900,
+    heightMm: kind === 'door' ? 2100 : 1200,
+    evidenceStatus: 'photo-observed',
+    sourceEvidenceIds: [sourceEvidenceId],
+    sourceAiObservationRefs: [sourceRef],
+  };
+}
+
+function nextOpeningId(existingIds: string[], kind: HouseOpening['kind']): string {
+  const prefix = kind === 'door' ? 'D' : 'W';
+  let number = 1;
+  while (existingIds.includes(`${prefix}${number}`)) number += 1;
+  return `${prefix}${number}`;
 }
