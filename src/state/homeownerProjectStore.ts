@@ -16,6 +16,20 @@ export interface HomeownerIntent {
   inspirationNotes: string;
 }
 
+export interface BuilderShareConsent {
+  schema: 'builder-share-consent/v1';
+  shareExactAddress: boolean;
+  shareContactDetails: boolean;
+  shareDrawings: boolean;
+  sharePhotoEvidence: boolean;
+  shareProfessionalRecords: boolean;
+  preferredContact: 'email' | 'phone' | 'either';
+  requestedBuilderCount: 1 | 2 | 3;
+  confirmed: boolean;
+  recordedAt: string | null;
+  designFingerprint: string | null;
+}
+
 export interface HomeownerProjectState {
   stage: ProjectStage;
   property: Property;
@@ -29,6 +43,7 @@ export interface HomeownerProjectState {
   verificationEvidence: VerificationEvidence[];
   sidneyApplication: SidneyApplicationData;
   permitSubmissionHistory: PermitSubmissionRecord[];
+  builderShareConsent: BuilderShareConsent;
   designHistory: DeckDesign[];
   designFuture: DeckDesign[];
   loading: boolean;
@@ -46,6 +61,8 @@ export interface HomeownerProjectState {
   addVerificationEvidence: (evidence: VerificationEvidence) => void;
   updateSidneyApplication: (changes: Partial<SidneyApplicationData>) => void;
   recordPermitSubmission: (record: PermitSubmissionRecord) => void;
+  updateBuilderSharePreferences: (changes: Partial<Omit<BuilderShareConsent, 'schema' | 'confirmed' | 'recordedAt' | 'designFingerprint'>>) => void;
+  recordBuilderShareConsent: (confirmed: boolean, designFingerprint?: string) => void;
   resolveReviewRedline: (input: { cycleId: string; redlineId: string; targetDesignFingerprint: string; disposition: ReviewRedlineResolution['disposition']; response: string }) => void;
   addPlatform: (input: AddPlatformInput) => void;
   updatePlatformBoundary: (platformId: string, boundary: ClosedBoundary) => void;
@@ -76,6 +93,7 @@ export interface HomeownerProjectState {
 
 export const emptyProperty: Property = { address: null, parcel: null, zoning: null, buildableEnvelope: null, snowLoad: 1, buildings: [], evidence: [] };
 export const emptyIntent: HomeownerIntent = { uses: [], materialPreference: 'unsure', desiredFeatures: [], budgetRange: 'unsure', inspirationNotes: '' };
+export const emptyBuilderShareConsent: BuilderShareConsent = { schema: 'builder-share-consent/v1', shareExactAddress: false, shareContactDetails: false, shareDrawings: true, sharePhotoEvidence: false, shareProfessionalRecords: true, preferredContact: 'either', requestedBuilderCount: 3, confirmed: false, recordedAt: null, designFingerprint: null };
 export const emptySidneyApplication: SidneyApplicationData = { civicAddress: '', ownerName: '', ownerCompany: '', ownerAddress: '', ownerCityProvince: '', ownerPostalCode: '', ownerPhone: '', ownerEmail: '', applicantName: '', applicantCompany: '', applicantBusinessLicence: '', applicantAddress: '', applicantCityProvince: '', applicantPostalCode: '', applicantPhone: '', applicantEmail: '', projectDescription: '', constructionValue: '', existingFloorAreaSqm: '', deckAreaSqm: '' };
 
 const freshState = () => ({
@@ -91,6 +109,7 @@ const freshState = () => ({
   verificationEvidence: [] as VerificationEvidence[],
   sidneyApplication: emptySidneyApplication,
   permitSubmissionHistory: [] as PermitSubmissionRecord[],
+  builderShareConsent: { ...emptyBuilderShareConsent },
   designHistory: [] as DeckDesign[],
   designFuture: [] as DeckDesign[],
   loading: false,
@@ -102,23 +121,27 @@ export const useHomeownerProject = create<HomeownerProjectState>((set) => ({
   persistenceStatus: 'loading',
   lastSavedAt: null,
   setStage: (stage) => set({ stage }),
-  setProperty: (property) => set((state) => ({ property, error: null, reviewPublication: null, sidneyApplication: { ...state.sidneyApplication, civicAddress: property.address?.fullAddress || state.sidneyApplication.civicAddress } })),
-  setSite: (site) => set({ site, reviewPublication: null }),
-  updateIntent: (changes) => set((state) => ({ intent: { ...state.intent, ...changes } })),
+  setProperty: (property) => set((state) => ({ property, error: null, reviewPublication: null, builderShareConsent: invalidateBuilderConsent(state.builderShareConsent), sidneyApplication: { ...state.sidneyApplication, civicAddress: property.address?.fullAddress || state.sidneyApplication.civicAddress } })),
+  setSite: (site) => set((state) => ({ site, reviewPublication: null, builderShareConsent: invalidateBuilderConsent(state.builderShareConsent) })),
+  updateIntent: (changes) => set((state) => ({ intent: { ...state.intent, ...changes }, builderShareConsent: invalidateBuilderConsent(state.builderShareConsent) })),
   replaceDesign: (design) => set((state) => commitDesign(state, design)),
-  setFraming: (framing) => set({ framing, reviewPublication: null }),
+  setFraming: (framing) => set((state) => ({ framing, reviewPublication: null, builderShareConsent: invalidateBuilderConsent(state.builderShareConsent) })),
   setReviewPublication: (reviewPublication) => set((state) => ({
     reviewPublication,
     reviewIssueRevision: reviewPublication ? Math.max(state.reviewIssueRevision, reviewPublication.revision || state.reviewIssueRevision + 1) : state.reviewIssueRevision,
+    builderShareConsent: invalidateBuilderConsent(state.builderShareConsent),
   })),
   importProfessionalReview: (evidence, cycle) => set((state) => ({
     verificationEvidence: [...state.verificationEvidence.filter((item) => item.id !== evidence.id), evidence],
     professionalReviewCycles: upsertProfessionalReviewCycle(state.professionalReviewCycles, cycle),
+    builderShareConsent: invalidateBuilderConsent(state.builderShareConsent),
   })),
-  addVerificationEvidence: (evidence) => set((state) => ({ verificationEvidence: [...state.verificationEvidence.filter((item) => item.id !== evidence.id), evidence] })),
-  updateSidneyApplication: (changes) => set((state) => ({ sidneyApplication: { ...state.sidneyApplication, ...changes } })),
-  recordPermitSubmission: (record) => set((state) => ({ permitSubmissionHistory: [...state.permitSubmissionHistory.filter((item) => item.id !== record.id), record] })),
-  resolveReviewRedline: (input) => set((state) => ({ professionalReviewCycles: recordRedlineResolution(state.professionalReviewCycles, input) })),
+  addVerificationEvidence: (evidence) => set((state) => ({ verificationEvidence: [...state.verificationEvidence.filter((item) => item.id !== evidence.id), evidence], builderShareConsent: invalidateBuilderConsent(state.builderShareConsent) })),
+  updateSidneyApplication: (changes) => set((state) => ({ sidneyApplication: { ...state.sidneyApplication, ...changes }, builderShareConsent: invalidateBuilderConsent(state.builderShareConsent) })),
+  recordPermitSubmission: (record) => set((state) => ({ permitSubmissionHistory: [...state.permitSubmissionHistory.filter((item) => item.id !== record.id), record], builderShareConsent: invalidateBuilderConsent(state.builderShareConsent) })),
+  updateBuilderSharePreferences: (changes) => set((state) => ({ builderShareConsent: { ...state.builderShareConsent, ...changes, confirmed: false, recordedAt: null, designFingerprint: null } })),
+  recordBuilderShareConsent: (confirmed, designFingerprint) => set((state) => ({ builderShareConsent: { ...state.builderShareConsent, confirmed: Boolean(confirmed && designFingerprint), recordedAt: confirmed && designFingerprint ? new Date().toISOString() : null, designFingerprint: confirmed && designFingerprint ? designFingerprint : null } })),
+  resolveReviewRedline: (input) => set((state) => ({ professionalReviewCycles: recordRedlineResolution(state.professionalReviewCycles, input), builderShareConsent: invalidateBuilderConsent(state.builderShareConsent) })),
   addPlatform: (input) => set((state) => commitDesign(state, addPlatform(state.design, input))),
   updatePlatformBoundary: (platformId, boundary) => set((state) => commitDesign(state, updatePlatformBoundary(state.design, platformId, boundary))),
   setPlatformElevation: (platformId, elevationMm) => set((state) => commitDesign(state, setPlatformElevation(state.design, platformId, elevationMm))),
@@ -142,18 +165,22 @@ export const useHomeownerProject = create<HomeownerProjectState>((set) => ({
   undoDesign: () => set((state) => {
     const previous = state.designHistory[state.designHistory.length - 1];
     if (!previous) return state;
-    return { design: previous, designHistory: state.designHistory.slice(0, -1), designFuture: [state.design, ...state.designFuture], reviewPublication: null };
+    return { design: previous, designHistory: state.designHistory.slice(0, -1), designFuture: [state.design, ...state.designFuture], reviewPublication: null, builderShareConsent: invalidateBuilderConsent(state.builderShareConsent) };
   }),
   redoDesign: () => set((state) => {
     const next = state.designFuture[0];
     if (!next) return state;
-    return { design: next, designHistory: [...state.designHistory, state.design].slice(-50), designFuture: state.designFuture.slice(1), reviewPublication: null };
+    return { design: next, designHistory: [...state.designHistory, state.design].slice(-50), designFuture: state.designFuture.slice(1), reviewPublication: null, builderShareConsent: invalidateBuilderConsent(state.builderShareConsent) };
   }),
   setLoading: (loading) => set({ loading }),
   setError: (error) => set({ error }),
   resetProject: () => set({ ...freshState(), persistenceStatus: 'saved', lastSavedAt: null }),
 }));
 
-function commitDesign(state: Pick<HomeownerProjectState, 'design' | 'designHistory'>, design: DeckDesign) {
-  return { design, designHistory: [...state.designHistory, state.design].slice(-50), designFuture: [] as DeckDesign[], error: null, reviewPublication: null };
+function commitDesign(state: Pick<HomeownerProjectState, 'design' | 'designHistory' | 'builderShareConsent'>, design: DeckDesign) {
+  return { design, designHistory: [...state.designHistory, state.design].slice(-50), designFuture: [] as DeckDesign[], error: null, reviewPublication: null, builderShareConsent: invalidateBuilderConsent(state.builderShareConsent) };
+}
+
+function invalidateBuilderConsent(consent: BuilderShareConsent): BuilderShareConsent {
+  return consent.confirmed || consent.recordedAt || consent.designFingerprint ? { ...consent, confirmed: false, recordedAt: null, designFingerprint: null } : consent;
 }

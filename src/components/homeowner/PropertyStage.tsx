@@ -51,7 +51,6 @@ export function PropertyStage({ property, site, research, onResearch, onResearch
     return () => { active = false; window.clearTimeout(timer); };
   }, [address, onSuggestAddresses, property.address?.fullAddress, research.status]);
   const ready = Boolean(property.address && property.parcel && site);
-  const door = site?.designWall.openings.find((opening) => opening.kind === 'door') || null;
   const selectAddressOption = (option: Address) => {
     setAddress(option.fullAddress);
     setAddressOptions([]);
@@ -113,10 +112,7 @@ export function PropertyStage({ property, site, research, onResearch, onResearch
             <label className="grid gap-1.5 text-xs font-bold uppercase tracking-[.08em] text-slate-500">Measured by<input value={site.measuredBy} onChange={(event) => onUpdateSite({ measuredBy: event.target.value })} placeholder="Homeowner or surveyor" className="min-h-11 rounded-lg border border-slate-300 px-3 text-sm font-normal normal-case tracking-normal text-slate-800" /></label>
             <label className="grid gap-1.5 text-xs font-bold uppercase tracking-[.08em] text-slate-500">Measured date<input type="date" value={site.measuredAt} onChange={(event) => onUpdateSite({ measuredAt: event.target.value })} className="min-h-11 rounded-lg border border-slate-300 px-3 text-sm font-normal normal-case tracking-normal text-slate-800" /></label>
           </div>
-          <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
-            <div className="flex items-start justify-between gap-3"><div className="flex gap-2"><DoorOpen size={18} className="mt-0.5 text-slate-600" /><div><h4 className="text-sm font-bold text-slate-900">Exterior door on this wall</h4><p className="mt-1 text-xs leading-5 text-slate-600">Doors are never inferred from the roofline. Add one only when you can locate it.</p></div></div>{door && <button type="button" onClick={() => onUpdateSite({}, { openings: site.designWall.openings.filter((opening) => opening.id !== door.id) })} aria-label="Remove recorded door" className="grid h-9 w-9 place-items-center rounded-md border border-red-200 bg-white text-red-700"><Trash2 size={15} /></button>}</div>
-            {door ? <div className="mt-4 grid gap-4 sm:grid-cols-3"><NumberField label="Door offset" value={door.offsetMm} suffix="mm" min={0} max={site.designWall.lengthMm} onChange={(offsetMm) => onUpdateSite({}, { openings: site.designWall.openings.map((opening) => opening.id === door.id ? { ...opening, offsetMm } : opening) })} /><NumberField label="Door width" value={door.widthMm} suffix="mm" min={300} max={4000} onChange={(widthMm) => onUpdateSite({}, { openings: site.designWall.openings.map((opening) => opening.id === door.id ? { ...opening, widthMm } : opening) })} /><NumberField label="Sill above grade" value={door.sillHeightMm} suffix="mm" min={100} max={5000} onChange={(sillHeightMm) => onUpdateSite({}, { openings: site.designWall.openings.map((opening) => opening.id === door.id ? { ...opening, sillHeightMm } : opening) })} /></div> : <button type="button" onClick={() => onUpdateSite({}, { openings: [...site.designWall.openings, { id: `D${site.designWall.openings.length + 1}`, kind: 'door', offsetMm: Math.min(600, Math.max(0, site.designWall.lengthMm - 1500)), widthMm: 900, sillHeightMm: 675 }] })} className="mt-4 flex min-h-10 items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 text-xs font-bold text-slate-700"><Plus size={15} /> Add a measured door</button>}
-          </div>
+          <WallOpeningEditor site={site} onUpdateOpenings={(openings) => onUpdateSite({}, { openings })} />
           <ExistingConditionCapturePanel capture={site.capture} assessment={captureAssessment} previewUrls={capturePreviewUrls} onAddFiles={onAddCaptureFiles} onUpdateEvidence={onUpdateCaptureEvidence} onRemoveEvidence={onRemoveCaptureEvidence} />
           <TerrainCapturePanel terrain={site.terrain} onUpdateDatum={onUpdateTerrainDatum} onAddPoint={onAddTerrainPoint} onUpdatePoint={onUpdateTerrainPoint} onRemovePoint={onRemoveTerrainPoint} />
           <div className="mt-5 flex justify-end"><button type="button" onClick={onContinue} className="flex min-h-11 items-center gap-2 rounded-lg bg-emerald-800 px-5 text-sm font-bold text-white">Open deck designer <ArrowRight size={16} /></button></div>
@@ -124,6 +120,53 @@ export function PropertyStage({ property, site, research, onResearch, onResearch
       </>}
     </div>
   </main>;
+}
+
+function WallOpeningEditor({ site, onUpdateOpenings }: { site: SiteModel; onUpdateOpenings: (openings: SiteModel['designWall']['openings']) => void }) {
+  const openings = site.designWall.openings;
+  const update = (id: string, changes: Partial<SiteModel['designWall']['openings'][number]>) => onUpdateOpenings(openings.map((opening) => opening.id === id ? { ...opening, ...changes } : opening));
+  const add = (kind: 'door' | 'window') => {
+    const sameKind = openings.filter((opening) => opening.kind === kind);
+    const widthMm = kind === 'door' ? 900 : 1200;
+    const starterOffset = Math.min(Math.max(0, sameKind.length * 1600 + 600), Math.max(0, site.designWall.lengthMm - widthMm));
+    onUpdateOpenings([...openings, {
+      id: nextOpeningId(openings.map((opening) => opening.id), kind),
+      kind,
+      offsetMm: starterOffset,
+      widthMm,
+      sillHeightMm: kind === 'door' ? 750 : 900,
+      heightMm: kind === 'door' ? 2100 : 1200,
+      evidenceStatus: 'photo-observed',
+      sourceEvidenceIds: [],
+    }]);
+  };
+  return <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex gap-2"><DoorOpen size={18} className="mt-0.5 shrink-0 text-slate-600" /><div><h4 className="text-sm font-bold text-slate-900">Doors and windows on the design wall</h4><p className="mt-1 max-w-2xl text-xs leading-5 text-slate-600">Photos can prove an opening exists. Offset, width, sill and head remain provisional until measured. These openings appear in plan, elevation, CAD, and conflict review.</p></div></div>
+      <div className="flex shrink-0 flex-wrap gap-2"><button type="button" onClick={() => add('door')} className="flex min-h-9 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-[10px] font-bold text-slate-700"><Plus size={13} /> Door</button><button type="button" onClick={() => add('window')} className="flex min-h-9 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-[10px] font-bold text-slate-700"><Plus size={13} /> Window</button></div>
+    </div>
+    {!openings.length ? <p className="mt-4 rounded-lg border border-dashed border-slate-300 bg-white p-4 text-center text-xs text-slate-500">No openings recorded on this wall yet. Add every door and rear-wall window visible in the photo set.</p> : <div className="mt-4 grid gap-3">{openings.map((opening) => {
+      const measured = (opening.evidenceStatus || 'field-measured') !== 'photo-observed';
+      return <article key={opening.id} className="rounded-lg border border-slate-200 bg-white p-3">
+        <div className="flex flex-wrap items-center gap-2"><strong className="text-xs text-slate-900">{opening.id} · {opening.kind === 'door' ? 'Exterior door' : 'Window'}</strong><span className={`rounded-full px-2 py-1 text-[8px] font-bold uppercase tracking-[.08em] ${measured ? 'bg-emerald-100 text-emerald-900' : 'bg-amber-100 text-amber-900'}`}>{measured ? opening.evidenceStatus === 'professional-verified' ? 'Professional verified' : 'Field measured' : 'Photo observed · dimensions provisional'}</span><button type="button" onClick={() => onUpdateOpenings(openings.filter((candidate) => candidate.id !== opening.id))} aria-label={`Remove ${opening.id}`} className="ml-auto grid h-8 w-8 place-items-center rounded-md border border-red-200 text-red-700"><Trash2 size={13} /></button></div>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          <label className="grid gap-1.5 text-xs font-bold uppercase tracking-[.08em] text-slate-500">Evidence<select value={opening.evidenceStatus || 'field-measured'} onChange={(event) => update(opening.id, { evidenceStatus: event.target.value as NonNullable<typeof opening.evidenceStatus> })} className="min-h-11 rounded-lg border border-slate-300 bg-white px-3 text-sm font-normal normal-case tracking-normal text-slate-800"><option value="photo-observed">Photo observed</option><option value="field-measured">Field measured</option><option value="professional-verified">Professional verified</option></select></label>
+          <NumberField label="Offset from wall start" value={opening.offsetMm} suffix="mm" min={0} max={site.designWall.lengthMm} onChange={(offsetMm) => update(opening.id, { offsetMm })} />
+          <NumberField label="Opening width" value={opening.widthMm} suffix="mm" min={300} max={4000} onChange={(widthMm) => update(opening.id, { widthMm })} />
+          <NumberField label="Sill above grade" value={opening.sillHeightMm} suffix="mm" min={0} max={5000} onChange={(sillHeightMm) => update(opening.id, { sillHeightMm })} />
+          <NumberField label="Opening height" value={opening.heightMm ?? (opening.kind === 'door' ? 2100 : 1200)} suffix="mm" min={300} max={4000} onChange={(heightMm) => update(opening.id, { heightMm })} />
+        </div>
+        {!measured && <p className="mt-2 text-[9px] leading-4 text-amber-800">Starter numbers only keep the symbol editable; they are not derived from the photograph. Measure from the selected wall start, local grade, sill and head before relying on clearance checks.</p>}
+      </article>;
+    })}</div>}
+  </div>;
+}
+
+function nextOpeningId(existingIds: string[], kind: 'door' | 'window'): string {
+  const prefix = kind === 'door' ? 'D' : 'W';
+  let number = 1;
+  while (existingIds.includes(`${prefix}${number}`)) number += 1;
+  return `${prefix}${number}`;
 }
 
 function NumberField({ label, value, suffix, min, max, onChange }: { label: string; value: number; suffix: string; min: number; max: number; onChange: (value: number) => void }) {

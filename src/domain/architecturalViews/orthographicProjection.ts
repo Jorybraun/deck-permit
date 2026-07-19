@@ -182,7 +182,7 @@ function projectedOpenings(site: SiteModel, axis: ProjectionAxis): OrthographicH
       minimumProjectionMm: Math.min(first, second),
       maximumProjectionMm: Math.max(first, second),
       sillElevationMm: opening.sillHeightMm,
-      headElevationMm: opening.sillHeightMm + (opening.kind === 'door' ? 2100 : 1200),
+      headElevationMm: opening.sillHeightMm + (opening.heightMm ?? (opening.kind === 'door' ? 2100 : 1200)),
     }];
   });
 }

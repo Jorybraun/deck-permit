@@ -44,3 +44,26 @@ describe('homeowner professional review revision state', () => {
     expect(useHomeownerProject.getState().reviewPublication).toBeNull();
   });
 });
+
+describe('builder sharing consent', () => {
+  beforeEach(() => useHomeownerProject.getState().resetProject());
+
+  it('records consent and invalidates it whenever the sharing scope changes', () => {
+    useHomeownerProject.getState().recordBuilderShareConsent(true, 'DP-ABCDEF12');
+    expect(useHomeownerProject.getState().builderShareConsent).toMatchObject({ confirmed: true, recordedAt: expect.any(String), designFingerprint: 'DP-ABCDEF12', shareExactAddress: false });
+    useHomeownerProject.getState().updateBuilderSharePreferences({ shareExactAddress: true });
+    expect(useHomeownerProject.getState().builderShareConsent).toMatchObject({ confirmed: false, recordedAt: null, designFingerprint: null, shareExactAddress: true });
+  });
+
+  it('invalidates a consented builder brief when canonical design geometry changes', () => {
+    useHomeownerProject.getState().recordBuilderShareConsent(true, 'DP-ABCDEF12');
+    useHomeownerProject.getState().addPlatform({ boundary: rectangularBoundary(0, 0, 4000, 3000), elevationMm: 900 });
+    expect(useHomeownerProject.getState().builderShareConsent).toMatchObject({ confirmed: false, recordedAt: null, designFingerprint: null });
+  });
+
+  it('invalidates consent when permit evidence changes under the same design fingerprint', () => {
+    useHomeownerProject.getState().recordBuilderShareConsent(true, 'DP-ABCDEF12');
+    useHomeownerProject.getState().recordPermitSubmission(receipt);
+    expect(useHomeownerProject.getState().builderShareConsent).toMatchObject({ confirmed: false, recordedAt: null, designFingerprint: null });
+  });
+});

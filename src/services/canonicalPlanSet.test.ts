@@ -63,7 +63,7 @@ describe('canonical coordinated review set', () => {
     expect(siteSheet).toContain('Municipal GIS is reference evidence, not a legal survey.');
     const existingSheet = planSet.sheets.find((sheet) => sheet.number === 'C1.0')?.svg || '';
     expect(existingSheet).toContain('EXISTING HOUSE WALL AND OPENING RECORD');
-    expect(existingSheet).toContain('D1 · 1800 W · SILL 120');
+    expect(existingSheet).toContain('D1 · 1800 W × 2100 H · SILL 120 · FIELD-MEASURED');
     expect(existingSheet).toContain('MEASUREMENT / DATUM PROVENANCE');
     expect(existingSheet).toContain('EXISTING-CONDITION EVIDENCE REGISTER');
     expect(existingSheet).toContain('fully scheduled on C1.1+');

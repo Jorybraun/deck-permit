@@ -1,7 +1,7 @@
 import { useHomeownerProject } from '../state/homeownerProjectStore';
-import type { HomeownerIntent, ProjectStage } from '../state/homeownerProjectStore';
+import type { BuilderShareConsent, HomeownerIntent, ProjectStage } from '../state/homeownerProjectStore';
 import type { PermitSubmissionRecord, ProfessionalReviewCycle, Property, ReviewExchangePublication, SidneyApplicationData, VerificationEvidence } from '../types';
-import { emptySidneyApplication } from '../state/homeownerProjectStore';
+import { emptyBuilderShareConsent, emptySidneyApplication } from '../state/homeownerProjectStore';
 import type { DeckDesign } from '../domain/deckDesign';
 import { createExistingConditionCapture, createTerrainSurface, type SiteModel } from '../domain/siteModel';
 import type { FramingDesign } from '../domain/framingDesign';
@@ -25,6 +25,7 @@ interface Snapshot {
   verificationEvidence?: VerificationEvidence[];
   sidneyApplication?: SidneyApplicationData;
   permitSubmissionHistory?: PermitSubmissionRecord[];
+  builderShareConsent?: BuilderShareConsent;
 }
 
 export function initializeHomeownerProjectPersistence(): void {
@@ -34,19 +35,19 @@ export function initializeHomeownerProjectPersistence(): void {
     const raw = localStorage.getItem(STORAGE_KEY);
     const snapshot = raw ? JSON.parse(raw) as Partial<Snapshot> : null;
     if (snapshot?.schema === 'homeowner-project/v1' && snapshot.design?.schema === 'deck-design/v1' && snapshot.property && snapshot.intent && snapshot.stage) {
-      useHomeownerProject.setState({ stage: snapshot.stage, property: snapshot.property, site: snapshot.site ? normalizeSite(snapshot.site) : null, intent: snapshot.intent, design: normalizeDesign(snapshot.design), framing: snapshot.framing?.schema === 'framing-design/v2' && snapshot.framing.lifeSafety?.schema === 'life-safety-screen/v2' ? snapshot.framing : null, reviewPublication: snapshot.reviewPublication || null, reviewIssueRevision: snapshot.reviewIssueRevision || snapshot.reviewPublication?.revision || 0, professionalReviewCycles: snapshot.professionalReviewCycles || [], verificationEvidence: snapshot.verificationEvidence || [], sidneyApplication: snapshot.sidneyApplication || { ...emptySidneyApplication, civicAddress: snapshot.property.address?.fullAddress || '' }, permitSubmissionHistory: snapshot.permitSubmissionHistory || [], persistenceStatus: 'saved', lastSavedAt: snapshot.savedAt || null });
+      useHomeownerProject.setState({ stage: snapshot.stage, property: snapshot.property, site: snapshot.site ? normalizeSite(snapshot.site) : null, intent: snapshot.intent, design: normalizeDesign(snapshot.design), framing: snapshot.framing?.schema === 'framing-design/v2' && snapshot.framing.lifeSafety?.schema === 'life-safety-screen/v2' ? snapshot.framing : null, reviewPublication: snapshot.reviewPublication || null, reviewIssueRevision: snapshot.reviewIssueRevision || snapshot.reviewPublication?.revision || 0, professionalReviewCycles: snapshot.professionalReviewCycles || [], verificationEvidence: snapshot.verificationEvidence || [], sidneyApplication: snapshot.sidneyApplication || { ...emptySidneyApplication, civicAddress: snapshot.property.address?.fullAddress || '' }, permitSubmissionHistory: snapshot.permitSubmissionHistory || [], builderShareConsent: normalizeBuilderShareConsent(snapshot.builderShareConsent), persistenceStatus: 'saved', lastSavedAt: snapshot.savedAt || null });
     } else useHomeownerProject.setState({ persistenceStatus: 'saved' });
   } catch {
     useHomeownerProject.setState({ persistenceStatus: 'error' });
   }
   useHomeownerProject.subscribe((state, previous) => {
-    if (state.stage === previous.stage && state.property === previous.property && state.site === previous.site && state.intent === previous.intent && state.design === previous.design && state.framing === previous.framing && state.reviewPublication === previous.reviewPublication && state.reviewIssueRevision === previous.reviewIssueRevision && state.professionalReviewCycles === previous.professionalReviewCycles && state.verificationEvidence === previous.verificationEvidence && state.sidneyApplication === previous.sidneyApplication && state.permitSubmissionHistory === previous.permitSubmissionHistory) return;
+    if (state.stage === previous.stage && state.property === previous.property && state.site === previous.site && state.intent === previous.intent && state.design === previous.design && state.framing === previous.framing && state.reviewPublication === previous.reviewPublication && state.reviewIssueRevision === previous.reviewIssueRevision && state.professionalReviewCycles === previous.professionalReviewCycles && state.verificationEvidence === previous.verificationEvidence && state.sidneyApplication === previous.sidneyApplication && state.permitSubmissionHistory === previous.permitSubmissionHistory && state.builderShareConsent === previous.builderShareConsent) return;
     if (timer) clearTimeout(timer);
     useHomeownerProject.setState({ persistenceStatus: 'saving' });
     timer = setTimeout(() => {
       const savedAt = new Date().toISOString();
       const current = useHomeownerProject.getState();
-      const snapshot: Snapshot = { schema: 'homeowner-project/v1', savedAt, stage: current.stage, property: current.property, site: current.site, intent: current.intent, design: current.design, framing: current.framing, reviewPublication: current.reviewPublication, reviewIssueRevision: current.reviewIssueRevision, professionalReviewCycles: current.professionalReviewCycles, verificationEvidence: current.verificationEvidence, sidneyApplication: current.sidneyApplication, permitSubmissionHistory: current.permitSubmissionHistory };
+      const snapshot: Snapshot = { schema: 'homeowner-project/v1', savedAt, stage: current.stage, property: current.property, site: current.site, intent: current.intent, design: current.design, framing: current.framing, reviewPublication: current.reviewPublication, reviewIssueRevision: current.reviewIssueRevision, professionalReviewCycles: current.professionalReviewCycles, verificationEvidence: current.verificationEvidence, sidneyApplication: current.sidneyApplication, permitSubmissionHistory: current.permitSubmissionHistory, builderShareConsent: current.builderShareConsent };
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
         useHomeownerProject.setState({ persistenceStatus: 'saved', lastSavedAt: savedAt });
@@ -55,6 +56,12 @@ export function initializeHomeownerProjectPersistence(): void {
       }
     }, 250);
   });
+}
+
+function normalizeBuilderShareConsent(consent?: BuilderShareConsent): BuilderShareConsent {
+  if (consent?.schema !== 'builder-share-consent/v1') return { ...emptyBuilderShareConsent };
+  const confirmed = Boolean(consent.confirmed && consent.recordedAt && consent.designFingerprint);
+  return { ...emptyBuilderShareConsent, ...consent, confirmed, recordedAt: confirmed ? consent.recordedAt : null, designFingerprint: confirmed ? consent.designFingerprint : null };
 }
 
 function normalizeDesign(design: DeckDesign): DeckDesign {
@@ -92,7 +99,12 @@ function normalizeSite(site: SiteModel): SiteModel {
       selectionStatus: wall.selectionStatus || 'unselected',
       reverseDirection: wall.reverseDirection || false,
       invertOutward: wall.invertOutward || false,
-      openings: syntheticStarterDoor ? [] : wall.openings,
+      openings: syntheticStarterDoor ? [] : wall.openings.map((opening) => ({
+        ...opening,
+        heightMm: opening.heightMm || (opening.kind === 'door' ? 2100 : 1200),
+        evidenceStatus: opening.evidenceStatus || 'field-measured',
+        sourceEvidenceIds: opening.sourceEvidenceIds || [],
+      })),
     },
   };
 }

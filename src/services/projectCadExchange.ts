@@ -80,7 +80,7 @@ export function buildProjectCadExchange(input: ProjectCadExchangeInput): Project
     const start: PointMm = [opening.offsetMm, 0];
     const end: PointMm = [opening.offsetMm + opening.widthMm, 0];
     lines.push({ id: `OPEN-${opening.id}`, layer: 'A-EXST-OPEN', start, end });
-    captions.push(label(`OPEN-${opening.id}`, `${opening.id} ${opening.kind.toUpperCase()} ${opening.widthMm}W SILL ${opening.sillHeightMm}`, midpoint(start, end), opening.widthMm));
+    captions.push(label(`OPEN-${opening.id}`, `${opening.id} ${opening.kind.toUpperCase()} ${opening.widthMm}W ${opening.heightMm ?? (opening.kind === 'door' ? 2100 : 1200)}H SILL ${opening.sillHeightMm} ${(opening.evidenceStatus || 'field-measured').toUpperCase()}`, midpoint(start, end), opening.widthMm));
   });
   site.terrain.gradePoints.forEach((point) => {
     circles.push({ id: `GRADE-${point.id}`, layer: 'C-GRADE-POINT', center: [point.xMm, point.yMm], radiusMm: 100 });

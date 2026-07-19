@@ -3,7 +3,7 @@ import type { CaptureCategory, CaptureEvidence, CaptureEvidenceChanges, CaptureO
 export const MAX_CAPTURE_FILE_BYTES = 30 * 1024 * 1024;
 export const CAPTURE_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'] as const;
 export const CAPTURE_OBSERVATION_TAGS: Array<{ id: CaptureObservationTag; label: string }> = [
-  { id: 'house-context', label: 'House + yard context' }, { id: 'complete-wall', label: 'Complete design wall' }, { id: 'wall-corners', label: 'Wall corners visible' }, { id: 'door-opening', label: 'Door/opening visible' },
+  { id: 'house-context', label: 'House + yard context' }, { id: 'complete-wall', label: 'Complete design wall' }, { id: 'wall-corners', label: 'Wall corners visible' }, { id: 'door-opening', label: 'Door visible' }, { id: 'window-opening', label: 'Window opening visible' },
   { id: 'threshold-grade', label: 'Threshold to grade' }, { id: 'grade-slope', label: 'Grade/slope visible' }, { id: 'drainage-path', label: 'Drainage path' }, { id: 'visible-foundation', label: 'Foundation/rim visible' },
   { id: 'cladding-condition', label: 'Cladding condition' }, { id: 'obstruction-service', label: 'Obstruction/service' }, { id: 'scale-reference', label: 'Scale reference visible' }, { id: 'measured-sketch', label: 'Measured sketch/survey' },
 ];

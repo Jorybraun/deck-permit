@@ -4,6 +4,11 @@ export interface HouseOpening {
   offsetMm: number;
   widthMm: number;
   sillHeightMm: number;
+  /** Recorded opening height. Legacy records use a diagrammatic default until measured. */
+  heightMm?: number;
+  /** A photograph can establish presence, but not construction dimensions without a scale workflow. */
+  evidenceStatus?: 'photo-observed' | 'field-measured' | 'professional-verified';
+  sourceEvidenceIds?: string[];
 }
 
 export interface HouseWallReference {
@@ -95,7 +100,7 @@ export interface TerrainElevationResult {
 
 export type CaptureCategory = 'house-overview' | 'design-wall' | 'door-threshold' | 'grade-context' | 'wall-assembly' | 'obstruction' | 'survey-or-sketch';
 export type CaptureEvidenceStatus = 'recorded-unverified' | 'homeowner-confirmed' | 'professional-verified';
-export type CaptureObservationTag = 'house-context' | 'complete-wall' | 'wall-corners' | 'door-opening' | 'threshold-grade' | 'grade-slope' | 'drainage-path' | 'visible-foundation' | 'cladding-condition' | 'obstruction-service' | 'scale-reference' | 'measured-sketch';
+export type CaptureObservationTag = 'house-context' | 'complete-wall' | 'wall-corners' | 'door-opening' | 'window-opening' | 'threshold-grade' | 'grade-slope' | 'drainage-path' | 'visible-foundation' | 'cladding-condition' | 'obstruction-service' | 'scale-reference' | 'measured-sketch';
 
 export interface CaptureEvidence {
   id: string;

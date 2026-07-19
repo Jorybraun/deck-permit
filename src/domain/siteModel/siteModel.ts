@@ -55,6 +55,9 @@ export function assessSiteModel(site: SiteModel): SiteAssessment {
   if (site.houseDepthMm < 2000 || site.houseDepthMm > 30000) errors.push('House depth must be between 2,000 mm and 30,000 mm.');
   site.designWall.openings.forEach((opening) => {
     if (opening.widthMm < 300 || opening.offsetMm < 0 || opening.offsetMm + opening.widthMm > site.designWall.lengthMm) errors.push(`${opening.kind} ${opening.id} must fit inside the measured wall.`);
+    const openingHeightMm = opening.heightMm ?? (opening.kind === 'door' ? 2100 : 1200);
+    if (openingHeightMm < 300 || opening.sillHeightMm < 0 || opening.sillHeightMm + openingHeightMm > site.designWall.wallHeightMm) errors.push(`${opening.kind} ${opening.id} must fit inside the recorded wall height.`);
+    if ((opening.evidenceStatus || 'field-measured') === 'photo-observed') warnings.push(`${opening.kind} ${opening.id} is photo-observed; confirm its offset, width, sill, and head height in the field.`);
   });
   if (site.status !== 'field-input-unverified') warnings.push('House geometry is reference context only. Record field measurements before professional review.');
   if (site.designWall.selectionStatus === 'unselected') errors.push('Select and confirm the house wall used by the deck design.');
