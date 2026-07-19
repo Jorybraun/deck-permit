@@ -7,6 +7,7 @@ import { sha256Blob, sha256Bytes } from './fileDigest';
 import { buildProfessionalResolutionRecord } from './professionalWorkResolution';
 import { loadReviewEvidenceFile } from './reviewEvidenceStorage';
 import { buildSidneyApplicationPdf, SIDNEY_APPLICATION_EDITION, validateSidneyApplication } from './sidneyApplication';
+import { assessSidneyMunicipalIntake } from './sidneyMunicipalIntake';
 import { buildVectorPlanPdf } from './vectorPlanPdf';
 
 export const CANONICAL_PERMIT_BUNDLE_SCHEMA = 'permitly-canonical-permit-bundle/v1' as const;
@@ -53,6 +54,7 @@ export async function buildCanonicalPermitBundle(input: CanonicalPermitBundleInp
   const files: Record<string, Uint8Array> = {
     'README-FIRST.txt': encode(buildReadme(input)),
     [`01-application/sidney-application-prefill-UNSIGNED-${safeName(SIDNEY_APPLICATION_EDITION)}.pdf`]: applicationPdf,
+    [`01-application/sidney-intake-assessment-${fingerprint}.txt`]: encode(buildIntakeSummary(input)),
     [`02-drawings/deck-permit-drawings-${fingerprint}.pdf`]: await bytes(drawingPdf),
     [`02-drawings/structural-calculation-report-${fingerprint}.pdf`]: await bytes(calculationPdf),
     [`02-drawings/layered-cad-${fingerprint}.dxf`]: encode(issue.reviewPackage.cadExchange!.dxf),
@@ -110,6 +112,34 @@ function validateInput(input: CanonicalPermitBundleInput): void {
 function buildReadme(input: CanonicalPermitBundleInput): string {
   const outstanding = input.readiness.gates.filter((gate) => gate.status === 'required');
   return ['PERMITLY — TOWN OF SIDNEY DECK PERMIT PACKAGE', `Project: ${input.issue.manifest.address}`, `Drawing issue: Rev ${input.issue.manifest.revision} · ${input.issue.manifest.designFingerprint}`, `Package state: ${input.readiness.status}`, `Schema: ${CANONICAL_PERMIT_BUNDLE_SCHEMA}`, '', 'CONTENTS', '01-application — official unsigned Town application prefill', `02-drawings — ${input.issue.reviewPackage.planset.length}-sheet vector drawing set, calculation booklet, and layered DXF`, '03-evidence — owner-signed application, current professional evidence, and field-confirmed site capture', '04-records — canonical model, calculation data, professional resolutions, submission manifest, and SHA-256 index', '05-stale-evidence — retained evidence belonging to another design fingerprint', '', 'IMPORTANT', 'The official prefill remains unsigned. A ready-to-submit label means the app recorded every listed gate; it is not proof of municipal acceptance or authorization to construct.', '', outstanding.length ? `OUTSTANDING GATES (${outstanding.length})` : 'OUTSTANDING GATES: none recorded by the app', ...outstanding.map((gate) => `- ${gate.label}: ${gate.detail}`), '', 'Town of Sidney Development Services · developmentservices@sidney.ca · 250-656-1725'].join('\n');
+}
+
+function buildIntakeSummary(input: CanonicalPermitBundleInput): string {
+  const siteCompliance = input.issue.reviewPackage.calculationReport?.siteCompliance;
+  const assessment = assessSidneyMunicipalIntake({
+    application: input.application,
+    evidence: input.evidence,
+    designFingerprint: input.issue.manifest.designFingerprint,
+    drawingSheetCount: input.issue.reviewPackage.planset.length,
+    professionalReviewAccepted: input.readiness.gates.some((gate) => gate.id === 'professional-review' && gate.status === 'confirmed'),
+    lotCoverageIncluded: Boolean(siteCompliance?.schema === 'site-compliance/v2' && siteCompliance.coverage.status !== 'unavailable'),
+  });
+  return [
+    'TOWN OF SIDNEY DIGITAL BUILDING PERMIT INTAKE ASSESSMENT',
+    `Official checklist edition: ${assessment.edition}`,
+    `Drawing fingerprint: ${input.issue.manifest.designFingerprint}`,
+    `Official form: ${assessment.sourceUrl}`,
+    `Current Town intake page: ${assessment.buildingPermitPageUrl}`,
+    '',
+    'PACKAGE ITEMS',
+    ...assessment.items.map((item) => `[${item.status.toUpperCase()}] ${item.label}\n  ${item.detail}`),
+    '',
+    'PROJECT-SPECIFIC ITEMS REQUIRING TOWN CONFIRMATION',
+    ...assessment.unresolvedConditionalItems.map((label) => `- ${label}`),
+    '',
+    'DELIVERY MEANING',
+    'This assessment supports a Town completeness review. It is not a municipal receipt, file number, permit approval, or authorization to construct.',
+  ].join('\n');
 }
 
 async function buildIndex(files: Record<string, Uint8Array>, fingerprint: string, status: SubmissionReadiness['status']): Promise<string> {

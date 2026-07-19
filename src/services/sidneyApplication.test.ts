@@ -6,7 +6,7 @@ const complete: SidneyApplicationData = {
   civicAddress: '2423 Lovell Avenue, Sidney, BC',
   ownerName: 'Owner Name', ownerCompany: '', ownerAddress: '2423 Lovell Avenue', ownerCityProvince: 'Sidney, BC', ownerPostalCode: 'V8L 2J4', ownerPhone: '250-555-0100', ownerEmail: 'owner@example.com',
   applicantName: '', applicantCompany: '', applicantBusinessLicence: '', applicantAddress: '', applicantCityProvince: '', applicantPostalCode: '', applicantPhone: '', applicantEmail: '',
-  projectDescription: 'Construct an attached residential wood deck.', constructionValue: '25000', existingFloorAreaSqm: '', deckAreaSqm: '20.8',
+  projectDescription: 'Construct an attached residential wood deck.', constructionValue: '25000', existingFloorAreaSqm: '', deckAreaSqm: '20.8', authorizeTownTitleSearch: true,
 };
 
 describe('Sidney application validation', () => {
@@ -30,6 +30,7 @@ describe('Sidney application validation', () => {
     textFields.forEach((name, index) => form.createTextField(name).addToPage(page, { x: 10, y: 10 + index * 2, width: 100, height: 10 }));
     form.createCheckBox('Check Box4').addToPage(page, { x: 120, y: 20, width: 10, height: 10 });
     form.createCheckBox('Check Box6').addToPage(page, { x: 140, y: 20, width: 10, height: 10 });
+    form.createCheckBox('Check Box10').addToPage(page, { x: 160, y: 20, width: 10, height: 10 });
     const bytes = await template.save();
     const originalFetch = globalThis.fetch;
     globalThis.fetch = async () => new Response(new Uint8Array(bytes), { status: 200, headers: { 'content-type': 'application/pdf' } });
@@ -42,6 +43,7 @@ describe('Sidney application validation', () => {
       expect(resultForm.getTextField('Proposed Building Area (m²)').getText()).toBe('20.8');
       expect(resultForm.getCheckBox('Check Box4').isChecked()).toBe(true);
       expect(resultForm.getCheckBox('Check Box6').isChecked()).toBe(true);
+      expect(resultForm.getCheckBox('Check Box10').isChecked()).toBe(false);
     } finally {
       globalThis.fetch = originalFetch;
     }

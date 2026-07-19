@@ -13,7 +13,7 @@ const property: Property = {
   parcel: { pid: '000-111-222', pidRaw: '000111222', parcelName: 'Lot 1', planNumber: 'VIP1', municipality: 'Town of Sidney', ownerType: '', parcelClass: '', areaSqm: 500, polygon: [], center: [-123.4, 48.6] },
   zoning: null, buildableEnvelope: null, snowLoad: 1, buildings: [], evidence: [],
 };
-const application: SidneyApplicationData = { civicAddress: property.address!.fullAddress, ownerName: 'Owner', ownerCompany: '', ownerAddress: '2423 Lovell Ave', ownerCityProvince: 'Sidney, BC', ownerPostalCode: 'V8L 2P3', ownerPhone: '250-555-0100', ownerEmail: 'owner@example.com', applicantName: '', applicantCompany: '', applicantBusinessLicence: '', applicantAddress: '', applicantCityProvince: '', applicantPostalCode: '', applicantPhone: '', applicantEmail: '', projectDescription: 'Construct a new residential deck and stairs.', constructionValue: '25000', existingFloorAreaSqm: '', deckAreaSqm: '12' };
+const application: SidneyApplicationData = { civicAddress: property.address!.fullAddress, ownerName: 'Owner', ownerCompany: '', ownerAddress: '2423 Lovell Ave', ownerCityProvince: 'Sidney, BC', ownerPostalCode: 'V8L 2P3', ownerPhone: '250-555-0100', ownerEmail: 'owner@example.com', applicantName: '', applicantCompany: '', applicantBusinessLicence: '', applicantAddress: '', applicantCityProvince: '', applicantPostalCode: '', applicantPhone: '', applicantEmail: '', projectDescription: 'Construct a new residential deck and stairs.', constructionValue: '25000', existingFloorAreaSqm: '', deckAreaSqm: '12', authorizeTownTitleSearch: true };
 const readiness: SubmissionReadiness = { status: 'review-package', confirmedCount: 2, requiredCount: 6, summary: 'Review package only.', gates: [{ id: 'professional-review', label: 'Professional review', status: 'required', responsibleParty: 'engineer', detail: 'Required.' }] };
 
 function fixture() {
@@ -37,12 +37,13 @@ describe('canonical permit bundle', () => {
     const archive = unzipSync(new Uint8Array(await artifact.blob.arrayBuffer()));
     expect(artifact.kind).toBe('professional-review');
     expect(artifact.designFingerprint).toBe(issue.manifest.designFingerprint);
-    expect(artifact.fileNames).toHaveLength(9);
+    expect(artifact.fileNames).toHaveLength(10);
     expect(artifact.fileNames).toContain(`02-drawings/layered-cad-${issue.manifest.designFingerprint}.dxf`);
+    expect(artifact.fileNames).toContain(`01-application/sidney-intake-assessment-${issue.manifest.designFingerprint}.txt`);
     const indexName = artifact.fileNames.find((name) => name.includes('package-index'))!;
     const index = JSON.parse(strFromU8(archive[indexName]));
     expect(index).toMatchObject({ schema: 'permitly-canonical-package-index/v1', designFingerprint: issue.manifest.designFingerprint, packageKind: 'review-package' });
-    expect(index.files).toHaveLength(8);
+    expect(index.files).toHaveLength(9);
   });
 
   it('rejects missing or tampered local evidence and separates stale revision evidence', async () => {

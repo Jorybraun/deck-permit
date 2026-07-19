@@ -313,11 +313,14 @@ export interface SubmissionReadiness {
 
 export type VerificationEvidenceKind =
   | 'legal-survey'
+  | 'land-title-search'
   | 'municipal-confirmation'
   | 'field-report'
   | 'soil-report'
   | 'sealed-structural-review'
   | 'sealed-architectural-review'
+  | 'construction-fire-safety-plan'
+  | 'owner-authorization'
   | 'application-checklist';
 
 export interface VerificationEvidence {
@@ -436,4 +439,6 @@ export interface SidneyApplicationData {
   constructionValue: string;
   existingFloorAreaSqm: string;
   deckAreaSqm: string;
+  /** April 2026 form election allowing the Town to obtain the title search and registered charges for the stated fees. */
+  authorizeTownTitleSearch: boolean;
 }

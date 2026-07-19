@@ -55,6 +55,10 @@ export async function buildSidneyApplicationPdf(data: SidneyApplicationData): Pr
 
   form.getCheckBox('Check Box4').check(); // Addition
   form.getCheckBox('Check Box6').check(); // Deck
+  // The Town template reuses "Check Box10" for both New construction on page 1 and
+  // the title-search election on page 2. Checking the AcroForm field would mark both.
+  // Draw only the page-2 election to avoid changing the stated construction type.
+  if (data.authorizeTownTitleSearch) pdf.getPages()[1]?.drawText('X', { x: 62, y: 608, size: 10, font });
   put('Describe Project 1', data.projectDescription);
   put('Total value of all works for project', data.constructionValue.replace(/^\$\s*/, ''));
   put('Existing Total Floor Area m² per floor', data.existingFloorAreaSqm);

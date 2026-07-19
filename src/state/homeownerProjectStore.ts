@@ -96,7 +96,7 @@ export interface HomeownerProjectState {
 export const emptyProperty: Property = { address: null, parcel: null, zoning: null, buildableEnvelope: null, snowLoad: 1, buildings: [], evidence: [] };
 export const emptyIntent: HomeownerIntent = { uses: [], materialPreference: 'unsure', desiredFeatures: [], budgetRange: 'unsure', inspirationNotes: '' };
 export const emptyBuilderShareConsent: BuilderShareConsent = { schema: 'builder-share-consent/v1', shareExactAddress: false, shareContactDetails: false, shareDrawings: true, sharePhotoEvidence: false, shareProfessionalRecords: true, preferredContact: 'either', requestedBuilderCount: 3, confirmed: false, recordedAt: null, designFingerprint: null };
-export const emptySidneyApplication: SidneyApplicationData = { civicAddress: '', ownerName: '', ownerCompany: '', ownerAddress: '', ownerCityProvince: '', ownerPostalCode: '', ownerPhone: '', ownerEmail: '', applicantName: '', applicantCompany: '', applicantBusinessLicence: '', applicantAddress: '', applicantCityProvince: '', applicantPostalCode: '', applicantPhone: '', applicantEmail: '', projectDescription: '', constructionValue: '', existingFloorAreaSqm: '', deckAreaSqm: '' };
+export const emptySidneyApplication: SidneyApplicationData = { civicAddress: '', ownerName: '', ownerCompany: '', ownerAddress: '', ownerCityProvince: '', ownerPostalCode: '', ownerPhone: '', ownerEmail: '', applicantName: '', applicantCompany: '', applicantBusinessLicence: '', applicantAddress: '', applicantCityProvince: '', applicantPostalCode: '', applicantPhone: '', applicantEmail: '', projectDescription: '', constructionValue: '', existingFloorAreaSqm: '', deckAreaSqm: '', authorizeTownTitleSearch: false };
 
 const freshState = () => ({
   stage: 'idea' as ProjectStage,

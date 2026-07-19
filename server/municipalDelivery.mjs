@@ -30,7 +30,7 @@ export class MunicipalDeliveryService {
       recipient: SIDNEY_PERMIT_RECIPIENT,
       maxPackageBytes: MAX_PACKAGE_BYTES,
       authorizationRequired: true,
-      deliveryMeaning: 'Accepted by the email delivery provider; not municipal acceptance or permit approval.',
+      deliveryMeaning: 'Accepted by the email provider for transmission; Town receipt, completeness review, file number, fees, and permit status remain unconfirmed.',
     };
   }
 
@@ -73,7 +73,7 @@ export class MunicipalDeliveryService {
       packageByteSize: packageBytes.length,
       packageSha256,
       status: 'delivered-to-email-provider',
-      deliveryMeaning: 'Accepted by the email delivery provider; not municipal acceptance or permit approval.',
+      deliveryMeaning: 'Accepted by the email provider for transmission; Town receipt, completeness review, file number, fees, and permit status remain unconfirmed.',
     };
     await this.writeReceipt(receiptKey, receipt);
     return receipt;

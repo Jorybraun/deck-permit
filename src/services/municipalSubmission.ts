@@ -44,8 +44,8 @@ export async function deliverSidneyPermitPackage(input: {
       ownerEmail: input.ownerEmail,
       readinessStatus: input.readiness.status,
       manifest: { designFingerprint: input.manifest.designFingerprint, revision: input.manifest.revision, issueId: input.manifest.issueId },
-      subject: `Building permit application — ${input.address} — Rev ${input.manifest.revision} ${input.manifest.designFingerprint}`,
-      message: `Town of Sidney Development Services,\n\nAttached is the controlled building permit application package for a proposed residential deck at ${input.address} (PID ${input.pid}).\n\nDrawing issue: Rev ${input.manifest.revision} · ${input.manifest.designFingerprint}\nPackage SHA-256: ${packageSha256}\n\nPlease reply to the authorized applicant email with the municipal file number, fee instructions, and any completeness comments.`,
+      subject: `Digital building permit package for completeness review — ${input.address} — Rev ${input.manifest.revision} ${input.manifest.designFingerprint}`,
+      message: `Town of Sidney Development Services,\n\nAttached is the owner-authorized digital building permit application package for a proposed residential deck at ${input.address} (PID ${input.pid}). Please review the package for municipal completeness.\n\nDrawing issue: Rev ${input.manifest.revision} · ${input.manifest.designFingerprint}\nPackage SHA-256: ${packageSha256}\n\nPlease reply to the authorized applicant email with the Town receipt or file number, fee instructions, and any outstanding requirements. This delivery does not represent that the Town has accepted the application or issued a permit.`,
       package: { fileName, mimeType: 'application/zip', byteSize: input.artifact.blob.size, sha256: packageSha256, base64: await blobToBase64(input.artifact.blob) },
     }),
   });
