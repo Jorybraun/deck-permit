@@ -12,7 +12,7 @@ export async function captureEvidenceFromFile(file: File, category: CaptureCateg
   return {
     id: crypto.randomUUID(), category, label: file.name.replace(/\.[^.]+$/, ''), fileName: file.name,
     mimeType: file.type, byteSize: file.size, sha256: await sha256File(file), recordedAt: now.toISOString(),
-    status: 'recorded-unverified', notes: '',
+    status: 'recorded-unverified', notes: '', observationTags: [], viewpoint: '', referenceLabel: '', referenceDimensionMm: null,
   };
 }
 

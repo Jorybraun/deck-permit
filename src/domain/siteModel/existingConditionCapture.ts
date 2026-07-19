@@ -1,7 +1,13 @@
-import type { CaptureCategory, CaptureEvidence, ExistingConditionCapture, ExistingConditionCaptureAssessment } from './types';
+import type { CaptureCategory, CaptureEvidence, CaptureEvidenceChanges, CaptureObservationTag, ExistingConditionCapture, ExistingConditionCaptureAssessment } from './types';
 
 export const MAX_CAPTURE_FILE_BYTES = 30 * 1024 * 1024;
 export const CAPTURE_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'] as const;
+export const CAPTURE_OBSERVATION_TAGS: Array<{ id: CaptureObservationTag; label: string }> = [
+  { id: 'house-context', label: 'House + yard context' }, { id: 'complete-wall', label: 'Complete design wall' }, { id: 'wall-corners', label: 'Wall corners visible' }, { id: 'door-opening', label: 'Door/opening visible' },
+  { id: 'threshold-grade', label: 'Threshold to grade' }, { id: 'grade-slope', label: 'Grade/slope visible' }, { id: 'drainage-path', label: 'Drainage path' }, { id: 'visible-foundation', label: 'Foundation/rim visible' },
+  { id: 'cladding-condition', label: 'Cladding condition' }, { id: 'obstruction-service', label: 'Obstruction/service' }, { id: 'scale-reference', label: 'Scale reference visible' }, { id: 'measured-sketch', label: 'Measured sketch/survey' },
+];
+const CAPTURE_OBSERVATION_IDS = new Set(CAPTURE_OBSERVATION_TAGS.map((tag) => tag.id));
 
 export type AddCaptureEvidenceInput = Omit<CaptureEvidence, 'status' | 'notes'> & { status?: CaptureEvidence['status']; notes?: string };
 
@@ -20,13 +26,26 @@ export function addCaptureEvidence(capture: ExistingConditionCapture, input: Add
     fileName: input.fileName.trim(),
     status: input.status || 'recorded-unverified',
     notes: input.notes?.trim() || '',
+    observationTags: normalizeObservationTags(input.observationTags),
+    viewpoint: input.viewpoint?.trim() || '',
+    referenceLabel: input.referenceLabel?.trim() || '',
+    referenceDimensionMm: normalizeReferenceDimension(input.referenceDimensionMm),
   };
   return { ...capture, evidence: [...capture.evidence, record] };
 }
 
-export function updateCaptureEvidence(capture: ExistingConditionCapture, evidenceId: string, changes: Partial<Pick<CaptureEvidence, 'category' | 'label' | 'notes' | 'status'>>): ExistingConditionCapture {
+export function updateCaptureEvidence(capture: ExistingConditionCapture, evidenceId: string, changes: CaptureEvidenceChanges): ExistingConditionCapture {
   if (!capture.evidence.some((record) => record.id === evidenceId)) throw new Error(`Capture evidence ${evidenceId} was not found.`);
-  return { ...capture, evidence: capture.evidence.map((record) => record.id === evidenceId ? { ...record, ...changes, label: changes.label?.trim() || record.label, notes: changes.notes?.trim() ?? record.notes } : record) };
+  return { ...capture, evidence: capture.evidence.map((record) => record.id === evidenceId ? {
+    ...record,
+    ...changes,
+    label: changes.label?.trim() || record.label,
+    notes: changes.notes?.trim() ?? record.notes,
+    observationTags: changes.observationTags ? normalizeObservationTags(changes.observationTags) : normalizeObservationTags(record.observationTags),
+    viewpoint: changes.viewpoint === undefined ? record.viewpoint || '' : changes.viewpoint.trim(),
+    referenceLabel: changes.referenceLabel === undefined ? record.referenceLabel || '' : changes.referenceLabel.trim(),
+    referenceDimensionMm: changes.referenceDimensionMm === undefined ? normalizeReferenceDimension(record.referenceDimensionMm) : normalizeReferenceDimension(changes.referenceDimensionMm),
+  } : record) };
 }
 
 export function removeCaptureEvidence(capture: ExistingConditionCapture, evidenceId: string): ExistingConditionCapture {
@@ -71,4 +90,28 @@ export function categoryTitle(category: CaptureCategory): string {
     obstruction: 'Obstructions and services',
     'survey-or-sketch': 'Survey or measured sketch',
   } satisfies Record<CaptureCategory, string>)[category];
+}
+
+export function defaultObservationTag(category: CaptureCategory): CaptureObservationTag {
+  return ({ 'house-overview': 'house-context', 'design-wall': 'complete-wall', 'door-threshold': 'threshold-grade', 'grade-context': 'grade-slope', 'wall-assembly': 'visible-foundation', obstruction: 'obstruction-service', 'survey-or-sketch': 'measured-sketch' } satisfies Record<CaptureCategory, CaptureObservationTag>)[category];
+}
+
+export function observationTagLabel(tag: CaptureObservationTag): string {
+  return CAPTURE_OBSERVATION_TAGS.find((candidate) => candidate.id === tag)?.label || tag;
+}
+
+export function captureObservationSummary(record: CaptureEvidence): string {
+  const tags = normalizeObservationTags(record.observationTags).map(observationTagLabel);
+  const reference = record.referenceDimensionMm ? `${record.referenceLabel || 'reference'} ${record.referenceDimensionMm} mm` : '';
+  return [record.viewpoint?.trim(), tags.join(', '), reference, record.notes?.trim()].filter(Boolean).join(' · ') || 'No structured observation recorded';
+}
+
+function normalizeObservationTags(tags: CaptureObservationTag[] | undefined): CaptureObservationTag[] {
+  return [...new Set((tags || []).filter((tag) => CAPTURE_OBSERVATION_IDS.has(tag)))];
+}
+
+function normalizeReferenceDimension(value: number | null | undefined): number | null {
+  if (value === null || value === undefined || value === 0) return null;
+  if (!Number.isFinite(value) || value < 1 || value > 100_000) throw new Error('Photo scale reference must be between 1 mm and 100,000 mm.');
+  return Math.round(value);
 }

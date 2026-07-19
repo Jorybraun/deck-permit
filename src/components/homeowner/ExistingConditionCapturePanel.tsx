@@ -1,13 +1,13 @@
 import { Camera, Check, Circle, Image as ImageIcon, Loader2, ShieldCheck, Trash2, Upload } from 'lucide-react';
 import { useState } from 'react';
-import type { CaptureCategory, CaptureEvidence, ExistingConditionCapture, ExistingConditionCaptureAssessment } from '../../domain/siteModel';
+import { CAPTURE_OBSERVATION_TAGS, defaultObservationTag, type CaptureCategory, type CaptureEvidenceChanges, type CaptureObservationTag, type ExistingConditionCapture, type ExistingConditionCaptureAssessment } from '../../domain/siteModel';
 
 interface ExistingConditionCapturePanelProps {
   capture: ExistingConditionCapture;
   assessment: ExistingConditionCaptureAssessment;
   previewUrls: Record<string, string>;
   onAddFiles: (category: CaptureCategory, files: File[]) => Promise<void>;
-  onUpdateEvidence: (evidenceId: string, changes: Partial<Pick<CaptureEvidence, 'category' | 'label' | 'notes' | 'status'>>) => void;
+  onUpdateEvidence: (evidenceId: string, changes: CaptureEvidenceChanges) => void;
   onRemoveEvidence: (evidenceId: string) => Promise<void>;
 }
 
@@ -25,7 +25,7 @@ export function ExistingConditionCapturePanel({ capture, assessment, previewUrls
   return <section className="mt-5 overflow-hidden rounded-xl border border-sky-200 bg-sky-50/50" aria-labelledby="capture-title">
     <header className="border-b border-sky-200 bg-white p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-sky-100 text-sky-800"><Camera size={19} /></span><div><h4 id="capture-title" className="text-sm font-bold text-slate-950">Photograph the real house and yard</h4><p className="mt-1 max-w-2xl text-xs leading-5 text-slate-600">These photos become private source evidence for the existing-condition model. AI may propose findings later, but no photo automatically becomes a dimension or structural fact.</p></div></div>
+        <div className="flex gap-3"><span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-sky-100 text-sky-800"><Camera size={19} /></span><div><h4 id="capture-title" className="text-sm font-bold text-slate-950">Photograph the real house and yard</h4><p className="mt-1 max-w-2xl text-xs leading-5 text-slate-600">Upload each required view, then record the camera viewpoint, what is visibly proven, and any known scale reference. The source photo and its SHA-256 integrity record become part of the existing-condition package; no image automatically becomes a dimension or structural fact.</p></div></div>
         <div className="shrink-0 rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-right"><strong className="block text-sm tabular-nums text-sky-950">{assessment.recordedRequiredCount}/{assessment.requiredCount}</strong><span className="text-[9px] font-bold uppercase tracking-[.1em] text-sky-700">required views recorded</span></div>
       </div>
       <div className="mt-3 flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 text-[10px] leading-4 text-slate-600"><ShieldCheck size={15} className="shrink-0 text-emerald-700" /><span>Stored only in this browser. Nothing is uploaded or shared until the homeowner explicitly publishes a professional-review package.</span></div>
@@ -45,15 +45,29 @@ export function ExistingConditionCapturePanel({ capture, assessment, previewUrls
           {evidence.length > 0 && <div className="mt-3 grid gap-2 sm:grid-cols-2">{evidence.map((record) => <div key={record.id} className="grid grid-cols-[74px_minmax(0,1fr)] gap-3 rounded-lg border border-slate-200 bg-slate-50 p-2">
             <div className="grid h-16 place-items-center overflow-hidden rounded-md bg-slate-200">{previewUrls[record.id] && !record.mimeType.includes('heic') && !record.mimeType.includes('heif') ? <img src={previewUrls[record.id]} alt="" className="h-full w-full object-cover" /> : <ImageIcon size={20} className="text-slate-500" />}</div>
             <div className="min-w-0"><div className="flex items-start gap-2"><div className="min-w-0 flex-1"><strong className="block truncate text-[10px] text-slate-900" title={record.fileName}>{record.label}</strong><span className="block truncate text-[8px] text-slate-400">{formatBytes(record.byteSize)} · SHA {record.sha256.slice(0, 10)}…</span></div><button type="button" onClick={() => void onRemoveEvidence(record.id).catch((reason) => setError(reason instanceof Error ? reason.message : 'The photo could not be removed.'))} aria-label={`Remove ${record.label}`} className="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-red-200 text-red-700"><Trash2 size={12} /></button></div>
-              <label className="mt-2 flex cursor-pointer items-start gap-2 text-[9px] leading-4 text-slate-600"><input type="checkbox" checked={record.status === 'homeowner-confirmed' || record.status === 'professional-verified'} disabled={record.status === 'professional-verified'} onChange={(event) => onUpdateEvidence(record.id, { status: event.target.checked ? 'homeowner-confirmed' : 'recorded-unverified' })} className="mt-0.5" /><span>I confirm this photo shows the requested view.</span></label>
+              <label className="mt-2 flex cursor-pointer items-start gap-2 text-[9px] leading-4 text-slate-600"><input type="checkbox" checked={record.status === 'homeowner-confirmed' || record.status === 'professional-verified'} disabled={record.status === 'professional-verified'} onChange={(event) => onUpdateEvidence(record.id, { status: event.target.checked ? 'homeowner-confirmed' : 'recorded-unverified', observationTags: event.target.checked && !(record.observationTags?.length) ? [defaultObservationTag(record.category)] : record.observationTags })} className="mt-0.5" /><span>I confirm this photo shows the requested view.</span></label>
             </div>
+            <details className="col-span-2 rounded-md border border-sky-200 bg-white px-2 py-1.5">
+              <summary className="cursor-pointer text-[9px] font-bold text-sky-900">Document what this photo proves</summary>
+              <div className="mt-2 grid gap-2">
+                <label className="grid gap-1 text-[8px] font-bold uppercase tracking-[.08em] text-slate-500">Viewpoint / direction<input aria-label={`Viewpoint for ${record.label}`} value={record.viewpoint || ''} onChange={(event) => onUpdateEvidence(record.id, { viewpoint: event.target.value })} placeholder="Example: rear yard looking toward house" className="min-h-9 rounded-md border border-slate-300 px-2 text-[10px] font-normal normal-case tracking-normal text-slate-800" /></label>
+                <fieldset><legend className="text-[8px] font-bold uppercase tracking-[.08em] text-slate-500">Visible observations</legend><div className="mt-1 flex flex-wrap gap-1">{CAPTURE_OBSERVATION_TAGS.map((tag) => { const checked = record.observationTags?.includes(tag.id) || false; return <label key={tag.id} className={`cursor-pointer rounded-full border px-2 py-1 text-[8px] font-semibold ${checked ? 'border-emerald-500 bg-emerald-50 text-emerald-900' : 'border-slate-200 bg-white text-slate-500'}`}><input type="checkbox" className="sr-only" checked={checked} onChange={() => onUpdateEvidence(record.id, { observationTags: toggleTag(record.observationTags || [], tag.id) })} />{tag.label}</label>; })}</div></fieldset>
+                <div className="grid grid-cols-[minmax(0,1fr)_110px] gap-2"><label className="grid gap-1 text-[8px] font-bold uppercase tracking-[.08em] text-slate-500">Scale reference<input aria-label={`Scale reference for ${record.label}`} value={record.referenceLabel || ''} onChange={(event) => onUpdateEvidence(record.id, { referenceLabel: event.target.value })} placeholder="Tape / known object" className="min-h-9 rounded-md border border-slate-300 px-2 text-[10px] font-normal normal-case tracking-normal text-slate-800" /></label><label className="grid gap-1 text-[8px] font-bold uppercase tracking-[.08em] text-slate-500">Length (mm)<input aria-label={`Reference length for ${record.label}`} type="number" min="1" max="100000" value={record.referenceDimensionMm || ''} onChange={(event) => onUpdateEvidence(record.id, { referenceDimensionMm: event.target.value ? Number(event.target.value) : null })} className="min-h-9 rounded-md border border-slate-300 px-2 text-[10px] font-normal normal-case tracking-normal text-slate-800" /></label></div>
+                <label className="grid gap-1 text-[8px] font-bold uppercase tracking-[.08em] text-slate-500">Condition notes<textarea aria-label={`Condition notes for ${record.label}`} value={record.notes || ''} onChange={(event) => onUpdateEvidence(record.id, { notes: event.target.value })} placeholder="Visible damage, drainage, obstruction, uncertainty…" rows={2} className="rounded-md border border-slate-300 p-2 text-[10px] font-normal normal-case tracking-normal text-slate-800" /></label>
+                <p className="text-[8px] leading-3 text-slate-400">A scale reference documents what appears in the image; it does not calibrate the photo or replace a field measurement.</p>
+              </div>
+            </details>
           </div>)}</div>}
         </article>;
       })}
     </div>
     {error && <p className="mx-4 mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800" role="alert">{error}</p>}
-    <footer className="border-t border-sky-200 bg-white px-4 py-3 text-[10px] leading-4 text-slate-500">JPEG, PNG, WebP, HEIC or HEIF · 30 MB maximum each. Original files and metadata remain local; consider disabling location metadata before sharing a final review package.</footer>
+    <footer className="border-t border-sky-200 bg-white px-4 py-3 text-[10px] leading-4 text-slate-500">JPEG, PNG, WebP, HEIC or HEIF · 30 MB maximum each. Original files remain local. Structured observations appear on C1.x; source bytes are added only when you explicitly assemble the professional-review package.</footer>
   </section>;
+}
+
+function toggleTag(tags: CaptureObservationTag[], tag: CaptureObservationTag): CaptureObservationTag[] {
+  return tags.includes(tag) ? tags.filter((candidate) => candidate !== tag) : [...tags, tag];
 }
 
 function formatBytes(bytes: number): string {

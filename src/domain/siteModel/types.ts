@@ -95,6 +95,7 @@ export interface TerrainElevationResult {
 
 export type CaptureCategory = 'house-overview' | 'design-wall' | 'door-threshold' | 'grade-context' | 'wall-assembly' | 'obstruction' | 'survey-or-sketch';
 export type CaptureEvidenceStatus = 'recorded-unverified' | 'homeowner-confirmed' | 'professional-verified';
+export type CaptureObservationTag = 'house-context' | 'complete-wall' | 'wall-corners' | 'door-opening' | 'threshold-grade' | 'grade-slope' | 'drainage-path' | 'visible-foundation' | 'cladding-condition' | 'obstruction-service' | 'scale-reference' | 'measured-sketch';
 
 export interface CaptureEvidence {
   id: string;
@@ -107,7 +108,14 @@ export interface CaptureEvidence {
   recordedAt: string;
   status: CaptureEvidenceStatus;
   notes: string;
+  /** Controlled homeowner observations; an image is not treated as a fact by itself. */
+  observationTags?: CaptureObservationTag[];
+  viewpoint?: string;
+  referenceLabel?: string;
+  referenceDimensionMm?: number | null;
 }
+
+export type CaptureEvidenceChanges = Partial<Pick<CaptureEvidence, 'category' | 'label' | 'notes' | 'status' | 'observationTags' | 'viewpoint' | 'referenceLabel' | 'referenceDimensionMm'>>;
 
 /** Metadata for locally stored private capture files; bytes are owned by capture-file storage. */
 export interface ExistingConditionCapture {

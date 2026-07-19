@@ -2,7 +2,7 @@ import { DOMParser } from '@xmldom/xmldom';
 import { describe, expect, it } from 'vitest';
 import { addPlatform, addStair, createEmptyDesign, rectangularBoundary } from '../domain/deckDesign';
 import { generateFramingDesign } from '../domain/framingDesign';
-import { createSiteModel, selectHouseWall } from '../domain/siteModel';
+import { addCaptureEvidence, createSiteModel, selectHouseWall } from '../domain/siteModel';
 import type { Property } from '../types';
 import { canonicalPlanFingerprint, generateCanonicalPlanSet } from './canonicalPlanSet';
 
@@ -20,7 +20,8 @@ describe('canonical coordinated review set', () => {
     design = addPlatform(design, { name: 'Lower deck', boundary: rectangularBoundary(4710, 0, 3500, 3000), elevationMm: 450 });
     design = addStair(design, { from: { kind: 'platform', platformId: 'P1' }, to: { kind: 'platform', platformId: 'P2' }, fromEdgeId: 'P1-E2', toEdgeId: 'P2-E4', startMm: [4000, 1500], endMm: [4710, 1500], directionDeg: 0, riserCount: 3, treadDepthMm: 355 });
     const selectedSite = selectHouseWall(createSiteModel(property), property, 'house', 0);
-    const site = { ...selectedSite, measuredBy: 'Homeowner', yardReference: { ...selectedSite.yardReference, status: 'homeowner-selected' as const, frontEdgeIndex: 0, rearEdgeIndex: 2, selectedBy: 'Homeowner', selectedAt: '2026-07-18T00:00:00.000Z' }, designWall: { ...selectedSite.designWall, openings: [{ id: 'D1', kind: 'door' as const, offsetMm: 900, widthMm: 1800, sillHeightMm: 120 }] } };
+    const capture = addCaptureEvidence(selectedSite.capture, { id: 'capture-wall', category: 'design-wall', label: 'Complete wall', fileName: 'wall.jpg', mimeType: 'image/jpeg', byteSize: 1200, sha256: 'a'.repeat(64), recordedAt: '2026-07-18T00:00:00.000Z', status: 'homeowner-confirmed', notes: 'Cladding appears intact.', viewpoint: 'Rear yard looking toward house', observationTags: ['complete-wall', 'wall-corners', 'scale-reference'], referenceLabel: 'tape', referenceDimensionMm: 1000 });
+    const site = { ...selectedSite, capture, measuredBy: 'Homeowner', yardReference: { ...selectedSite.yardReference, status: 'homeowner-selected' as const, frontEdgeIndex: 0, rearEdgeIndex: 2, selectedBy: 'Homeowner', selectedAt: '2026-07-18T00:00:00.000Z' }, designWall: { ...selectedSite.designWall, openings: [{ id: 'D1', kind: 'door' as const, offsetMm: 900, widthMm: 1800, sillHeightMm: 120 }] } };
     const framing = generateFramingDesign(design, site, { municipality: 'Town of Sidney', snowLoadKpa: 1 }, '2026-07-18T00:00:00.000Z');
     const planSet = generateCanonicalPlanSet({ property, site, design, framing, issuedAt: '2026-07-18T00:00:00.000Z' });
 
@@ -30,11 +31,13 @@ describe('canonical coordinated review set', () => {
     const foundationPageCount = Math.max(1, Math.ceil(framing.footings.length / 15));
     const foundationNumbers = Array.from({ length: foundationPageCount }, (_, index) => `S1.${index + 1}`);
     const sectionNumbers = design.platforms.map((_, index) => `S3.${index}`);
+    const capturePageCount = Math.max(1, Math.ceil(site.capture.evidence.length / 8));
+    const captureNumbers = Array.from({ length: capturePageCount }, (_, index) => `C1.${index + 1}`);
     const reviewControlCount = framing.platformSystems.length + framing.checks.length + framing.reviewGates.length;
     const reviewPageCount = Math.max(1, Math.ceil(reviewControlCount / 12));
     const reviewNumbers = Array.from({ length: reviewPageCount }, (_, index) => `S4.${index + 1}`);
-    expect(planSet.sheets).toHaveLength(10 + foundationPageCount + connectionPageCount + sectionNumbers.length + reviewPageCount);
-    expect(planSet.sheets.map((sheet) => sheet.number)).toEqual(['A0.0', 'C1.0', 'A1.0', 'A2.0', 'S1.0', ...foundationNumbers, 'S2.0', ...connectionNumbers, 'A3.0', ...sectionNumbers, 'A4.0', 'A4.1', 'S4.0', ...reviewNumbers]);
+    expect(planSet.sheets).toHaveLength(10 + capturePageCount + foundationPageCount + connectionPageCount + sectionNumbers.length + reviewPageCount);
+    expect(planSet.sheets.map((sheet) => sheet.number)).toEqual(['A0.0', 'C1.0', ...captureNumbers, 'A1.0', 'A2.0', 'S1.0', ...foundationNumbers, 'S2.0', ...connectionNumbers, 'A3.0', ...sectionNumbers, 'A4.0', 'A4.1', 'S4.0', ...reviewNumbers]);
     expect(planSet.sheets.every((sheet) => sheet.designFingerprint === planSet.fingerprint)).toBe(true);
     for (const sheet of planSet.sheets) {
       const errors: string[] = [];
@@ -63,6 +66,14 @@ describe('canonical coordinated review set', () => {
     expect(existingSheet).toContain('D1 · 1800 W · SILL 120');
     expect(existingSheet).toContain('MEASUREMENT / DATUM PROVENANCE');
     expect(existingSheet).toContain('EXISTING-CONDITION EVIDENCE REGISTER');
+    expect(existingSheet).toContain('fully scheduled on C1.1+');
+    const captureSchedules = planSet.sheets.filter((sheet) => sheet.id === 'capture-schedule' || sheet.id.startsWith('capture-schedule-'));
+    expect(captureSchedules).toHaveLength(1);
+    expect(captureSchedules[0].svg).toContain('PHOTO OBSERVATIONS &amp; INTEGRITY RECORDS');
+    expect(captureSchedules[0].svg).toContain('Rear yard looking toward house');
+    expect(captureSchedules[0].svg).toContain('complete-wall, wall-corners, scale-reference');
+    expect(captureSchedules[0].svg).toContain('tape · 1000 mm');
+    expect(captureSchedules[0].svg).toContain('SHA aaaaaaaaaaaaaaaa…');
     expect(planSet.sheets.find((sheet) => sheet.number === 'A2.0')?.svg).toContain('DECK, LANDING, STAIR AND GUARD PLAN');
     expect(planSet.sheets.find((sheet) => sheet.number === 'A2.0')?.svg).toContain('STAIR 1 · 900 WIDE · 3R');
     expect(planSet.sheets.find((sheet) => sheet.number === 'A2.0')?.svg).toContain('900H · DROP 900');
@@ -139,7 +150,10 @@ describe('canonical coordinated review set', () => {
     for (let index = 0; index < 4; index += 1) {
       design = addPlatform(design, { name: `Deck ${index + 1}`, boundary: rectangularBoundary(index * 5000, 0, 3000, 2400), elevationMm: 900 });
     }
-    const site = selectHouseWall(createSiteModel(property), property, 'house', 0);
+    let site = selectHouseWall(createSiteModel(property), property, 'house', 0);
+    for (let index = 0; index < 17; index += 1) {
+      site = { ...site, capture: addCaptureEvidence(site.capture, { id: `ev-${String(index + 1).padStart(2, '0')}-id`, category: index % 2 ? 'design-wall' : 'house-overview', label: `Photo ${index + 1}`, fileName: `photo-${index + 1}.jpg`, mimeType: 'image/jpeg', byteSize: 1000 + index, sha256: index.toString(16).padStart(64, '0'), recordedAt: '2026-07-18T00:00:00.000Z', observationTags: index % 2 ? ['complete-wall'] : ['house-context'], viewpoint: `View ${index + 1}` }) };
+    }
     const framing = generateFramingDesign(design, site, { municipality: 'Town of Sidney', snowLoadKpa: 1 }, '2026-07-18T00:00:00.000Z');
     expect(framing.guards.length).toBeGreaterThan(15);
 
@@ -160,6 +174,10 @@ describe('canonical coordinated review set', () => {
     for (const connection of framing.connections) expect(connectionSheets.filter((sheet) => sheet.svg.includes(connection.id))).toHaveLength(1);
     expect(planSet.sheets.find((sheet) => sheet.number === 'A0.0')?.svg).toContain(`S2.1–S2.${connectionSheets.length}`);
     expect(planSet.sheets.find((sheet) => sheet.number === 'A0.0')?.svg).toContain('S3.0–S3.3');
+    const captureSheets = planSet.sheets.filter((sheet) => sheet.id === 'capture-schedule' || sheet.id.startsWith('capture-schedule-'));
+    expect(captureSheets.map((sheet) => sheet.number)).toEqual(['C1.1', 'C1.2', 'C1.3']);
+    for (const record of site.capture.evidence) expect(captureSheets.filter((sheet) => sheet.svg.includes(record.id))).toHaveLength(1);
+    expect(planSet.sheets.find((sheet) => sheet.number === 'A0.0')?.svg).toContain('C1.1–C1.3');
     const reviewSheets = planSet.sheets.filter((sheet) => sheet.id === 'review-schedule' || sheet.id.startsWith('review-schedule-'));
     expect(reviewSheets.length).toBeGreaterThan(1);
     for (const system of framing.platformSystems) expect(reviewSheets.filter((sheet) => sheet.svg.includes(`SYS-${system.platformId}`))).toHaveLength(1);

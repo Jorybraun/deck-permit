@@ -1,12 +1,12 @@
 import { createOrthographicProjection } from '../domain/architecturalViews';
 import type { DeckDesign, DeckPlatform, PointMm } from '../domain/deckDesign';
 import type { FramingDesign } from '../domain/framingDesign';
-import { assessExistingConditionCapture, assessSiteCompliance, assessSiteModel, calculateSiteClearances, deriveProposedSiteComponents, deriveReferenceSetbackGuides, projectPropertyToLocal, terrainElevationAt, type LocalPropertyGeometry, type ProposedSiteComponent, type ReferenceSetbackGuide, type SiteClearanceAssessment, type SiteComplianceAssessment, type SiteModel } from '../domain/siteModel';
+import { assessExistingConditionCapture, assessSiteCompliance, assessSiteModel, calculateSiteClearances, deriveProposedSiteComponents, deriveReferenceSetbackGuides, projectPropertyToLocal, terrainElevationAt, type CaptureEvidence, type LocalPropertyGeometry, type ProposedSiteComponent, type ReferenceSetbackGuide, type SiteClearanceAssessment, type SiteComplianceAssessment, type SiteModel } from '../domain/siteModel';
 import type { PlanSheet, Property } from '../types';
 import { renderOrthographicElevationSvg } from './orthographicElevationSvg';
 
 const CONTENT_BOTTOM = 970;
-export const CANONICAL_PLAN_SET_SCHEMA = 'permitly-canonical-plan-set/v9' as const;
+export const CANONICAL_PLAN_SET_SCHEMA = 'permitly-canonical-plan-set/v10' as const;
 
 interface CanonicalPlanSetInput {
   property: Property;
@@ -58,9 +58,11 @@ export function generateCanonicalPlanSet(input: CanonicalPlanSetInput): Canonica
   const sections = sectionSheets(input, issue);
   const assemblySchedules = assemblyScheduleSheets(input, issue);
   const reviewSchedules = reviewControlScheduleSheets(input, issue);
+  const captureSchedules = captureEvidenceScheduleSheets(input, issue);
   const sheets = [
-    coverSheet(input, issue, foundationSchedules.length, connectionSchedules.length, sections.length, assemblySchedules.length, reviewSchedules.length),
+    coverSheet(input, issue, captureSchedules.length, foundationSchedules.length, connectionSchedules.length, sections.length, assemblySchedules.length, reviewSchedules.length),
     existingConditionsSheet(input, issue),
+    ...captureSchedules,
     siteSheet(input, issue),
     deckPlanSheet(input, issue),
     foundationSheet(input, issue),
@@ -77,7 +79,7 @@ export function generateCanonicalPlanSet(input: CanonicalPlanSetInput): Canonica
   return { fingerprint: issue.fingerprint, sheets };
 }
 
-function coverSheet(input: CanonicalPlanSetInput, issue: IssueMeta, foundationScheduleCount: number, connectionScheduleCount: number, sectionCount: number, assemblyScheduleCount: number, reviewScheduleCount: number): PlanSheet {
+function coverSheet(input: CanonicalPlanSetInput, issue: IssueMeta, captureScheduleCount: number, foundationScheduleCount: number, connectionScheduleCount: number, sectionCount: number, assemblyScheduleCount: number, reviewScheduleCount: number): PlanSheet {
   const { property, site, design, framing } = input;
   const totalArea = design.platforms.reduce((sum, platform) => sum + polygonArea(platform.boundary.vertices.map((vertex): PointMm => [vertex.xMm, vertex.yMm])) / 1_000_000, 0);
   const projectRows = [
@@ -92,7 +94,7 @@ function coverSheet(input: CanonicalPlanSetInput, issue: IssueMeta, foundationSc
     ['Issue', `Rev ${pad(issue.revision)} · ${issue.fingerprint}`],
   ];
   const indexRows = [
-    ['A0.0', 'Cover, project data, drawing index'], ['C1.0', 'Evidence and existing conditions'], ['A1.0', 'Site and property relationship'], ['A2.0', 'Dimensioned deck and landing plan'],
+    ['A0.0', 'Cover, project data, drawing index'], ['C1.0', 'Evidence and existing conditions'], [captureScheduleCount === 1 ? 'C1.1' : `C1.1–C1.${captureScheduleCount}`, 'All photo observations and integrity records'], ['A1.0', 'Site and property relationship'], ['A2.0', 'Dimensioned deck and landing plan'],
     ['S1.0', 'Foundation and post plan'], [foundationScheduleCount === 1 ? 'S1.1' : `S1.1–S1.${foundationScheduleCount}`, 'All footing and post design-control records'], ['S2.0', 'Framing plan and member schedule'], [connectionScheduleCount === 1 ? 'S2.1' : `S2.1–S2.${connectionScheduleCount}`, 'All keyed structural connection design controls'], ['A3.0', 'Platform and stair elevations'],
     [sectionCount === 1 ? 'S3.0' : `S3.0–S3.${sectionCount - 1}`, 'Building section for every modeled platform'], ['A4.0', 'Stair, guard, footing, connection details'], [assemblyScheduleCount === 1 ? 'A4.1' : `A4.1–A4.${assemblyScheduleCount}`, 'All stair and guard design-control schedules'], ['S4.0', 'Design basis and review summary'], [reviewScheduleCount === 1 ? 'S4.1' : `S4.1–S4.${reviewScheduleCount}`, 'All system screens, checks, and review work packages'],
   ];
@@ -102,7 +104,7 @@ function coverSheet(input: CanonicalPlanSetInput, issue: IssueMeta, foundationSc
     <text class="subheading" x="70" y="128">${esc(property.address?.fullAddress || 'Address unconfirmed')}</text>
     ${notice(70, 160, 1560, 78, 'ISSUED FOR COORDINATED PROFESSIONAL REVIEW — NOT FOR CONSTRUCTION', 'Field geometry, structural capacity, footings, connections, guards, stairs, and municipal requirements remain subject to the review gates shown in this set.')}
     <text class="section" x="70" y="286">PROJECT DATA</text>${table(projectRows, 70, 310, 850, 48, 185)}
-    <text class="section" x="970" y="286">DRAWING INDEX</text>${table(indexRows, 970, 310, 660, 22, 100)}
+    <text class="section" x="970" y="286">DRAWING INDEX</text>${table(indexRows, 970, 310, 660, 20, 100)}
     <text class="section" x="970" y="648">REQUIRED REVIEW WORK PACKAGES</text>
     ${required.slice(0, 5).map((gate, index) => statusBox(970, 675 + index * 52, 660, gate.discipline.toUpperCase(), gate.title, 'review')).join('')}
     ${notice(70, 790, 850, 120, 'GENERAL NOTES', 'Do not scale drawings. Written dimensions govern. Verify property boundaries, house wall, openings, grade, utilities, and existing construction before issue. No construction may begin until the authority having jurisdiction issues a permit and required professional documents are accepted.')}`);
@@ -123,12 +125,9 @@ function existingConditionsSheet(input: CanonicalPlanSetInput, issue: IssueMeta)
     ['Photo coverage', `${capture.recordedRequiredCount}/${capture.requiredCount} required recorded · ${capture.confirmedRequiredCount}/${capture.requiredCount} confirmed`],
   ];
   const captureRows = capture.requirements.map((requirement) => [requirement.title, `${requirement.required ? 'required' : 'supplemental'} · ${requirement.status} · ${requirement.evidenceIds.join(', ') || 'no evidence id'}`]);
-  const evidenceNotes = [
-    ...property.evidence.map((source) => `${source.label} · ${source.authority} · ${source.status} · retrieved ${source.retrievedAt.slice(0, 10)}.`),
-    ...site.capture.evidence.map((record) => `${record.id} · ${record.category} · ${record.fileName} · SHA-256 ${record.sha256.slice(0, 16)}… · ${record.status}.`),
-  ];
+  const evidenceNotes = property.evidence.map((source) => `${source.label} · ${source.authority} · ${source.status} · retrieved ${source.retrievedAt.slice(0, 10)}.`);
   const openConditions = [...assessment.errors.map((item) => `BLOCKED — ${item}`), ...assessment.warnings.map((item) => `VERIFY — ${item}`)];
-  const visibleEvidenceNotes = boundedNotes(evidenceNotes, 4, 'additional evidence record(s) are indexed in the review package.');
+  const visibleEvidenceNotes = boundedNotes([...evidenceNotes, `${site.capture.evidence.length} homeowner capture record(s) are fully scheduled on C1.1+.`], 4, 'additional municipal evidence record(s) are indexed in the review package.');
   const visibleOpenConditions = boundedNotes(openConditions, 6, 'additional unresolved condition(s) remain in the project review gates.');
   return makeSheet('existing-conditions', 'Evidence & Existing Conditions', 'MEASURED INPUTS · DO NOT SCALE', 'C1.0', input, issue, `
     <text class="view-title" x="535" y="68" text-anchor="middle">EXISTING HOUSE WALL AND OPENING RECORD</text>
@@ -138,6 +137,42 @@ function existingConditionsSheet(input: CanonicalPlanSetInput, issue: IssueMeta)
     <rect x="845" y="495" width="785" height="387" class="panel"/><text class="section" x="875" y="532">EXISTING-CONDITION EVIDENCE REGISTER</text>${noteList(visibleEvidenceNotes.length ? visibleEvidenceNotes : ['No municipal or homeowner evidence records are attached to this issue.'], 875, 558, 36, 720)}
     <text class="section" x="875" y="700">UNRESOLVED CONDITIONS</text>${noteList(visibleOpenConditions.length ? visibleOpenConditions : ['No unresolved existing-condition items recorded.'], 875, 726, 28, 720)}
     ${notice(55, 900, 1575, 52, 'EVIDENCE CONTROL', 'Photographs and municipal geometry corroborate visible conditions only. Legal boundaries, concealed construction, soil, utilities, and field dimensions remain governed by accepted survey, measurement, and professional evidence.')}`);
+}
+
+const CAPTURE_EVIDENCE_ROWS_PER_SHEET = 8;
+
+/** Schedules every private capture metadata record without embedding or silently clipping the source photos. */
+function captureEvidenceScheduleSheets(input: CanonicalPlanSetInput, issue: IssueMeta): PlanSheet[] {
+  const records = input.site.capture.evidence;
+  const pageCount = Math.max(1, Math.ceil(records.length / CAPTURE_EVIDENCE_ROWS_PER_SHEET));
+  return Array.from({ length: pageCount }, (_, pageIndex) => {
+    const pageRecords = records.slice(pageIndex * CAPTURE_EVIDENCE_ROWS_PER_SHEET, (pageIndex + 1) * CAPTURE_EVIDENCE_ROWS_PER_SHEET);
+    const id: PlanSheet['id'] = pageIndex === 0 ? 'capture-schedule' : `capture-schedule-${pageIndex + 1}`;
+    return makeSheet(id, 'Existing-Condition Photo Evidence Schedule', 'NTS · SOURCE FILES GOVERN', `C1.${pageIndex + 1}`, input, issue, `
+      <rect x="55" y="82" width="1575" height="820" class="panel"/><text class="section" x="80" y="118">PHOTO OBSERVATIONS &amp; INTEGRITY RECORDS · ${pageIndex + 1}/${pageCount}</text>
+      <text class="tiny" x="80" y="137">SOURCE FILES REMAIN PRIVATE UNTIL EXPLICIT PACKAGE ASSEMBLY · METADATA AND OBSERVATIONS ARE BOUND TO ${issue.fingerprint}</text>
+      ${captureEvidenceTable(pageRecords, pageIndex * CAPTURE_EVIDENCE_ROWS_PER_SHEET, 80, 152, 1525, 78)}
+      <text class="tiny" x="80" y="875">${records.length} TOTAL CAPTURE RECORD(S) · ROWS ${pageRecords.length ? pageIndex * CAPTURE_EVIDENCE_ROWS_PER_SHEET + 1 : 0}–${pageIndex * CAPTURE_EVIDENCE_ROWS_PER_SHEET + pageRecords.length} SHOWN · COMPLETE BYTES AND SHA-256 VALIDATED DURING PACKAGE ASSEMBLY</text>
+      <text class="title-warning" x="80" y="900">OBSERVATIONS DESCRIBE VISIBLE CONDITIONS ONLY · THEY DO NOT CALIBRATE THE IMAGE OR ESTABLISH CONCEALED CONSTRUCTION, LEGAL BOUNDARIES OR STRUCTURAL CAPACITY</text>`);
+  });
+}
+
+function captureEvidenceTable(records: CaptureEvidence[], offset: number, x: number, y: number, width: number, rowHeight: number): string {
+  const headers = ['TAG / RECORD', 'CATEGORY', 'STATUS', 'VIEWPOINT', 'VISIBLE OBSERVATIONS', 'SCALE REFERENCE', 'NOTES / INTEGRITY'];
+  const columnWidths = [160, 150, 110, 230, 340, 190, width - 1180];
+  const boundaries = columnWidths.reduce<number[]>((items, column) => [...items, items[items.length - 1] + column], [x]);
+  const header = `<rect x="${x}" y="${y}" width="${width}" height="48" class="schedule-head"/>${headers.map((value, index) => `<text class="schedule-label" x="${boundaries[index] + 6}" y="${y + 30}">${value}</text>`).join('')}`;
+  const source = records.length ? records : [null];
+  const body = source.map((record, rowIndex) => {
+    const yy = y + 48 + rowIndex * rowHeight;
+    if (!record) return `<rect x="${x}" y="${yy}" width="${width}" height="${rowHeight}" class="schedule-row"/><text class="schedule-text" x="${x + 8}" y="${yy + 26}">—</text><text class="note" x="${boundaries[1] + 8}" y="${yy + 26}">No homeowner photo evidence is recorded for this issue.</text>`;
+    const reference = record.referenceDimensionMm ? `${record.referenceLabel || 'reference'} · ${record.referenceDimensionMm} mm` : 'none recorded';
+    const values = [`EV-${String(offset + rowIndex + 1).padStart(2, '0')} · ${record.id.slice(0, 12)}`, record.category, record.status, record.viewpoint || 'not recorded', (record.observationTags || []).join(', ') || 'none recorded', reference, `${record.notes || 'No condition note'} · SHA ${record.sha256.slice(0, 16)}…`];
+    return `<rect x="${x}" y="${yy}" width="${width}" height="${rowHeight}" class="schedule-row"/>${values.map((value, columnIndex) => wrapped(value, boundaries[columnIndex] + 6, yy + 16, columnWidths[columnIndex] - 12, 7.1, 9, 6)).join('')}`;
+  }).join('');
+  const bottom = y + 48 + source.length * rowHeight;
+  const verticals = boundaries.slice(1, -1).map((boundary) => `<line x1="${boundary}" y1="${y}" x2="${boundary}" y2="${bottom}" class="thin"/>`).join('');
+  return `${header}${body}${verticals}`;
 }
 
 function siteSheet(input: CanonicalPlanSetInput, issue: IssueMeta): PlanSheet {

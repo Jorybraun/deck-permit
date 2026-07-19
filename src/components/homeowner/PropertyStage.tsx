@@ -1,6 +1,6 @@
 import { AlertTriangle, ArrowRight, Building2, CheckCircle2, DoorOpen, ExternalLink, Loader2, MapPin, Plus, Ruler, Search, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import type { AddTerrainGradePointInput, CaptureCategory, CaptureEvidence, ExistingConditionCaptureAssessment, SiteModel, TerrainDatum, TerrainGradePoint } from '../../domain/siteModel';
+import type { AddTerrainGradePointInput, CaptureCategory, CaptureEvidenceChanges, ExistingConditionCaptureAssessment, SiteModel, TerrainDatum, TerrainGradePoint } from '../../domain/siteModel';
 import type { Address, Property } from '../../types';
 import { PropertyContextPlan } from './PropertyContextPlan';
 import { TerrainCapturePanel } from './TerrainCapturePanel';
@@ -28,7 +28,7 @@ interface PropertyStageProps {
   captureAssessment: ExistingConditionCaptureAssessment;
   capturePreviewUrls: Record<string, string>;
   onAddCaptureFiles: (category: CaptureCategory, files: File[]) => Promise<void>;
-  onUpdateCaptureEvidence: (evidenceId: string, changes: Partial<Pick<CaptureEvidence, 'category' | 'label' | 'notes' | 'status'>>) => void;
+  onUpdateCaptureEvidence: (evidenceId: string, changes: CaptureEvidenceChanges) => void;
   onRemoveCaptureEvidence: (evidenceId: string) => Promise<void>;
   onContinue: () => void;
 }

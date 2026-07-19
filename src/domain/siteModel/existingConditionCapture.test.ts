@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addCaptureEvidence, assessExistingConditionCapture, createExistingConditionCapture, removeCaptureEvidence, updateCaptureEvidence } from './existingConditionCapture';
+import { addCaptureEvidence, assessExistingConditionCapture, captureObservationSummary, createExistingConditionCapture, removeCaptureEvidence, updateCaptureEvidence } from './existingConditionCapture';
 import type { CaptureCategory } from './types';
 
 const evidence = (id: string, category: CaptureCategory) => ({
@@ -22,9 +22,11 @@ describe('ExistingConditionCapture public contract', () => {
   it('keeps recorded evidence distinct from homeowner confirmation', () => {
     let capture = addCaptureEvidence(createExistingConditionCapture(), evidence('1', 'house-overview'));
     expect(assessExistingConditionCapture(capture, { hasDoor: false }).requirements[0].status).toBe('recorded');
-    capture = updateCaptureEvidence(capture, '1', { status: 'homeowner-confirmed', notes: 'Shows the complete rear elevation.' });
+    capture = updateCaptureEvidence(capture, '1', { status: 'homeowner-confirmed', notes: 'Shows the complete rear elevation.', observationTags: ['house-context', 'scale-reference'], viewpoint: 'Rear yard looking toward house', referenceLabel: 'tape', referenceDimensionMm: 1000 });
     expect(assessExistingConditionCapture(capture, { hasDoor: false }).requirements[0].status).toBe('confirmed');
     expect(capture.evidence[0].notes).toBe('Shows the complete rear elevation.');
+    expect(captureObservationSummary(capture.evidence[0])).toBe('Rear yard looking toward house · House + yard context, Scale reference visible · tape 1000 mm · Shows the complete rear elevation.');
+    expect(() => updateCaptureEvidence(capture, '1', { referenceDimensionMm: 100_001 })).toThrow(/between 1 mm and 100,000 mm/);
   });
 
   it('rejects invalid files and removes metadata without mutating other records', () => {

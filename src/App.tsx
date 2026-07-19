@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Check, FileCheck2, FileText, Hammer, Home, Lightbulb, MapPin, Menu, PencilRuler, Save, X } from 'lucide-react';
 import { assessDesign } from './domain/deckDesign';
 import { generateFramingDesign, isFramingStale, type GenerateFramingInput } from './domain/framingDesign';
-import { addCaptureEvidence, addTerrainGradePoint, assessExistingConditionCapture, assessSiteModel, createExistingConditionCapture, createSiteModel, flipHouseWallDirection, removeCaptureEvidence, removeTerrainGradePoint, rotateHouseWallAlignment, selectHouseWall, updateCaptureEvidence, updateSiteModel, updateTerrainGradePoint, type CaptureCategory, type CaptureEvidence } from './domain/siteModel';
+import { addCaptureEvidence, addTerrainGradePoint, assessExistingConditionCapture, assessSiteModel, createExistingConditionCapture, createSiteModel, flipHouseWallDirection, removeCaptureEvidence, removeTerrainGradePoint, rotateHouseWallAlignment, selectHouseWall, updateCaptureEvidence, updateSiteModel, updateTerrainGradePoint, type CaptureCategory, type CaptureEvidence, type CaptureEvidenceChanges } from './domain/siteModel';
 import { lookupProperty, lookupPropertyFromAddress, PropertyLookupError, suggestAddresses } from './services/propertyLookup';
 import { lookupSnowLoad, lookupZoning } from './services/zoning';
 import { generateCanonicalPlanSet } from './services/canonicalPlanSet';
@@ -145,7 +145,7 @@ export function App() {
     if (current.site) current.setSite(updateSiteModel(current.site, { capture: removeCaptureEvidence(current.site.capture, evidenceId) }));
   };
 
-  const reviseCapture = (evidenceId: string, changes: Partial<Pick<CaptureEvidence, 'category' | 'label' | 'notes' | 'status'>>) => {
+  const reviseCapture = (evidenceId: string, changes: CaptureEvidenceChanges) => {
     const current = useHomeownerProject.getState();
     if (current.site) current.setSite(updateSiteModel(current.site, { capture: updateCaptureEvidence(current.site.capture, evidenceId, changes) }));
   };
