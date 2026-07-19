@@ -118,7 +118,7 @@ export function buildProfessionalResolutionRecord(cycle: ProfessionalReviewCycle
     schema: 'permitly-professional-resolution-record/v1',
     designFingerprint: cycle.sourceDesignFingerprint,
     decision: cycle.decision,
-    professional: { name: cycle.issuerName, role: cycle.issuerRole, licenseNumber: cycle.licenseNumber },
+    professional: { name: cycle.issuerName, role: cycle.issuerRole, discipline: cycle.professionalDiscipline || '', licenseNumber: cycle.licenseNumber, firmName: cycle.firmName || '', permitToPracticeNumber: cycle.permitToPracticeNumber || '' },
     evidenceId: cycle.evidenceId,
     importedAt: cycle.importedAt,
     resolutionCount: structuralResolutions.length,

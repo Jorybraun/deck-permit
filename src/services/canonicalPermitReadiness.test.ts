@@ -17,9 +17,18 @@ describe('canonical permit readiness', () => {
   it('reports ready only when the accepted review resolves the exact work-package set and the signed application matches', () => {
     const property = { address: null, parcel: { pid: '001' }, zoning: { zone: 'R2' }, buildableEnvelope: null, snowLoad: 1, buildings: [], evidence: [] } as never;
     const structuralResolutions = [{ schema: 'permitly-professional-work-resolution/v1', id: 'resolution-001', designFingerprint: fingerprint, workPackageId: 'SYS:P1', kind: 'platform-system', disposition: 'specified', specification: '2x10 No.2 S-P-F joists and engineered beam schedule', capacityBasis: 'Sealed calculation SC-1 and referenced CWC tables', documentReference: 'SC-1 / S2.0', notes: '', recordedAt: '2026-07-18T12:00:00.000Z' }];
-    const reviewCycles = [{ sourceDesignFingerprint: fingerprint, decision: 'accepted', structuralResolutions }];
-    const evidence = [{ kind: 'sealed-structural-review', decision: 'accepted', designFingerprint: fingerprint }, { kind: 'field-report', gateId: 'property-offsets', designFingerprint: fingerprint }, { kind: 'application-checklist', gateId: 'signed-application', designFingerprint: fingerprint }];
+    const reviewCycles = [{ sourceDesignFingerprint: fingerprint, decision: 'accepted', issuerRole: 'engineer', professionalDiscipline: 'structural', firmName: 'Test Engineering Ltd.', permitToPracticeNumber: '1000123', structuralResolutions }];
+    const evidence = [{ kind: 'sealed-structural-review', decision: 'accepted', designFingerprint: fingerprint, issuerRole: 'engineer', professionalDiscipline: 'structural', professionalRegistry: 'egbc', registryStatus: 'directory-confirmed-by-user', firmName: 'Test Engineering Ltd.', permitToPracticeNumber: '1000123' }, { kind: 'field-report', gateId: 'property-offsets', designFingerprint: fingerprint }, { kind: 'application-checklist', gateId: 'signed-application', designFingerprint: fingerprint }];
     const ready = evaluateCanonicalPermitReadiness({ issue, property, application, evidence: evidence as never, reviewCycles: reviewCycles as never });
     expect(ready).toMatchObject({ status: 'ready-to-submit', confirmedCount: 7, requiredCount: 7 });
+  });
+
+  it('does not let an architectural acceptance satisfy the structural engineering gate', () => {
+    const property = { address: null, parcel: { pid: '001' }, zoning: { zone: 'R2' }, buildableEnvelope: null, snowLoad: 1, buildings: [], evidence: [] } as never;
+    const structuralResolutions = [{ schema: 'permitly-professional-work-resolution/v1', id: 'resolution-001', designFingerprint: fingerprint, workPackageId: 'SYS:P1', kind: 'platform-system', disposition: 'specified', specification: 'Architect-selected member note', capacityBasis: 'Architectural drawing note', documentReference: 'A2.0', notes: '', recordedAt: '2026-07-18T12:00:00.000Z' }];
+    const reviewCycles = [{ sourceDesignFingerprint: fingerprint, decision: 'accepted', issuerRole: 'architect', professionalDiscipline: 'architectural', firmName: 'Test Architecture Inc.', permitToPracticeNumber: 'N/A', structuralResolutions }];
+    const evidence = [{ kind: 'sealed-structural-review', decision: 'accepted', designFingerprint: fingerprint, issuerRole: 'architect', professionalDiscipline: 'architectural', professionalRegistry: 'aibc', registryStatus: 'directory-confirmed-by-user', firmName: 'Test Architecture Inc.', permitToPracticeNumber: 'N/A' }];
+    const readiness = evaluateCanonicalPermitReadiness({ issue, property, application, evidence: evidence as never, reviewCycles: reviewCycles as never });
+    expect(readiness.gates.find((gate) => gate.id === 'professional-review')).toMatchObject({ status: 'required', responsibleParty: 'engineer' });
   });
 });

@@ -17,6 +17,7 @@ describe('private review exchange server', () => {
     testDirectory = await mkdtemp(join(tmpdir(), 'permitly-review-'));
     const store = new ReviewExchangeStore(testDirectory);
     const reviewPackage = {
+      reviewScope: { discipline: 'structural', responsibleProfessional: 'engineer', acceptanceRequires: ['sealed-pdf', 'egbc-directory-confirmation', 'permit-to-practice', 'complete-work-package-resolutions'] },
       manifest: { designFingerprint: 'DP-ABCDEF12', revision: 3 },
       property: { address: '12 Test Street' },
       deck: { area: 18.4 },
@@ -28,7 +29,7 @@ describe('private review exchange server', () => {
     const pdf = Buffer.from('%PDF-1.4\n1 0 obj\n<<>>\nendobj\n%%EOF');
     const review = {
       id: 'evidence_accepted_01', gateId: 'structural-review', kind: 'sealed-structural-review', fileName: 'sealed-review.pdf', mimeType: 'application/pdf', byteSize: pdf.length,
-      pdfBase64: pdf.toString('base64'), sha256: createHash('sha256').update(pdf).digest('hex'), issuerName: 'Test Professional', issuerRole: 'engineer', licenseNumber: 'TEST-001',
+      pdfBase64: pdf.toString('base64'), sha256: createHash('sha256').update(pdf).digest('hex'), issuerName: 'Test Professional', issuerRole: 'engineer', professionalDiscipline: 'structural', licenseNumber: 'TEST-001', firmName: 'Test Engineering Ltd.', permitToPracticeNumber: '1000123',
       decision: 'accepted', designFingerprint: 'DP-ABCDEF12', professionalRegistry: 'egbc', registryUrl: 'https://www.egbc.ca/registrant-directory', registryCheckedAt: new Date().toISOString(),
       registryStatus: 'directory-confirmed-by-user', recordedAt: new Date().toISOString(), status: 'recorded-unverified', redlines: [],
     };

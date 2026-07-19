@@ -337,6 +337,9 @@ export interface VerificationEvidence {
   registryUrl?: string;
   registryCheckedAt?: string;
   registryStatus?: 'directory-confirmed-by-user';
+  professionalDiscipline?: 'structural' | 'architectural' | 'survey';
+  firmName?: string;
+  permitToPracticeNumber?: string;
   recordedAt: string;
   status: 'recorded-unverified';
 }
@@ -398,6 +401,9 @@ export interface ProfessionalReviewCycle {
   issuerName: string;
   issuerRole: 'engineer' | 'architect';
   licenseNumber: string;
+  professionalDiscipline?: 'structural' | 'architectural';
+  firmName?: string;
+  permitToPracticeNumber?: string;
   importedAt: string;
   evidenceId: string;
   redlines: ReviewRedline[];

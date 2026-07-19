@@ -24,6 +24,7 @@ describe('canonical professional review issue', () => {
     expect(issue.manifest).toMatchObject({ revision: 4, generatedAt: '2026-07-18T12:05:00.000Z', designFingerprint: expect.stringMatching(/^DP-[A-F0-9]{8}$/) });
     expect(issue.manifest.sheetIds).toEqual(expect.arrayContaining(['cover', 'existing-conditions', 'capture-schedule', 'site', 'deck-plan', 'foundations', 'foundation-schedule', 'framing', 'connection-schedule', 'elevations', 'sections', 'details', 'assembly-schedule', 'calculations', 'review-schedule']));
     expect(issue.reviewPackage.manifest).toEqual(issue.manifest);
+    expect(issue.reviewPackage.reviewScope).toEqual({ discipline: 'structural', responsibleProfessional: 'engineer', acceptanceRequires: ['sealed-pdf', 'egbc-directory-confirmation', 'permit-to-practice', 'complete-work-package-resolutions'] });
     const reviewPageCount = Math.max(1, Math.ceil((framing.platformSystems.length + framing.checks.length + framing.reviewGates.length + framing.openingCoordination.profile.rules.length + framing.openingCoordination.profile.sources.length) / 8));
     expect(issue.reviewPackage.planset).toHaveLength(12 + Math.max(1, Math.ceil(framing.connections.length / 12)) + Math.max(1, Math.ceil(framing.footings.length / 15)) + reviewPageCount);
     expect(issue.reviewPackage.planset.every((sheet) => sheet.revision === 4 && sheet.designFingerprint === issue.manifest.designFingerprint)).toBe(true);
@@ -59,7 +60,7 @@ describe('canonical professional review issue', () => {
     }));
     const acceptedCycle: ProfessionalReviewCycle = {
       id: 'cycle-accepted-001', exchangeProjectId: 'review-001', sourceDesignFingerprint: report.designFingerprint,
-      decision: 'accepted', issuerName: 'A. Engineer', issuerRole: 'engineer', licenseNumber: 'EGBC-12345',
+      decision: 'accepted', issuerName: 'A. Engineer', issuerRole: 'engineer', professionalDiscipline: 'structural', licenseNumber: 'EGBC-12345', firmName: 'Deck Structure Engineering Ltd.', permitToPracticeNumber: '1000123',
       importedAt: '2026-07-18T12:20:00.000Z', evidenceId: 'sealed-review-evidence-001', redlines: [], resolutions: [], structuralResolutions,
     };
 
@@ -69,6 +70,8 @@ describe('canonical professional review issue', () => {
     expect(resolutionSheets.map((sheet) => sheet.number)).toEqual(resolutionSheets.map((_, index) => `R1.${index}`));
     expect(resolutionSheets[0].svg).toContain('ACCEPTED PROFESSIONAL REVIEW COORDINATION');
     expect(resolutionSheets[0].svg).toContain('sealed-review-evidence-001');
+    expect(resolutionSheets[0].svg).toContain('Deck Structure Engineering Ltd.');
+    expect(resolutionSheets[0].svg).toContain('Permit to Practice 1000123');
     expect(resolutionSheets[0].svg).toContain(report.designFingerprint);
     expect(resolutionSheets[0].svg).toContain('SUPPLEMENTAL RECORD — NOT A SEAL');
     for (const sheet of resolutionSheets) {

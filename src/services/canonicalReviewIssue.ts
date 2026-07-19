@@ -3,7 +3,7 @@ import type { FramingDesign } from '../domain/framingDesign';
 import type { SiteModel } from '../domain/siteModel';
 import type { PermitManifest, ProfessionalReviewCycle, Property } from '../types';
 import { generateCanonicalPlanSet } from './canonicalPlanSet';
-import type { ReviewPackagePayload } from './reviewExchange';
+import { structuralReviewScope, type ReviewPackagePayload } from './reviewExchange';
 import { reviewCyclesForPublication } from './reviewRedlines';
 import { buildProjectCadExchange } from './projectCadExchange';
 import { buildCanonicalCalculationReport } from './canonicalCalculationReport';
@@ -41,6 +41,7 @@ export function buildCanonicalReviewIssue(input: {
   };
   const area = input.design.platforms.reduce((sum, platform) => sum + polygonArea(platform.boundary.vertices.map((vertex): PointMm => [vertex.xMm, vertex.yMm])) / 1_000_000, 0);
   const reviewPackage: ReviewPackagePayload = {
+    reviewScope: structuralReviewScope(),
     manifest,
     property: {
       address: input.property.address.fullAddress,

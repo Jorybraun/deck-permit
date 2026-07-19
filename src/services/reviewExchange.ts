@@ -5,6 +5,11 @@ import type { CanonicalCalculationReport } from './canonicalCalculationReport';
 import type { ProfessionalWorkResolution } from './professionalWorkResolution';
 
 export interface ReviewPackagePayload {
+  reviewScope: {
+    discipline: 'structural';
+    responsibleProfessional: 'engineer';
+    acceptanceRequires: Array<'sealed-pdf' | 'egbc-directory-confirmation' | 'permit-to-practice' | 'complete-work-package-resolutions'>;
+  };
   manifest: PermitManifest;
   property: { address: string; pid: string; legalDescription: string; municipality: string; zone: string };
   deck: ReviewDeckPayload;
@@ -35,7 +40,10 @@ export interface ReviewBasisPayload {
 }
 
 export interface ReviewSubmission extends Omit<VerificationEvidence, 'issuerRole' | 'licenseNumber' | 'decision' | 'designFingerprint'> {
-  issuerRole: 'engineer' | 'architect';
+  issuerRole: 'engineer';
+  professionalDiscipline: 'structural';
+  firmName: string;
+  permitToPracticeNumber: string;
   licenseNumber: string;
   decision: 'accepted' | 'changes-requested';
   designFingerprint: string;
@@ -59,6 +67,7 @@ export interface OwnerExchangeResult extends Omit<ReviewerExchangeResult, 'revie
 
 export function buildReviewPackage(property: Property, deck: Deck, planset: PlanSheet[], report: StructuralReport, manifest: PermitManifest, reviewCycles: ProfessionalReviewCycle[] = []): ReviewPackagePayload {
   return {
+    reviewScope: structuralReviewScope(),
     manifest,
     property: {
       address: property.address?.fullAddress || '', pid: property.parcel?.pid || '', legalDescription: property.parcel?.legalDescription || '',
@@ -69,6 +78,10 @@ export function buildReviewPackage(property: Property, deck: Deck, planset: Plan
     report,
     priorReviewCycles: reviewCyclesForPublication(reviewCycles),
   };
+}
+
+export function structuralReviewScope(): ReviewPackagePayload['reviewScope'] {
+  return { discipline: 'structural', responsibleProfessional: 'engineer', acceptanceRequires: ['sealed-pdf', 'egbc-directory-confirmation', 'permit-to-practice', 'complete-work-package-resolutions'] };
 }
 
 export async function publishReviewExchange(reviewPackage: ReviewPackagePayload): Promise<ReviewExchangePublication> {

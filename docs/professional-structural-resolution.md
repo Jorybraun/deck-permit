@@ -1,6 +1,12 @@
 # Professional structural resolution workflow
 
-The canonical reviewer portal no longer treats a sealed PDF as the only structural output. For a canonical issue, Permitly derives a compact set of professional work packages from the calculation report:
+## Structural professional scope and authentication
+
+The review exchange now declares a structural discipline contract. An accepted structural decision must come from an EGBC engineering professional acting in the structural discipline; an architect's coordination review cannot satisfy the structural gate. The submission records the engineer's name and registration number, engineering firm or sole practice, EGBC Permit to Practice number, current EGBC directory confirmation, sealed PDF digest, design fingerprint, and every structured work-package resolution. The server independently validates this scope and metadata before storing the decision, and the permit-readiness engine repeats the discipline check when importing persisted evidence.
+
+This follows the Province of BC [Letters of Assurance guidance](https://www2.gov.bc.ca/gov/content/industry/construction-industry/building-codes-standards/bc-codes/letters-of-assurance), which distinguishes the coordinating professional from the Registered Professional of Record responsible for a specific discipline, and EGBC's [Permit to Practice requirements for Letters of Assurance](https://tools.egbc.ca/Practice-Resources/Individual-Practice/Guidelines-Advisories//Document/01525AMW2YVOKZSDUDYREZWW4W3A73SBNI/Permit%20to%20Practice%20Requirements%20for%20Letters%20of%20Assurance), which require engineering firms practising in BC to hold and apply a Permit to Practice number to authenticated documents. Whether formal BCBC Schedules are required for a particular Part 9 deck remains a project- and authority-specific decision; Permitly records the professional scope without claiming that a Letter of Assurance is always required.
+
+The canonical structural-engineer portal no longer treats a sealed PDF as the only structural output. For a canonical issue, Permitly derives a compact set of professional work packages from the calculation report:
 
 - one member-system package per platform;
 - one foundation-system package per platform with generated footings;

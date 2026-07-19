@@ -44,6 +44,9 @@ export function createProfessionalReviewCycle(input: {
     issuerName: string;
     issuerRole: 'engineer' | 'architect';
     licenseNumber?: string;
+    professionalDiscipline?: 'structural' | 'architectural';
+    firmName?: string;
+    permitToPracticeNumber?: string;
     recordedAt: string;
     redlines?: ReviewRedline[];
     structuralResolutions?: ProfessionalWorkResolution[];
@@ -58,6 +61,9 @@ export function createProfessionalReviewCycle(input: {
     issuerName: input.review.issuerName,
     issuerRole: input.review.issuerRole,
     licenseNumber: input.review.licenseNumber,
+    professionalDiscipline: input.review.professionalDiscipline,
+    firmName: input.review.firmName,
+    permitToPracticeNumber: input.review.permitToPracticeNumber,
     importedAt: new Date().toISOString(),
     evidenceId: input.review.id,
     redlines: input.review.redlines || [],

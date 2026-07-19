@@ -421,7 +421,7 @@ function professionalResolutionSheets(input: CanonicalPlanSetInput, issue: Issue
     return makeSheet(id, 'Professional Resolution Coordination Record', 'NTS · SEALED EVIDENCE GOVERNS', `R1.${pageIndex}`, input, issue, `
       <rect x="55" y="82" width="1575" height="155" class="panel"/>
       <text class="section" x="80" y="116">ACCEPTED PROFESSIONAL REVIEW COORDINATION · ${pageIndex + 1}/${pageCount}</text>
-      ${table([['Reviewer', `${cycle.issuerName} · ${cycle.issuerRole.toUpperCase()} · licence ${cycle.licenseNumber}`], ['Controlled issue', `${issue.fingerprint} · accepted/imported ${cycle.importedAt}`], ['Sealed evidence', cycle.evidenceId]], 80, 132, 1030, 30, 150)}
+      ${table([['Structural RPR', `${cycle.issuerName} · P.Eng. ${cycle.licenseNumber}`], ['Engineering practice', `${cycle.firmName || 'UNRECORDED'} · Permit to Practice ${cycle.permitToPracticeNumber || 'UNRECORDED'}`], ['Controlled issue', `${issue.fingerprint} · accepted/imported ${cycle.importedAt}`], ['Sealed evidence', cycle.evidenceId]], 80, 132, 1030, 30, 150)}
       ${notice(1140, 102, 460, 110, 'SUPPLEMENTAL RECORD — NOT A SEAL', 'This generated schedule transcribes structured reviewer answers. The separately supplied sealed PDF identified above governs professional authorship, scope, signature, and authentication.')}
       <rect x="55" y="255" width="1575" height="650" class="panel"/>
       <text class="section" x="80" y="291">WORK-PACKAGE RESOLUTIONS · ROWS ${pageIndex * PROFESSIONAL_RESOLUTION_ROWS_PER_SHEET + 1}–${pageIndex * PROFESSIONAL_RESOLUTION_ROWS_PER_SHEET + pageRows.length} OF ${resolutions.length}</text>

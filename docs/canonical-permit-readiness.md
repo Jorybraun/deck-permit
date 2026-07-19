@@ -6,7 +6,7 @@ The homeowner Permit stage evaluates submission readiness against one immutable 
 2. a recorded zone plus a current `site-compliance/v2` named-yard screen covering modeled platforms, stairs, grade landings, and generated footing extents without a setback or coverage failure, or a fingerprint-bound municipal confirmation resolving the siting condition;
 3. a dimensioned survey or field-measurement record confirming deck and footing offsets for this exact design;
 4. a field-measured selected house wall plus every required existing-condition capture view;
-5. accepted sealed professional evidence and a structured resolution for every derived member, foundation, stair, and connection work package;
+5. accepted sealed structural evidence from an EGBC engineer for the exact issue, with structural discipline, engineering practice, Permit to Practice number, current registry confirmation, and a structured resolution for every derived member, foundation, stair, guard, and connection work package;
 6. every required Town of Sidney application field; and
 7. an owner-signed application PDF bound to the same design fingerprint.
 

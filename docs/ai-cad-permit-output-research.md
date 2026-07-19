@@ -113,8 +113,7 @@ Documents issued for permitting that contain professional engineering must be au
 
 ## Current implementation gap
 
-- The active product is deterministic TypeScript, not an AI architect.
-- Its existing AI/Cerebras implementation is disconnected legacy code tied to an older model.
+- The active product now has a server-side Cerebras design team: a structured concept model, canonical geometry admission and one bounded repair attempt, deterministic code/framing review, and an independent reviewer model. AI output remains a proposed editable revision rather than authenticated design.
 - Current terrain is one number, not a surface.
 - Framing remains heuristic. The active v2 model now creates keyed connection work packages with quantities, member interfaces, and coordinated gravity actions, but proprietary hardware, fasteners, lateral/uplift actions, and capacity checks remain professional design work.
 - Elevations, sections, and details are diagrammatic and incomplete.

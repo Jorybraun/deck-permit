@@ -6,14 +6,16 @@ import { describe, expect, it } from 'vitest';
 import { ReviewExchangeError, ReviewExchangeStore } from './reviewExchangeStore.mjs';
 
 const fingerprint = 'DP-ABCDEF12';
+const reviewScope = { discipline: 'structural', responsibleProfessional: 'engineer', acceptanceRequires: ['sealed-pdf', 'egbc-directory-confirmation', 'permit-to-practice', 'complete-work-package-resolutions'] };
 const reviewPackage = {
+  reviewScope,
   manifest: { designFingerprint: fingerprint }, property: { address: '2423 Lovell Ave' }, deck: { area: 12 },
   planset: [{ id: 'cover', title: 'Cover', scale: 'NTS', svg: '<svg><text>Review package</text></svg>' }], report: { checks: [] },
 };
 const pdf = Buffer.from('%PDF-1.4\nreview\n%%EOF');
 const review = {
   id: 'evidence-1', gateId: 'structural-review', kind: 'sealed-structural-review', fileName: 'sealed.pdf', mimeType: 'application/pdf', byteSize: pdf.length,
-  pdfBase64: pdf.toString('base64'), sha256: createHash('sha256').update(pdf).digest('hex'), issuerName: 'Test Engineer', issuerRole: 'engineer', licenseNumber: '12345',
+  pdfBase64: pdf.toString('base64'), sha256: createHash('sha256').update(pdf).digest('hex'), issuerName: 'Test Engineer', issuerRole: 'engineer', professionalDiscipline: 'structural', licenseNumber: '12345', firmName: 'Test Engineering Ltd.', permitToPracticeNumber: '1000123',
   decision: 'accepted', designFingerprint: fingerprint, professionalRegistry: 'egbc', registryUrl: 'https://www.egbc.ca/registrant-directory', registryCheckedAt: new Date().toISOString(), registryStatus: 'directory-confirmed-by-user', recordedAt: new Date().toISOString(), status: 'recorded-unverified', structuralResolutions: [],
 };
 
@@ -41,6 +43,16 @@ describe('ReviewExchangeStore', () => {
     const created = await store.create(reviewPackage);
     await expect(store.submitReview(created.id, created.reviewerToken, { ...review, designFingerprint: 'DP-00000000' }))
       .rejects.toEqual(expect.objectContaining<Partial<ReviewExchangeError>>({ status: 409, code: 'revision-mismatch' }));
+  });
+
+  it('rejects architectural or unaffiliated acceptance at the structural engineer gate', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'deck-review-'));
+    const store = new ReviewExchangeStore(directory);
+    const created = await store.create(reviewPackage);
+    await expect(store.submitReview(created.id, created.reviewerToken, { ...review, issuerRole: 'architect', professionalDiscipline: 'architectural', professionalRegistry: 'aibc', registryUrl: 'https://aibc.ca/resources/online-directory-test/' }))
+      .rejects.toEqual(expect.objectContaining<Partial<ReviewExchangeError>>({ status: 400, code: 'invalid-professional-scope' }));
+    await expect(store.submitReview(created.id, created.reviewerToken, { ...review, permitToPracticeNumber: '' }))
+      .rejects.toEqual(expect.objectContaining<Partial<ReviewExchangeError>>({ status: 400, code: 'invalid-permit-to-practice' }));
   });
 
   it('accepts only a bounded CAD exchange tied to the published fingerprint', async () => {
