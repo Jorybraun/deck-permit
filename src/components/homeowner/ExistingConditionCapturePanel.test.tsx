@@ -22,6 +22,7 @@ describe('ExistingConditionCapturePanel', () => {
     expect(html).toContain('Rear yard looking north');
     expect(html).toContain('No visible damage.');
     expect(html).toContain('Structured observations appear on C1.x');
-    expect(html).toContain('store: false');
+    expect(html).toContain('sends the selected JPEG/PNG sources to Cerebras');
+    expect(html).toContain('original image payloads are not persisted');
   });
 });

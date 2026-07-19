@@ -7,9 +7,13 @@ import type { Property } from '../types';
 
 export interface AiDesignCapabilities {
   schema: 'ai-design-capabilities/v1';
+  provider: 'cerebras';
   configured: boolean;
   designModel: string;
   reviewModel: string;
+  photoModel: string;
+  photoBatchSize: 2;
+  photoSelectionLimit: 5;
   workflow: 'independent-proposal-and-review/v1';
   limitations: string[];
 }
@@ -69,7 +73,7 @@ export interface AiDesignTeamResult {
   independentReview: AiDesignReview;
 }
 
-interface AiGeneration { model: string; responseId: string; generatedAt: string }
+interface AiGeneration { provider: 'cerebras'; model: string; responseId: string; generatedAt: string }
 
 export class AiDesignStudioError extends Error {
   constructor(message: string, public readonly code = 'ai-design-error') { super(message); }
@@ -80,24 +84,64 @@ export async function fetchAiDesignCapabilities(): Promise<AiDesignCapabilities>
 }
 
 export async function analyzeCapturePhotos(records: CaptureEvidence[], projectContext: { address: string; designWallLabel: string }): Promise<AiPhotoAnalysisDraft> {
-  const supported = records.filter((record) => ['image/jpeg', 'image/png', 'image/webp'].includes(record.mimeType));
-  if (!supported.length) throw new AiDesignStudioError('Add a JPEG, PNG, or WebP photo before starting AI analysis.', 'no-supported-photos');
-  const photos = await Promise.all(supported.slice(0, 8).map(async (record) => {
+  const supported = records.filter((record) => ['image/jpeg', 'image/png'].includes(record.mimeType));
+  if (!supported.length) throw new AiDesignStudioError('Add a JPEG or PNG photo before starting AI analysis.', 'no-supported-photos');
+  const selected = supported.slice(0, 5);
+  const photos = await Promise.all(selected.map(async (record) => {
     const stored = await loadCaptureFile(record.id);
     if (!stored) throw new AiDesignStudioError(`${record.label} is no longer available in private browser storage.`, 'photo-bytes-missing');
-    return { evidenceId: record.id, sha256: record.sha256, label: record.label, dataUrl: await blobToDataUrl(stored.blob) };
+    const analysisCopy = await prepareCerebrasPhoto(stored.blob);
+    return { evidenceId: record.id, sha256: record.sha256, label: record.label, dataUrl: await blobToDataUrl(analysisCopy) };
   }));
-  const raw = await requestJson<Omit<AiPhotoAnalysisDraft, 'id' | 'observations'> & { observations: Array<Omit<AiPhotoAnalysisDraft['observations'][number], 'id' | 'decision'>> }>('/api/ai/photo-analysis', {
-    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ photos, projectContext }),
-  });
-  const sourceIds = new Set(supported.map((record) => record.id));
-  if (raw.schema !== 'ai-photo-observation-draft/v1' || raw.observations.some((observation) => !sourceIds.has(observation.sourceEvidenceId))) throw new AiDesignStudioError('The AI photo draft referenced an unknown source image.', 'invalid-photo-analysis');
-  return { ...raw, id: crypto.randomUUID(), observations: raw.observations.map((observation) => ({ ...observation, id: crypto.randomUUID(), decision: 'proposed' })) };
+  type RawPhotoDraft = Omit<AiPhotoAnalysisDraft, 'id' | 'observations'> & { observations: Array<Omit<AiPhotoAnalysisDraft['observations'][number], 'id' | 'decision'>> };
+  const drafts: RawPhotoDraft[] = [];
+  for (let offset = 0; offset < photos.length; offset += 2) {
+    const batch = photos.slice(offset, offset + 2);
+    const raw = await requestJson<RawPhotoDraft>('/api/ai/photo-analysis', {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ photos: batch, projectContext }),
+    });
+    const sourceIds = new Set(batch.map((photo) => photo.evidenceId));
+    if (raw.schema !== 'ai-photo-observation-draft/v1' || raw.observations.some((observation) => !sourceIds.has(observation.sourceEvidenceId))) throw new AiDesignStudioError('The Cerebras photo draft referenced an unknown source image.', 'invalid-photo-analysis');
+    drafts.push(raw);
+  }
+  const latest = drafts[drafts.length - 1];
+  return {
+    schema: 'ai-photo-observation-draft/v1', id: crypto.randomUUID(),
+    summary: drafts.length === 1 ? drafts[0].summary : `Cerebras analyzed ${photos.length} sources in ${drafts.length} source-bounded batches. ${drafts.map((draft) => draft.summary).join(' ')}`,
+    generation: { ...latest.generation, responseId: drafts.map((draft) => draft.generation.responseId).filter(Boolean).join(',') },
+    observations: drafts.flatMap((draft) => draft.observations.map((observation) => ({ ...observation, id: crypto.randomUUID(), decision: 'proposed' as const }))),
+    unknowns: [...new Set(drafts.flatMap((draft) => draft.unknowns))],
+  };
 }
 
 export async function runAiDesignTeam(input: { goal: string; intent: HomeownerIntent; property: Property; site: SiteModel; design: DeckDesign }): Promise<AiDesignTeamResult> {
-  const proposal = await requestJson<AiDesignProposal>('/api/ai/design-proposal', { method: 'POST', body: JSON.stringify(input), headers: { 'content-type': 'application/json' } });
-  const canonicalDesign = materializeAiDesignProposal(proposal);
+  let proposal = await requestJson<AiDesignProposal>('/api/ai/design-proposal', { method: 'POST', body: JSON.stringify(input), headers: { 'content-type': 'application/json' } });
+  let canonicalDesign: DeckDesign;
+  try { canonicalDesign = materializeAiDesignProposal(proposal); }
+  catch (reason) {
+    const admissionError = reason instanceof Error ? reason.message : 'The deterministic geometry engine rejected the proposal.';
+    proposal = await requestJson<AiDesignProposal>('/api/ai/design-proposal', {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ ...input, goal: `${input.goal}\nRepair the rejected concept without weakening or bypassing deterministic geometry checks.`, repairFeedback: { rejectedProposal: proposal, deterministicAdmissionError: admissionError } }),
+    });
+    try { canonicalDesign = materializeAiDesignProposal(proposal); }
+    catch (repairReason) {
+      const repairError = repairReason instanceof Error ? repairReason.message : 'The repaired proposal still failed deterministic geometry checks.';
+      if (!proposal.stairs.length) throw new AiDesignStudioError(`Cerebras proposed a repair, but deterministic admission still rejected it: ${repairError}`, 'proposal-repair-failed');
+      const excludedStairCount = proposal.stairs.length;
+      proposal = {
+        ...proposal,
+        homeownerSummary: `${proposal.homeownerSummary} ${excludedStairCount === 1 ? 'The proposed stair was' : 'The proposed stairs were'} excluded because the canonical geometry engine rejected the connection; add or resolve access in the editor.`,
+        stairs: [],
+        unresolved: [...proposal.unresolved, `Deterministic stair admission failed: ${repairError}`],
+      };
+      try { canonicalDesign = materializeAiDesignProposal(proposal); }
+      catch (platformReason) {
+        const platformError = platformReason instanceof Error ? platformReason.message : 'The repaired platform concept also failed deterministic geometry checks.';
+        throw new AiDesignStudioError(`Cerebras proposed a repair, but deterministic admission still rejected it: ${platformError}`, 'proposal-repair-failed');
+      }
+    }
+  }
   const deterministicReview = buildDeterministicDesignReview(canonicalDesign, input.site, input.property);
   const independentReview = await requestJson<AiDesignReview>('/api/ai/design-review', {
     method: 'POST', headers: { 'content-type': 'application/json' },
@@ -208,6 +252,38 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
 
 function blobToDataUrl(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onerror = () => reject(new AiDesignStudioError('A private photo could not be prepared for analysis.', 'photo-read-failed')); reader.onload = () => resolve(String(reader.result)); reader.readAsDataURL(blob); });
+}
+
+const CEREBRAS_ANALYSIS_COPY_MAX_BYTES = 500_000;
+const CEREBRAS_ANALYSIS_COPY_MAX_DIMENSION = 1_600;
+
+/** Makes a transient vision-model copy. The original and its SHA-256 record stay unchanged in browser storage. */
+async function prepareCerebrasPhoto(source: Blob): Promise<Blob> {
+  if (source.size <= CEREBRAS_ANALYSIS_COPY_MAX_BYTES) return source;
+  if (typeof createImageBitmap !== 'function') throw new AiDesignStudioError('This browser cannot prepare a large photo for Cerebras analysis.', 'photo-resize-unavailable');
+  const bitmap = await createImageBitmap(source);
+  try {
+    let scale = Math.min(1, CEREBRAS_ANALYSIS_COPY_MAX_DIMENSION / Math.max(bitmap.width, bitmap.height));
+    for (let attempt = 0; attempt < 7; attempt += 1) {
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+      canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+      const context = canvas.getContext('2d');
+      if (!context) throw new AiDesignStudioError('This browser could not prepare the photo canvas.', 'photo-resize-unavailable');
+      context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      const quality = Math.max(.48, .82 - attempt * .06);
+      const output = await canvasToBlob(canvas, 'image/jpeg', quality);
+      if (output.size <= CEREBRAS_ANALYSIS_COPY_MAX_BYTES) return output;
+      scale *= .82;
+    }
+    throw new AiDesignStudioError('A photo could not be reduced enough for Cerebras analysis. Crop it or upload a smaller JPEG.', 'photo-too-large');
+  } finally {
+    bitmap.close();
+  }
+}
+
+function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number): Promise<Blob> {
+  return new Promise((resolve, reject) => canvas.toBlob((blob) => blob ? resolve(blob) : reject(new AiDesignStudioError('A photo could not be encoded for Cerebras analysis.', 'photo-encode-failed')), type, quality));
 }
 
 export function platformProposalSummary(platform: AiPlatformProposal): string {

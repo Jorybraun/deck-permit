@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { ReviewExchangeError, ReviewExchangeStore } from './server/reviewExchangeStore.mjs';
 import { MunicipalDeliveryError, MunicipalDeliveryService } from './server/municipalDelivery.mjs';
-import { AiDesignError, OpenAiDesignService } from './server/openaiDesignService.mjs';
+import { AiDesignError, CerebrasDesignService } from './server/cerebrasDesignService.mjs';
 
 const app = express();
 const port = Number(process.env.PORT || 4173);
@@ -11,7 +11,14 @@ const root = dirname(fileURLToPath(import.meta.url));
 const reviewExchange = new ReviewExchangeStore(process.env.DECK_PERMIT_DATA_DIR || join(root, '.deck-permit-data'));
 const dataDirectory = process.env.DECK_PERMIT_DATA_DIR || join(root, '.deck-permit-data');
 const municipalDelivery = new MunicipalDeliveryService({ apiKey: process.env.RESEND_API_KEY, fromEmail: process.env.PERMIT_SUBMISSION_FROM_EMAIL, dataDirectory });
-const aiDesign = new OpenAiDesignService({ apiKey: process.env.OPENAI_API_KEY, designModel: process.env.OPENAI_DESIGN_MODEL, reviewModel: process.env.OPENAI_REVIEW_MODEL });
+const aiDesign = new CerebrasDesignService({
+  // VITE_CEREBRAS_API_KEY is supported temporarily so the existing local key works;
+  // CEREBRAS_API_KEY is the safe server-only name for all new environments.
+  apiKey: process.env.CEREBRAS_API_KEY || process.env.VITE_CEREBRAS_API_KEY,
+  designModel: process.env.CEREBRAS_DESIGN_MODEL,
+  reviewModel: process.env.CEREBRAS_REVIEW_MODEL,
+  photoModel: process.env.CEREBRAS_PHOTO_MODEL,
+});
 app.use(express.json({ limit: '22mb' }));
 const arcgisBase = 'https://services5.arcgis.com/MNn7A6yzK94Hggl3/arcgis/rest/services';
 const datasets = {

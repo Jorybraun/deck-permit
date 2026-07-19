@@ -1,5 +1,7 @@
-const OPENAI_RESPONSES_URL = 'https://api.openai.com/v1/responses';
-const DEFAULT_MODEL = 'gpt-5.6-sol';
+const CEREBRAS_CHAT_COMPLETIONS_URL = 'https://api.cerebras.ai/v1/chat/completions';
+const DEFAULT_DESIGN_MODEL = 'gemma-4-31b';
+const DEFAULT_REVIEW_MODEL = 'gpt-oss-120b';
+const DEFAULT_PHOTO_MODEL = 'gemma-4-31b';
 
 export class AiDesignError extends Error {
   constructor(status, code, message) {
@@ -10,21 +12,26 @@ export class AiDesignError extends Error {
   }
 }
 
-/** Server-only OpenAI adapter. The browser never receives the API key. */
-export class OpenAiDesignService {
-  constructor({ apiKey, designModel = DEFAULT_MODEL, reviewModel = DEFAULT_MODEL, fetchImpl = fetch } = {}) {
+/** Server-only Cerebras adapter. The browser never receives the API key. */
+export class CerebrasDesignService {
+  constructor({ apiKey, designModel = DEFAULT_DESIGN_MODEL, reviewModel = DEFAULT_REVIEW_MODEL, photoModel = DEFAULT_PHOTO_MODEL, fetchImpl = fetch } = {}) {
     this.apiKey = apiKey;
     this.designModel = designModel;
     this.reviewModel = reviewModel;
+    this.photoModel = photoModel;
     this.fetchImpl = fetchImpl;
   }
 
   capabilities() {
     return {
       schema: 'ai-design-capabilities/v1',
+      provider: 'cerebras',
       configured: Boolean(this.apiKey),
       designModel: this.designModel,
       reviewModel: this.reviewModel,
+      photoModel: this.photoModel,
+      photoBatchSize: 2,
+      photoSelectionLimit: 5,
       workflow: 'independent-proposal-and-review/v1',
       limitations: [
         'AI output is a proposed revision, not a measured fact or permit approval.',
@@ -44,19 +51,24 @@ export class OpenAiDesignService {
       property: input.property,
       site: input.site,
       currentDesign: input.design,
+      repairFeedback: input.repairFeedback || null,
       instructions: [
         'Return one genuinely useful alternate deck concept, not commentary about how to design one.',
         'Use bounded floor platforms at explicit elevations. Use a separate landing platform when a stair changes direction or needs an intermediate level.',
         'Connect levels with explicit straight stair flights. Keep stair endpoints on the named platform edges when a platform endpoint is used.',
+        'For a platform-to-platform stair, choose source and destination edges so the destination edge intersects the ray leaving the source edge at exactly 90 degrees. Otherwise add a landing platform or connect the flight to terrain.',
         'Treat photo-observed openings and municipal geometry as reference evidence; do not upgrade them to measurements.',
         'Prefer simple buildable load paths and regular framing directions, but do not claim structural adequacy.',
         'Do not claim code compliance. A separate deterministic and AI review follows this proposal.',
+        'Hard output limits: return 1-4 platforms, 3-10 vertices per platform, 0-6 stair flights, and no more than 5 rationale, assumption, or unresolved strings. Keep every prose string concise.',
+        'When repairFeedback is present, correct the rejected geometry instead of repeating it. The deterministic admission error is controlling.',
       ],
     };
     return this.#structuredResponse({
       model: this.designModel,
       schemaName: 'deck_design_proposal',
       schema: DESIGN_PROPOSAL_SCHEMA,
+      maxCompletionTokens: 8_000,
       system: 'You are the concept-design member of a residential deck design team. You generate editable architectural geometry for homeowner review. You never certify code compliance, measurements, structure, or permits.',
       user: JSON.stringify(prompt),
     });
@@ -72,6 +84,7 @@ export class OpenAiDesignService {
         'Every finding must cite a supplied checkId or ruleId. Use UNRESOLVED-PROFESSIONAL when no machine rule resolves the issue.',
         'Candidate-ready-for-professional-review does not mean code compliant, permit ready, engineered, or approved.',
         'Check circulation, platform/stair relationships, openings, guard intent, constructability, and unresolved structural scope.',
+        'Hard output limits: return no more than 12 findings, 5 strengths, and 8 unresolved professional checks. Keep every prose string concise.',
       ],
       proposal: input.proposal,
       canonicalDesign: input.canonicalDesign,
@@ -81,6 +94,7 @@ export class OpenAiDesignService {
       model: this.reviewModel,
       schemaName: 'deck_design_independent_review',
       schema: DESIGN_REVIEW_SCHEMA,
+      maxCompletionTokens: 10_000,
       system: 'You are the independent review member of a residential deck design team. You audit a proposed revision against supplied deterministic checks and rule provenance. You cannot approve, seal, or certify a design.',
       user: JSON.stringify(prompt),
     });
@@ -88,9 +102,9 @@ export class OpenAiDesignService {
 
   async analyzePhotos(input) {
     requireConfigured(this.apiKey);
-    if (!input || !Array.isArray(input.photos) || !input.photos.length || input.photos.length > 8) throw new AiDesignError(400, 'invalid-photo-input', 'Provide between one and eight source photos.');
+    if (!input || !Array.isArray(input.photos) || !input.photos.length || input.photos.length > 2) throw new AiDesignError(400, 'invalid-photo-input', 'Provide one or two source photos per Cerebras vision request.');
     const content = [{
-      type: 'input_text',
+      type: 'text',
       text: JSON.stringify({
         task: 'Record visible existing-condition observations for a deck-design site model.',
         projectContext: input.projectContext || null,
@@ -101,51 +115,64 @@ export class OpenAiDesignService {
           'All dimensions remain not-measured unless a calibrated reference workflow is explicitly supplied.',
           'Use confidence as an observation aid, never as verification.',
           'Call out doors, windows, wall planes, grade, existing decks/landings/stairs, vents/services, drainage, and obstructions when visible.',
+          'Return no more than 20 distinct observations for this one- or two-image batch and keep descriptions concise.',
         ],
       }),
     }];
+    let combinedPhotoBytes = 0;
     for (const photo of input.photos) {
-      if (!photo.evidenceId || !photo.sha256 || !/^data:image\/(jpeg|png|webp);base64,/i.test(photo.dataUrl || '')) throw new AiDesignError(400, 'invalid-photo-input', 'Each photo requires an evidence ID, SHA-256, and JPEG/PNG/WebP data URL.');
-      content.push({ type: 'input_image', image_url: photo.dataUrl, detail: 'high' });
+      if (!photo.evidenceId || !photo.sha256 || !/^data:image\/(jpeg|png);base64,/i.test(photo.dataUrl || '')) throw new AiDesignError(400, 'invalid-photo-input', 'Each photo requires an evidence ID, SHA-256, and JPEG/PNG data URL.');
+      combinedPhotoBytes += decodedDataUrlBytes(photo.dataUrl);
+      content.push({ type: 'image_url', image_url: { url: photo.dataUrl } });
     }
+    if (combinedPhotoBytes > 10 * 1024 * 1024) throw new AiDesignError(413, 'photo-input-too-large', 'Cerebras accepts at most 10 MB of combined image data per analysis. Remove photos or upload smaller JPEG/PNG files.');
     return this.#structuredResponse({
-      model: this.designModel,
+      model: this.photoModel,
       schemaName: 'existing_condition_photo_analysis',
       schema: PHOTO_ANALYSIS_SCHEMA,
+      maxCompletionTokens: 6_000,
       system: 'You are an architectural existing-conditions observer. Your output is a reviewable visual observation draft, not a survey, measurement, diagnosis, structural assessment, or code decision.',
       content,
     });
   }
 
-  async #structuredResponse({ model, schemaName, schema, system, user, content }) {
-    const response = await this.fetchImpl(OPENAI_RESPONSES_URL, {
+  async #structuredResponse({ model, schemaName, schema, system, user, content, maxCompletionTokens }) {
+    if (Buffer.byteLength(JSON.stringify(schema)) > 5_000) throw new AiDesignError(500, 'ai-schema-too-large', 'The structured-output schema exceeds the Cerebras 5,000-byte limit.');
+    const response = await this.fetchImpl(CEREBRAS_CHAT_COMPLETIONS_URL, {
       method: 'POST',
       headers: { authorization: `Bearer ${this.apiKey}`, 'content-type': 'application/json' },
       body: JSON.stringify({
         model,
-        store: false,
-        input: [
+        messages: [
           { role: 'system', content: system },
           { role: 'user', content: content || user },
         ],
-        text: { format: { type: 'json_schema', name: schemaName, strict: true, schema } },
-        max_output_tokens: 12_000,
+        response_format: { type: 'json_schema', json_schema: { name: schemaName, strict: true, schema } },
+        max_completion_tokens: maxCompletionTokens,
       }),
     });
     const body = await response.json().catch(() => null);
-    if (!response.ok) throw new AiDesignError(response.status >= 500 ? 502 : response.status, 'openai-request-failed', body?.error?.message || 'The AI request could not be completed.');
+    if (response.status === 429) {
+      const retryAfter = response.headers.get('retry-after');
+      throw new AiDesignError(429, 'cerebras-rate-limited', `Cerebras reached its token-per-minute limit. Wait${retryAfter ? ` ${retryAfter} seconds` : ' briefly'} and run the design team again.`);
+    }
+    if (!response.ok) throw new AiDesignError(response.status >= 500 ? 502 : response.status, 'cerebras-request-failed', body?.error?.message || body?.message || (typeof body === 'string' ? body : '') || 'The Cerebras request could not be completed.');
     const outputText = extractOutputText(body);
-    if (!outputText) throw new AiDesignError(502, 'openai-empty-output', 'The AI response did not contain a structured result.');
+    if (!outputText) {
+      const finishReason = cleanText(body?.choices?.[0]?.finish_reason, 80);
+      const refusal = cleanText(body?.choices?.[0]?.message?.refusal, 300);
+      throw new AiDesignError(502, 'cerebras-empty-output', `Cerebras returned no structured result${finishReason ? ` (finish reason: ${finishReason})` : ''}${refusal ? `: ${refusal}` : '.'}`);
+    }
     try {
-      return { ...JSON.parse(outputText), generation: { model, responseId: body.id || '', generatedAt: new Date().toISOString() } };
+      return { ...JSON.parse(outputText), generation: { provider: 'cerebras', model, responseId: body.id || '', generatedAt: new Date().toISOString() } };
     } catch {
-      throw new AiDesignError(502, 'openai-invalid-output', 'The AI response could not be read as structured output.');
+      throw new AiDesignError(502, 'cerebras-invalid-output', 'The Cerebras response could not be read as structured output.');
     }
   }
 }
 
 function requireConfigured(apiKey) {
-  if (!apiKey) throw new AiDesignError(503, 'ai-not-configured', 'The server does not have an OPENAI_API_KEY. Add it to .env.local and restart the API server.');
+  if (!apiKey) throw new AiDesignError(503, 'ai-not-configured', 'The server does not have a CEREBRAS_API_KEY. Add it to .env.local and restart the API server.');
 }
 
 function validateProjectInput(input) {
@@ -159,10 +186,12 @@ function cleanText(value, maxLength) {
 }
 
 function extractOutputText(body) {
-  for (const output of body?.output || []) {
-    for (const item of output?.content || []) if (item?.type === 'output_text' && typeof item.text === 'string') return item.text;
-  }
-  return '';
+  return typeof body?.choices?.[0]?.message?.content === 'string' ? body.choices[0].message.content : '';
+}
+
+function decodedDataUrlBytes(dataUrl) {
+  const commaIndex = dataUrl.indexOf(',');
+  return commaIndex < 0 ? 0 : Buffer.from(dataUrl.slice(commaIndex + 1), 'base64').byteLength;
 }
 
 const nullableInteger = { anyOf: [{ type: 'integer' }, { type: 'null' }] };
@@ -174,13 +203,13 @@ const DESIGN_PROPOSAL_SCHEMA = {
   properties: {
     schema: { type: 'string', enum: ['ai-deck-concept/v1'] },
     title: { type: 'string' }, homeownerSummary: { type: 'string' }, rationale: { type: 'array', items: { type: 'string' } },
-    platforms: { type: 'array', minItems: 1, maxItems: 8, items: { type: 'object', additionalProperties: false, required: ['name', 'purpose', 'elevationMm', 'vertices', 'supportStrategy', 'joistSpacingMm', 'decking', 'guardEdgeIndexes'], properties: {
+    platforms: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['name', 'purpose', 'elevationMm', 'vertices', 'supportStrategy', 'joistSpacingMm', 'decking', 'guardEdgeIndexes'], properties: {
       name: { type: 'string' }, purpose: { type: 'string', enum: ['deck', 'landing'] }, elevationMm: { type: 'integer', minimum: -1000, maximum: 10000 },
-      vertices: { type: 'array', minItems: 3, maxItems: 16, items: pointSchema },
+      vertices: { type: 'array', items: pointSchema },
       supportStrategy: { type: 'string', enum: ['auto', 'ledger', 'freestanding'] }, joistSpacingMm: { type: 'integer', enum: [300, 400, 600] },
       decking: { type: 'string' }, guardEdgeIndexes: { type: 'array', items: { type: 'integer', minimum: 0, maximum: 15 } },
     } } },
-    stairs: { type: 'array', maxItems: 12, items: { type: 'object', additionalProperties: false, required: ['name', 'fromPlatformIndex', 'toKind', 'toPlatformIndex', 'toTerrainElevationMm', 'fromEdgeIndex', 'toEdgeIndex', 'startMm', 'endMm', 'widthMm', 'handrailSides'], properties: {
+    stairs: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['name', 'fromPlatformIndex', 'toKind', 'toPlatformIndex', 'toTerrainElevationMm', 'fromEdgeIndex', 'toEdgeIndex', 'startMm', 'endMm', 'widthMm', 'handrailSides'], properties: {
       name: { type: 'string' }, fromPlatformIndex: { type: 'integer', minimum: 0, maximum: 7 }, toKind: { type: 'string', enum: ['platform', 'terrain'] },
       toPlatformIndex: nullableInteger, toTerrainElevationMm: nullableInteger, fromEdgeIndex: { type: 'integer', minimum: 0, maximum: 15 }, toEdgeIndex: nullableInteger,
       startMm: pointSchema, endMm: pointSchema, widthMm: { type: 'integer', minimum: 860, maximum: 3000 }, handrailSides: { type: 'string', enum: ['none', 'left', 'right', 'both'] },
