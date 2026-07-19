@@ -7,3 +7,4 @@ export * from './siteClearance';
 export * from './siteCompliance';
 export * from './proposedSiteComponents';
 export * from './setbackGuides';
+export * from './wallOpeningCoordination';

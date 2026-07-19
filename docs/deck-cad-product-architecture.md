@@ -188,6 +188,8 @@ Posts, beams, stairs and openings have direct plan handles and exact coordinate 
 
 The UI never claims “to code” for connections, soil, guards, stairs, lateral resistance, ledger substrate or envelope details that have not been designed and verified. A qualified professional resolves and accepts these items for the exact drawing revision.
 
+Implemented opening coordination treats recorded doors and windows as first-class constraints. Platform surfaces, door thresholds, window sill zones, and preliminary ledger depth are compared in the canonical wall coordinate system. Conflicts block permit progression; photo-only geometry and conditions such as egress use, glazing, door swing, guards, headers, and envelope integration remain explicit review work packages.
+
 ### 5. Specify buildable assemblies
 
 The user or professional selects:

@@ -1,4 +1,5 @@
 import type { PointMm } from '../deckDesign';
+import type { WallOpeningCoordinationAssessment } from '../siteModel';
 
 export type FramingStatus = 'table-screened' | 'review-required' | 'engineering-required';
 
@@ -271,7 +272,7 @@ export interface FramingCheck {
 
 export interface FramingReviewGate {
   id: string;
-  discipline: 'site' | 'structural' | 'building-envelope' | 'code';
+  discipline: 'site' | 'architectural' | 'structural' | 'building-envelope' | 'code';
   title: string;
   status: 'required' | 'not-required';
   reason: string;
@@ -301,6 +302,7 @@ export interface FramingDesign {
   footings: FootingMember[];
   guards: GuardAssembly[];
   lifeSafety: LifeSafetyAssessment;
+  openingCoordination: WallOpeningCoordinationAssessment;
   stairStringers: StairStringerMember[];
   stairOpenings: StairOpeningMember[];
   stairTrimmers: StairTrimmerMember[];

@@ -15,6 +15,7 @@ It does not automatically infer dimensions, decide structural facts, upload file
 - `ExistingConditionCapturePanel.tsx` presents the checklist and emits typed add, update, and remove intents. It does not mutate the site model directly.
 - Framing and plan-generation modules may consume evidence identifiers and readiness results, but may not reinterpret an image as a verified measurement.
 - `SiteModel.designWall.openings` owns the editable door/window register. A record carries an evidence status; `photo-observed` proves presence only, while field or professional status is required before dimensions can govern review.
+- `wallOpeningCoordination.ts` consumes that register with the deck geometry. It blocks surface/sill and ledger intersections and routes door access, low-window, evidence, and wall-alignment conditions to the professional-review package.
 
 ## Data and state flow
 

@@ -26,6 +26,7 @@ export interface CanonicalCalculationReport {
   };
   siteClearance: SiteClearanceAssessment;
   siteCompliance: SiteComplianceAssessment;
+  openingCoordination: FramingDesign['openingCoordination'];
   platformSystems: Array<{
     platformId: string;
     name: string;
@@ -171,6 +172,7 @@ export function buildCanonicalCalculationReport(input: CalculationReportInput): 
     },
     siteClearance,
     siteCompliance,
+    openingCoordination: framing.openingCoordination,
     platformSystems: framing.platformSystems.map((system) => {
       const platform = design.platforms.find((candidate) => candidate.id === system.platformId);
       return {
@@ -249,6 +251,14 @@ export async function buildCanonicalCalculationPdf(report: CanonicalCalculationR
   keyValue('Proposed modeled footprint', report.siteCompliance.coverage.proposedReferenceFootprintSqM === null ? 'unavailable' : `${report.siteCompliance.coverage.proposedReferenceFootprintSqM.toFixed(2)} m2 total / ${report.siteCompliance.coverage.proposedPlatformFootprintSqM?.toFixed(2) || '0.00'} m2 platforms / ${report.siteCompliance.coverage.proposedStairAndLandingFootprintSqM?.toFixed(2) || '0.00'} m2 stair and landing polygons`);
   keyValue('Coverage footprint', report.siteCompliance.coverage.combinedReferenceFootprintSqM === null ? 'unavailable' : `${report.siteCompliance.coverage.combinedReferenceFootprintSqM.toFixed(2)} m2 combined reference footprint`);
   report.siteCompliance.limitations.forEach((item) => paragraph(`- ${item}`, 8, 10));
+
+  heading('Door, window, and ledger coordination', 12);
+  keyValue('Coordination status', report.openingCoordination.status.toUpperCase());
+  keyValue('Outstanding checks', `${report.openingCoordination.blockedCount} blocked / ${report.openingCoordination.reviewCount} review`);
+  report.openingCoordination.checks.forEach((check) => {
+    keyValue(`${check.status.toUpperCase()} · ${check.openingId || check.platformId || check.kind}`, `${check.kind.replace(/-/g, ' ')}${check.horizontalOverlapMm ? ` · ${check.horizontalOverlapMm} mm wall overlap` : ''}`);
+    paragraph(check.message, 8.5, 10);
+  });
 
   newPage(); heading('1. Platform systems', 17);
   report.platformSystems.forEach((system) => { heading(`${system.platformId} - ${system.name}`, 12); keyValue('Geometry', `${system.areaSqM.toFixed(2)} m2 | top EL ${system.elevationMm} mm`); keyValue('Framing topology', `${system.supportStrategy} | joists ${system.joistAxis.toUpperCase()} | design span ${system.joistDesignSpanMm} mm`); keyValue('Screening status', system.status.replace(/-/g, ' ')); paragraph(system.explanation); rule(); });

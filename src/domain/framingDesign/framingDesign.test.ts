@@ -82,6 +82,8 @@ describe('FramingDesign v2 public contract', () => {
     expect(isFramingStale(framing, selected, site, input)).toBe(false);
     const changed = { ...selected, platforms: selected.platforms.map((platform) => ({ ...platform, elevationMm: 1200 })) };
     expect(isFramingStale(framing, changed, site, input)).toBe(true);
+    const openingChanged = updateSiteModel(site, {}, { openings: [{ id: 'W1', kind: 'window', offsetMm: 600, widthMm: 1200, sillHeightMm: 900, heightMm: 1200, evidenceStatus: 'field-measured' }] });
+    expect(isFramingStale(framing, selected, openingChanged, input)).toBe(true);
   });
 
   it('derives each post height from local observed grade instead of one global ground value', () => {

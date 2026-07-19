@@ -1,5 +1,5 @@
 import { assessStairPlanGeometry, type DeckDesign, type DeckPlatform, type PointMm } from '../deckDesign';
-import { assessExistingConditionCapture, terrainElevationAt, type SiteModel } from '../siteModel';
+import { assessExistingConditionCapture, assessWallOpeningCoordination, terrainElevationAt, type SiteModel, type WallOpeningCoordinationAssessment } from '../siteModel';
 import { boundaryBounds, clipAxisLine, isAxisAlignedRectangle, isHorizontal, lineLength, platformEdgePoints, stationsAlong } from './geometry';
 import { codeProfileForMunicipality, CWC_DECK_GUIDE, lifeSafetySourceForProfile, selectPreliminarySections } from './rules';
 import type { BeamMember, FramingCheck, FramingDesign, FramingReviewGate, FramingStatus, GenerateFramingInput, JoistMember, LedgerMember, LifeSafetyAssessment, PlatformFramingSystem, StairStringerMember } from './types';
@@ -22,6 +22,7 @@ export function generateFramingDesign(design: DeckDesign, site: SiteModel, input
   const treatment = input.treatment || 'incised';
   const codeProfile = codeProfileForMunicipality(input.municipality);
   const lifeSafety = assessDeckLifeSafety(design, site);
+  const openingCoordination = assessWallOpeningCoordination(design, site);
   const soilBearingKpa = input.soilBearingKpa || DEFAULT_SOIL_BEARING_KPA;
   const assumptions = {
     deadLoadKpa: DEAD_LOAD_KPA,
@@ -135,11 +136,12 @@ export function generateFramingDesign(design: DeckDesign, site: SiteModel, input
     basis: 'Connection geometry is coordinated to hosted platform edges. Header capacity, stringer hardware, fasteners, reactions, and landing support remain project-specific structural design.',
   });
   checks.push(...globalChecks(site, footings.length, ledgers.length, guards.length, stairStringers.length, lifeSafety));
+  checks.push(openingFramingCheck(openingCoordination, site.designWall.openings.length));
   const hasEngineering = platformSystems.some((system) => system.status === 'engineering-required');
-  const reviewGates = buildReviewGates(site, hasEngineering, ledgers.length, guards.length, stairStringers.length);
+  const reviewGates = buildReviewGates(site, hasEngineering, ledgers.length, guards.length, stairStringers.length, openingCoordination);
   return {
     schema: 'framing-design/v2', units: 'mm', inputFingerprint: framingInputFingerprint(design, site, input), generatedAt,
-    codeProfile, assumptions, platformSystems, joists, beams, ledgers, posts, footings, guards, lifeSafety, stairStringers,
+    codeProfile, assumptions, platformSystems, joists, beams, ledgers, posts, footings, guards, lifeSafety, openingCoordination, stairStringers,
     stairOpenings: stairConnectionFraming.openings, stairTrimmers: stairConnectionFraming.trimmers, stairConnections: stairConnectionFraming.connections,
     connections,
     checks, reviewGates, sources: [CWC_DECK_GUIDE, lifeSafetySourceForProfile(codeProfile)], status: hasEngineering ? 'engineering-required' : 'review-required',
@@ -150,14 +152,14 @@ export function framingInputFingerprint(design: DeckDesign, site: SiteModel, inp
   const structuralInput = {
     platforms: design.platforms.map((platform) => ({ id: platform.id, boundary: platform.boundary.vertices.map(({ xMm, yMm }) => [xMm, yMm]), elevationMm: platform.elevationMm, edges: platform.edges.map(({ id, role, hostId }) => ({ id, role, hostId })), framingIntent: platform.framingIntent, finish: { decking: platform.finish.decking, deckingThicknessMm: platform.finish.deckingThicknessMm, guardSystem: platform.finish.guardSystem } })),
     stairs: design.stairs.map((stair) => ({ id: stair.id, from: stair.from, to: stair.to, fromEdgeId: stair.fromEdgeId, toEdgeId: stair.toEdgeId, startMm: stair.startMm, endMm: stair.endMm, directionDeg: stair.directionDeg, widthMm: stair.widthMm, riserCount: stair.riserCount, riserHeightMm: stair.riserHeightMm, treadDepthMm: stair.treadDepthMm, totalRunMm: stair.totalRunMm, stringerCount: stair.stringerCount, handrailSides: stair.handrailSides })),
-    site: { terrain: site.terrain, capture: site.capture.evidence.map(({ id, category, sha256, status }) => ({ id, category, sha256, status })), wall: { selectionStatus: site.designWall.selectionStatus, sourceBuildingId: site.designWall.sourceBuildingId, sourceEdgeIndex: site.designWall.sourceEdgeIndex, lengthMm: site.designWall.lengthMm, rimMaterial: site.designWall.rimMaterial, rimDepthMm: site.designWall.rimDepthMm, cladding: site.designWall.cladding, flashingFeasible: site.designWall.flashingFeasible } },
+    site: { terrain: site.terrain, capture: site.capture.evidence.map(({ id, category, sha256, status }) => ({ id, category, sha256, status })), wall: { selectionStatus: site.designWall.selectionStatus, sourceBuildingId: site.designWall.sourceBuildingId, sourceEdgeIndex: site.designWall.sourceEdgeIndex, lengthMm: site.designWall.lengthMm, rimMaterial: site.designWall.rimMaterial, rimDepthMm: site.designWall.rimDepthMm, cladding: site.designWall.cladding, flashingFeasible: site.designWall.flashingFeasible, openings: site.designWall.openings.map(({ id, kind, offsetMm, widthMm, sillHeightMm, heightMm, evidenceStatus }) => ({ id, kind, offsetMm, widthMm, sillHeightMm, heightMm, evidenceStatus })) } },
     input: { municipality: input.municipality, snowLoadKpa: input.snowLoadKpa, treatment: input.treatment || 'incised', soilBearingKpa: input.soilBearingKpa || DEFAULT_SOIL_BEARING_KPA },
   };
   return `fd2-${fnv1a(JSON.stringify(structuralInput))}`;
 }
 
 export function isFramingStale(framing: FramingDesign | null, design: DeckDesign, site: SiteModel, input: GenerateFramingInput): boolean {
-  return !framing || framing.schema !== 'framing-design/v2' || framing.lifeSafety?.schema !== 'life-safety-screen/v2' || framing.inputFingerprint !== framingInputFingerprint(design, site, input);
+  return !framing || framing.schema !== 'framing-design/v2' || framing.lifeSafety?.schema !== 'life-safety-screen/v2' || framing.openingCoordination?.schema !== 'wall-opening-coordination/v1' || framing.inputFingerprint !== framingInputFingerprint(design, site, input);
 }
 
 function resolveJoistAxis(platform: DeckPlatform, housePoints: readonly [PointMm, PointMm] | null): 'x' | 'y' {
@@ -231,11 +233,23 @@ function globalChecks(site: SiteModel, footingCount: number, ledgerCount: number
   ];
 }
 
-function buildReviewGates(site: SiteModel, engineering: boolean, ledgerCount: number, guardCount: number, stringerCount: number): FramingReviewGate[] {
+function openingFramingCheck(assessment: WallOpeningCoordinationAssessment, openingCount: number): FramingCheck {
+  const reviewed = assessment.checks.filter((check) => check.status === 'review').length;
+  const blocked = assessment.checks.filter((check) => check.status === 'blocked').length;
+  const issueText = assessment.checks.filter((check) => check.status !== 'pass').slice(0, 3).map((check) => check.message).join(' ');
+  return {
+    id: 'wall-openings', title: 'Doors, windows, deck surfaces, and ledger zones', objectId: 'site', status: assessment.status,
+    result: openingCount ? `${openingCount} opening(s) screened; ${blocked} blocked conflict(s), ${reviewed} review item(s).${issueText ? ` ${issueText}` : ''}` : 'No doors or windows are recorded on the selected design wall.',
+    basis: openingCount ? 'Canonical wall-opening geometry screen. Final opening use, door swing, egress, safety glazing, guards, envelope, flashing, headers, and attachment design require field evidence and professional review.' : 'Opening coordination cannot be completed until every design-wall door and window is recorded.',
+  };
+}
+
+function buildReviewGates(site: SiteModel, engineering: boolean, ledgerCount: number, guardCount: number, stringerCount: number, openingCoordination: WallOpeningCoordinationAssessment): FramingReviewGate[] {
   const capture = assessExistingConditionCapture(site.capture, { hasDoor: site.designWall.openings.some((opening) => opening.kind === 'door') });
   return [
     { id: 'field-geometry', discipline: 'site', title: 'Field-verify house, grade, and property offsets', status: site.designWall.selectionStatus === 'field-measured' && site.terrain.gradePoints.length >= 3 && site.terrain.gradePoints.every((point) => point.verificationStatus !== 'reference') ? 'not-required' : 'required', reason: 'Municipal GIS, provisional alignment, and an assumed grade datum are not construction measurements.' },
     { id: 'existing-condition-capture', discipline: 'site', title: 'Complete and confirm existing-condition photo set', status: capture.readyForProfessionalReview ? 'not-required' : 'required', reason: capture.readyForAiDraft ? 'Required views are recorded but still need homeowner confirmation and reviewer acceptance.' : `${capture.recordedRequiredCount} of ${capture.requiredCount} required photo views are recorded.` },
+    { id: 'wall-opening-coordination', discipline: 'architectural', title: 'Resolve door, window, deck-surface, and ledger conflicts', status: !site.designWall.openings.length || openingCoordination.status !== 'pass' ? 'required' : 'not-required', reason: !site.designWall.openings.length ? 'No design-wall openings are recorded.' : openingCoordination.status === 'pass' ? 'Recorded opening geometry clears the encoded coordination screens; final opening use and assembly review still govern.' : `${openingCoordination.blockedCount} blocked conflict(s) and ${openingCoordination.reviewCount} review item(s) remain.` },
     { id: 'structural-design', discipline: 'structural', title: 'Structural member and load-path review', status: engineering ? 'required' : 'not-required', reason: engineering ? 'At least one platform lies outside the encoded prescriptive table slice.' : 'Gravity member sizes are table-screened, subject to all remaining gates.' },
     { id: 'footing-design', discipline: 'structural', title: 'Footing, frost, soil, uplift, and lateral design', status: 'required', reason: 'The CWC span guide explicitly excludes footings and lateral bracing.' },
     { id: 'connection-design', discipline: 'structural', title: 'Beam, post, joist, and lateral connections', status: 'required', reason: 'Connector types, fastener schedules, splices, bearing, and lateral ties are not automatically certified.' },
