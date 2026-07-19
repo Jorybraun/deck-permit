@@ -20,9 +20,10 @@ describe('canonical professional review issue', () => {
     const issue = buildCanonicalReviewIssue({ property, site, design, framing, revision: 4, issuedAt: '2026-07-18T12:05:00.000Z' });
 
     expect(issue.manifest).toMatchObject({ revision: 4, generatedAt: '2026-07-18T12:05:00.000Z', designFingerprint: expect.stringMatching(/^DP-[A-F0-9]{8}$/) });
-    expect(issue.manifest.sheetIds).toEqual(expect.arrayContaining(['cover', 'existing-conditions', 'site', 'deck-plan', 'foundations', 'foundation-schedule', 'framing', 'connection-schedule', 'elevations', 'sections', 'details', 'assembly-schedule', 'calculations']));
+    expect(issue.manifest.sheetIds).toEqual(expect.arrayContaining(['cover', 'existing-conditions', 'site', 'deck-plan', 'foundations', 'foundation-schedule', 'framing', 'connection-schedule', 'elevations', 'sections', 'details', 'assembly-schedule', 'calculations', 'review-schedule']));
     expect(issue.reviewPackage.manifest).toEqual(issue.manifest);
-    expect(issue.reviewPackage.planset).toHaveLength(11 + Math.max(1, Math.ceil(framing.connections.length / 12)) + Math.max(1, Math.ceil(framing.footings.length / 15)));
+    const reviewPageCount = Math.max(1, Math.ceil((framing.platformSystems.length + framing.checks.length + framing.reviewGates.length) / 12));
+    expect(issue.reviewPackage.planset).toHaveLength(11 + Math.max(1, Math.ceil(framing.connections.length / 12)) + Math.max(1, Math.ceil(framing.footings.length / 15)) + reviewPageCount);
     expect(issue.reviewPackage.planset.every((sheet) => sheet.revision === 4 && sheet.designFingerprint === issue.manifest.designFingerprint)).toBe(true);
     expect(issue.reviewPackage.deck.canonical).toMatchObject({ schema: 'permitly-canonical-review-snapshot/v1', units: 'mm', design: { schema: 'deck-design/v1' }, framing: { schema: 'framing-design/v2' } });
     expect(issue.reviewPackage.cadExchange).toMatchObject({ schema: 'permitly-project-cad-exchange/v1', units: 'mm', designFingerprint: issue.manifest.designFingerprint, notForConstruction: true });

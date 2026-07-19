@@ -6,7 +6,7 @@ import type { PlanSheet, Property } from '../types';
 import { renderOrthographicElevationSvg } from './orthographicElevationSvg';
 
 const CONTENT_BOTTOM = 970;
-export const CANONICAL_PLAN_SET_SCHEMA = 'permitly-canonical-plan-set/v8' as const;
+export const CANONICAL_PLAN_SET_SCHEMA = 'permitly-canonical-plan-set/v9' as const;
 
 interface CanonicalPlanSetInput {
   property: Property;
@@ -57,8 +57,9 @@ export function generateCanonicalPlanSet(input: CanonicalPlanSetInput): Canonica
   const connectionSchedules = connectionScheduleSheets(input, issue);
   const sections = sectionSheets(input, issue);
   const assemblySchedules = assemblyScheduleSheets(input, issue);
+  const reviewSchedules = reviewControlScheduleSheets(input, issue);
   const sheets = [
-    coverSheet(input, issue, foundationSchedules.length, connectionSchedules.length, sections.length, assemblySchedules.length),
+    coverSheet(input, issue, foundationSchedules.length, connectionSchedules.length, sections.length, assemblySchedules.length, reviewSchedules.length),
     existingConditionsSheet(input, issue),
     siteSheet(input, issue),
     deckPlanSheet(input, issue),
@@ -71,11 +72,12 @@ export function generateCanonicalPlanSet(input: CanonicalPlanSetInput): Canonica
     detailSheet(input, issue),
     ...assemblySchedules,
     calculationSheet(input, issue),
+    ...reviewSchedules,
   ];
   return { fingerprint: issue.fingerprint, sheets };
 }
 
-function coverSheet(input: CanonicalPlanSetInput, issue: IssueMeta, foundationScheduleCount: number, connectionScheduleCount: number, sectionCount: number, assemblyScheduleCount: number): PlanSheet {
+function coverSheet(input: CanonicalPlanSetInput, issue: IssueMeta, foundationScheduleCount: number, connectionScheduleCount: number, sectionCount: number, assemblyScheduleCount: number, reviewScheduleCount: number): PlanSheet {
   const { property, site, design, framing } = input;
   const totalArea = design.platforms.reduce((sum, platform) => sum + polygonArea(platform.boundary.vertices.map((vertex): PointMm => [vertex.xMm, vertex.yMm])) / 1_000_000, 0);
   const projectRows = [
@@ -92,7 +94,7 @@ function coverSheet(input: CanonicalPlanSetInput, issue: IssueMeta, foundationSc
   const indexRows = [
     ['A0.0', 'Cover, project data, drawing index'], ['C1.0', 'Evidence and existing conditions'], ['A1.0', 'Site and property relationship'], ['A2.0', 'Dimensioned deck and landing plan'],
     ['S1.0', 'Foundation and post plan'], [foundationScheduleCount === 1 ? 'S1.1' : `S1.1–S1.${foundationScheduleCount}`, 'All footing and post design-control records'], ['S2.0', 'Framing plan and member schedule'], [connectionScheduleCount === 1 ? 'S2.1' : `S2.1–S2.${connectionScheduleCount}`, 'All keyed structural connection design controls'], ['A3.0', 'Platform and stair elevations'],
-    [sectionCount === 1 ? 'S3.0' : `S3.0–S3.${sectionCount - 1}`, 'Building section for every modeled platform'], ['A4.0', 'Stair, guard, footing, connection details'], [assemblyScheduleCount === 1 ? 'A4.1' : `A4.1–A4.${assemblyScheduleCount}`, 'All stair and guard design-control schedules'], ['S4.0', 'Design basis, checks, review gates'],
+    [sectionCount === 1 ? 'S3.0' : `S3.0–S3.${sectionCount - 1}`, 'Building section for every modeled platform'], ['A4.0', 'Stair, guard, footing, connection details'], [assemblyScheduleCount === 1 ? 'A4.1' : `A4.1–A4.${assemblyScheduleCount}`, 'All stair and guard design-control schedules'], ['S4.0', 'Design basis and review summary'], [reviewScheduleCount === 1 ? 'S4.1' : `S4.1–S4.${reviewScheduleCount}`, 'All system screens, checks, and review work packages'],
   ];
   const required = framing.reviewGates.filter((gate) => gate.status === 'required');
   return makeSheet('cover', 'Cover & Project Data', 'NTS', 'A0.0', input, issue, `
@@ -100,7 +102,7 @@ function coverSheet(input: CanonicalPlanSetInput, issue: IssueMeta, foundationSc
     <text class="subheading" x="70" y="128">${esc(property.address?.fullAddress || 'Address unconfirmed')}</text>
     ${notice(70, 160, 1560, 78, 'ISSUED FOR COORDINATED PROFESSIONAL REVIEW — NOT FOR CONSTRUCTION', 'Field geometry, structural capacity, footings, connections, guards, stairs, and municipal requirements remain subject to the review gates shown in this set.')}
     <text class="section" x="70" y="286">PROJECT DATA</text>${table(projectRows, 70, 310, 850, 48, 185)}
-    <text class="section" x="970" y="286">DRAWING INDEX</text>${table(indexRows, 970, 310, 660, 24, 100)}
+    <text class="section" x="970" y="286">DRAWING INDEX</text>${table(indexRows, 970, 310, 660, 22, 100)}
     <text class="section" x="970" y="648">REQUIRED REVIEW WORK PACKAGES</text>
     ${required.slice(0, 5).map((gate, index) => statusBox(970, 675 + index * 52, 660, gate.discipline.toUpperCase(), gate.title, 'review')).join('')}
     ${notice(70, 790, 850, 120, 'GENERAL NOTES', 'Do not scale drawings. Written dimensions govern. Verify property boundaries, house wall, openings, grade, utilities, and existing construction before issue. No construction may begin until the authority having jurisdiction issues a permit and required professional documents are accepted.')}`);
@@ -419,10 +421,50 @@ function calculationSheet(input: CanonicalPlanSetInput, issue: IssueMeta): PlanS
   const loadRows = [['Dead load', `${framing.assumptions.deadLoadKpa.toFixed(2)} kPa`], ['Residential live load', `${framing.assumptions.liveLoadKpa.toFixed(2)} kPa`], ['Site snow load', `${framing.assumptions.snowLoadKpa.toFixed(2)} kPa`], ['Governing area load', `${framing.assumptions.governingAreaLoadKpa.toFixed(2)} kPa`], ['Assumed soil bearing', `${framing.assumptions.soilBearingKpa} kPa`], ['Lumber basis', `${framing.assumptions.lumberSpecies} ${framing.assumptions.lumberGrade} · ${framing.assumptions.treatment}`]];
   return makeSheet('calculations', 'Design Basis, Checks & Review Gates', 'NTS', 'S4.0', input, issue, `
     <text class="section" x="70" y="70">DESIGN BASIS</text>${table(loadRows, 70, 95, 650, 54, 220)}
-    <text class="section" x="70" y="465">PLATFORM SYSTEM SCREENING</text>${input.framing.platformSystems.map((system, index) => statusBox(70, 490 + index * 100, 650, system.status.toUpperCase().replace(/-/g, ' '), `${system.platformId} · ${system.supportStrategy} · ${system.joistDesignSpanMm} mm span`, system.status === 'engineering-required' ? 'blocked' : 'review', system.explanation)).join('')}
-    <text class="section" x="780" y="70">FRAMING CHECKS</text>${framing.checks.map((check, index) => statusBox(780, 95 + index * 90, 850, check.status.toUpperCase(), check.title, check.status, `${check.result} Basis: ${check.basis}`)).join('')}
+    <text class="section" x="70" y="465">PLATFORM SYSTEM SCREENING · SUMMARY</text>${input.framing.platformSystems.slice(0, 3).map((system, index) => statusBox(70, 490 + index * 100, 650, system.status.toUpperCase().replace(/-/g, ' '), `${system.platformId} · ${system.supportStrategy} · ${system.joistDesignSpanMm} mm span`, system.status === 'engineering-required' ? 'blocked' : 'review', system.explanation)).join('')}
+    <text class="tiny" x="70" y="815">${framing.platformSystems.length} PLATFORM SYSTEM(S) · COMPLETE SYSTEM / CHECK / WORK-PACKAGE REGISTER ON S4.1+</text>
+    <text class="section" x="780" y="70">FRAMING CHECKS · SUMMARY</text>${framing.checks.slice(0, 6).map((check, index) => statusBox(780, 95 + index * 90, 850, check.status.toUpperCase(), check.title, check.status, `${check.result} Basis: ${check.basis}`)).join('')}
     <text class="section" x="780" y="680">PROFESSIONAL REVIEW GATES</text>${framing.reviewGates.slice(0, 4).map((gate, index) => statusBox(780, 705 + index * 56, 850, `${gate.discipline.toUpperCase()} · ${gate.status.toUpperCase()}`, gate.title, gate.status === 'required' ? 'blocked' : 'pass')).join('')}
+    <text class="tiny" x="780" y="940">SUMMARY ONLY · ALL ${framing.checks.length} CHECK(S) AND ${framing.reviewGates.length} REVIEW GATE(S) ARE SCHEDULED ON S4.1+</text>
     <text class="tiny" x="70" y="946">COMPANION CALCULATION BOOKLET · permitly-canonical-calculation-report/v1 · ${issue.fingerprint} · MEMBER DEMANDS / REACTIONS / BEARING SCREENS / CONNECTION ACTIONS</text>`);
+}
+
+const REVIEW_CONTROL_ROWS_PER_SHEET = 12;
+
+/** Prints the complete professional review scope; S4.0 remains a visual summary only. */
+function reviewControlScheduleSheets(input: CanonicalPlanSetInput, issue: IssueMeta): PlanSheet[] {
+  const rows: Array<{ id: string; type: string; status: string; object: string; title: string; detail: string }> = [
+    ...input.framing.platformSystems.map((system) => ({ id: `SYS-${system.platformId}`, type: 'SYSTEM', status: system.status, object: system.platformId, title: `${system.supportStrategy} · ${system.joistDesignSpanMm} mm span`, detail: system.explanation })),
+    ...input.framing.checks.map((check) => ({ id: `CHECK-${check.id}`, type: 'CHECK', status: check.status, object: check.objectId, title: check.title, detail: `${check.result} · Basis: ${check.basis}` })),
+    ...input.framing.reviewGates.map((gate) => ({ id: `GATE-${gate.id}`, type: 'WORK PACKAGE', status: gate.status, object: gate.discipline, title: gate.title, detail: gate.reason })),
+  ];
+  const pageCount = Math.max(1, Math.ceil(rows.length / REVIEW_CONTROL_ROWS_PER_SHEET));
+  return Array.from({ length: pageCount }, (_, pageIndex) => {
+    const pageRows = rows.slice(pageIndex * REVIEW_CONTROL_ROWS_PER_SHEET, (pageIndex + 1) * REVIEW_CONTROL_ROWS_PER_SHEET);
+    const id: PlanSheet['id'] = pageIndex === 0 ? 'review-schedule' : `review-schedule-${pageIndex + 1}`;
+    return makeSheet(id, 'Professional Review Control Schedule', 'NTS · WRITTEN SCHEDULE GOVERNS', `S4.${pageIndex + 1}`, input, issue, `
+      <rect x="55" y="82" width="1575" height="800" class="panel"/><text class="section" x="80" y="118">SYSTEM SCREENS, CHECKS &amp; PROFESSIONAL WORK PACKAGES · ${pageIndex + 1}/${pageCount}</text>
+      <text class="tiny" x="80" y="137">EVERY ROW IS BOUND TO THIS DESIGN FINGERPRINT · REQUIRED WORK MUST BE RESOLVED BY THE RESPONSIBLE QUALIFIED PARTY BEFORE ACCEPTANCE</text>
+      ${reviewControlTable(pageRows, 80, 152, 1525, 48)}
+      <text class="tiny" x="80" y="810">${rows.length} TOTAL CONTROL RECORD(S) · ROWS ${pageRows.length ? pageIndex * REVIEW_CONTROL_ROWS_PER_SHEET + 1 : 0}–${pageIndex * REVIEW_CONTROL_ROWS_PER_SHEET + pageRows.length} SHOWN</text>
+      <text class="title-warning" x="80" y="850">A PASSING SOFTWARE SCREEN IS NOT A PROFESSIONAL ACCEPTANCE, SEALED DESIGN OR AUTHORIZATION TO CONSTRUCT</text>`);
+  });
+}
+
+function reviewControlTable(rows: Array<{ id: string; type: string; status: string; object: string; title: string; detail: string }>, x: number, y: number, width: number, rowHeight: number): string {
+  const headers = ['CONTROL ID', 'TYPE', 'STATUS', 'OBJECT / DISCIPLINE', 'CONTROL', 'RESULT / BASIS / REQUIRED RESOLUTION'];
+  const columnWidths = [190, 120, 110, 160, 350, width - 930];
+  const boundaries = columnWidths.reduce<number[]>((items, column) => [...items, items[items.length - 1] + column], [x]);
+  const header = `<rect x="${x}" y="${y}" width="${width}" height="${rowHeight}" class="schedule-head"/>${headers.map((value, index) => `<text class="schedule-label" x="${boundaries[index] + 6}" y="${y + rowHeight * .62}">${value}</text>`).join('')}`;
+  const source = rows.length ? rows : [{ id: '—', type: 'NONE', status: '—', object: '—', title: 'No generated controls', detail: 'Regenerate framing after drawing a supported platform.' }];
+  const body = source.map((row, rowIndex) => {
+    const yy = y + (rowIndex + 1) * rowHeight;
+    const values = [row.id, row.type, row.status.toUpperCase().replace(/-/g, ' '), row.object, row.title, row.detail];
+    return `<rect x="${x}" y="${yy}" width="${width}" height="${rowHeight}" class="schedule-row"/>${values.map((value, columnIndex) => columnIndex >= 4 ? wrapped(value, boundaries[columnIndex] + 6, yy + 14, columnWidths[columnIndex] - 12, 7.2, 8.5, 3) : `<text class="schedule-text" x="${boundaries[columnIndex] + 6}" y="${yy + rowHeight * .58}">${esc(value)}</text>`).join('')}`;
+  }).join('');
+  const bottom = y + rowHeight * (source.length + 1);
+  const verticals = boundaries.slice(1, -1).map((boundary) => `<line x1="${boundary}" y1="${y}" x2="${boundary}" y2="${bottom}" class="thin"/>`).join('');
+  return `${header}${body}${verticals}`;
 }
 
 function makeSheet(id: PlanSheet['id'], title: string, scale: string, number: string, input: CanonicalPlanSetInput, issue: IssueMeta, body: string): PlanSheet {

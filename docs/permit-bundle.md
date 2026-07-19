@@ -25,14 +25,14 @@ Dependency direction is UI → permit bundle → artifact services/evidence read
 
 - `README-FIRST.txt`: readiness, revision, limitations, outstanding gates, and submission contact.
 - `01-application/`: unsigned official prefill and current signed/checklist evidence when recorded.
-- `02-drawings/`: coordinated thirteen-sheet-minimum 11×17 vector PDF with paginated S1.x footing/post schedules, S2.x connection schedules, one S3.x section per platform, and A4.x stair/guard schedules, plus the calculation booklet and layered millimetre DXF carrying one design fingerprint.
+- `02-drawings/`: coordinated fourteen-sheet-minimum 11×17 vector PDF with paginated S1.x footing/post schedules, S2.x connection schedules, one S3.x section per platform, A4.x stair/guard schedules, and S4.x complete system/check/professional-work-package registers, plus the calculation booklet and layered millimetre DXF carrying one design fingerprint.
 - `03-evidence/`: integrity-checked site captures, owner-signed application evidence, and current professional evidence.
 - `04-records/`: canonical project, calculation report, canonical submission manifest, professional structural-resolution records, and a SHA-256 package index covering every preceding file.
 - `05-stale-evidence/`: integrity-checked evidence belonging to another design fingerprint. It is retained for audit and never satisfies current readiness.
 
 ## Failure and recovery
 
-Assembly fails closed when the ten canonical sheets, calculation report, DXF, or design fingerprint no longer match the manifest; required application fields are incomplete; the official form or drawing conversion fails; capture/evidence bytes are missing; MIME type, byte count, or SHA-256 digest does not match; or the generated ZIP does not contain the exact expected non-empty paths. The UI preserves the project and provides a retryable error. Recovery is to regenerate stale drawings, complete the form, reattach evidence, or retry the official form download.
+Assembly fails closed when any required canonical sheet family—including S4.1—or the calculation report, DXF, or design fingerprint no longer matches the manifest; required application fields are incomplete; the official form or drawing conversion fails; capture/evidence bytes are missing; MIME type, byte count, or SHA-256 digest does not match; or the generated ZIP does not contain the exact expected non-empty paths. The UI preserves the project and provides a retryable error. Recovery is to regenerate stale drawings, complete the form, reattach evidence, or retry the official form download.
 
 ## Security and privacy
 
@@ -41,6 +41,6 @@ ZIP generation occurs in the browser. It does not upload owner PII, plans, or ev
 ## Verification
 
 - Unit: missing/tampered capture and professional evidence, stale-revision isolation, exact ZIP paths, index coverage, and fail-closed readiness disclosures.
-- Integration: official PDF fill and ten-page vector drawing tests, including fixed 17×11 media boxes and an image-XObject regression guard.
+- Integration: official PDF fill and complete vector drawing tests, including fixed 17×11 media boxes and an image-XObject regression guard.
 - Journey: complete application fields on Submit, assemble the appropriate package kind, observe a validated file count, and confirm reload persistence.
 - Release: TypeScript, Vitest, Vite production build, and production dependency audit.

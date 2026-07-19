@@ -192,7 +192,7 @@ export interface Deck {
 }
 
 export interface PlanSheet {
-  id: 'cover' | 'existing-conditions' | 'site' | 'deck-plan' | 'foundations' | 'foundation-schedule' | `foundation-schedule-${number}` | 'framing' | 'connection-schedule' | `connection-schedule-${number}` | 'elevations' | 'sections' | `sections-${number}` | 'details' | 'assembly-schedule' | `assembly-schedule-${number}` | 'calculations';
+  id: 'cover' | 'existing-conditions' | 'site' | 'deck-plan' | 'foundations' | 'foundation-schedule' | `foundation-schedule-${number}` | 'framing' | 'connection-schedule' | `connection-schedule-${number}` | 'elevations' | 'sections' | `sections-${number}` | 'details' | 'assembly-schedule' | `assembly-schedule-${number}` | 'calculations' | 'review-schedule' | `review-schedule-${number}`;
   number: string;
   title: string;
   scale: string;

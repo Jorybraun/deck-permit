@@ -30,8 +30,11 @@ describe('canonical coordinated review set', () => {
     const foundationPageCount = Math.max(1, Math.ceil(framing.footings.length / 15));
     const foundationNumbers = Array.from({ length: foundationPageCount }, (_, index) => `S1.${index + 1}`);
     const sectionNumbers = design.platforms.map((_, index) => `S3.${index}`);
-    expect(planSet.sheets).toHaveLength(10 + foundationPageCount + connectionPageCount + sectionNumbers.length);
-    expect(planSet.sheets.map((sheet) => sheet.number)).toEqual(['A0.0', 'C1.0', 'A1.0', 'A2.0', 'S1.0', ...foundationNumbers, 'S2.0', ...connectionNumbers, 'A3.0', ...sectionNumbers, 'A4.0', 'A4.1', 'S4.0']);
+    const reviewControlCount = framing.platformSystems.length + framing.checks.length + framing.reviewGates.length;
+    const reviewPageCount = Math.max(1, Math.ceil(reviewControlCount / 12));
+    const reviewNumbers = Array.from({ length: reviewPageCount }, (_, index) => `S4.${index + 1}`);
+    expect(planSet.sheets).toHaveLength(10 + foundationPageCount + connectionPageCount + sectionNumbers.length + reviewPageCount);
+    expect(planSet.sheets.map((sheet) => sheet.number)).toEqual(['A0.0', 'C1.0', 'A1.0', 'A2.0', 'S1.0', ...foundationNumbers, 'S2.0', ...connectionNumbers, 'A3.0', ...sectionNumbers, 'A4.0', 'A4.1', 'S4.0', ...reviewNumbers]);
     expect(planSet.sheets.every((sheet) => sheet.designFingerprint === planSet.fingerprint)).toBe(true);
     for (const sheet of planSet.sheets) {
       const errors: string[] = [];
@@ -113,7 +116,17 @@ describe('canonical coordinated review set', () => {
     expect(assemblySchedule).toContain('UNVERIFIED');
     for (const guard of framing.guards) expect(assemblySchedule).toContain(guard.id);
     expect(assemblySchedule).toContain('REVIEWER MUST RESOLVE EVERY LISTED FLIGHT AND GUARD RUN');
-    expect(planSet.sheets.find((sheet) => sheet.number === 'S4.0')?.svg).toContain('PROFESSIONAL REVIEW GATES');
+    const calculationSheet = planSet.sheets.find((sheet) => sheet.number === 'S4.0')?.svg || '';
+    expect(calculationSheet).toContain('PROFESSIONAL REVIEW GATES');
+    expect(calculationSheet).toContain('SUMMARY ONLY');
+    expect(calculationSheet).toContain('S4.1+');
+    const reviewSchedules = planSet.sheets.filter((sheet) => sheet.id === 'review-schedule' || sheet.id.startsWith('review-schedule-'));
+    expect(reviewSchedules).toHaveLength(reviewPageCount);
+    expect(reviewSchedules[0].svg).toContain('SYSTEM SCREENS, CHECKS &amp; PROFESSIONAL WORK PACKAGES');
+    expect(reviewSchedules[0].svg).toContain('A PASSING SOFTWARE SCREEN IS NOT A PROFESSIONAL ACCEPTANCE');
+    for (const system of framing.platformSystems) expect(reviewSchedules.filter((sheet) => sheet.svg.includes(`SYS-${system.platformId}`))).toHaveLength(1);
+    for (const check of framing.checks) expect(reviewSchedules.filter((sheet) => sheet.svg.includes(`CHECK-${check.id}`))).toHaveLength(1);
+    for (const gate of framing.reviewGates) expect(reviewSchedules.filter((sheet) => sheet.svg.includes(`GATE-${gate.id}`))).toHaveLength(1);
 
     const movedDoorSite = { ...site, designWall: { ...site.designWall, openings: [{ ...site.designWall.openings[0], offsetMm: 1200 }] } };
     expect(canonicalPlanFingerprint({ property, site: movedDoorSite, design, framing })).not.toBe(planSet.fingerprint);
@@ -147,5 +160,11 @@ describe('canonical coordinated review set', () => {
     for (const connection of framing.connections) expect(connectionSheets.filter((sheet) => sheet.svg.includes(connection.id))).toHaveLength(1);
     expect(planSet.sheets.find((sheet) => sheet.number === 'A0.0')?.svg).toContain(`S2.1–S2.${connectionSheets.length}`);
     expect(planSet.sheets.find((sheet) => sheet.number === 'A0.0')?.svg).toContain('S3.0–S3.3');
+    const reviewSheets = planSet.sheets.filter((sheet) => sheet.id === 'review-schedule' || sheet.id.startsWith('review-schedule-'));
+    expect(reviewSheets.length).toBeGreaterThan(1);
+    for (const system of framing.platformSystems) expect(reviewSheets.filter((sheet) => sheet.svg.includes(`SYS-${system.platformId}`))).toHaveLength(1);
+    for (const check of framing.checks) expect(reviewSheets.filter((sheet) => sheet.svg.includes(`CHECK-${check.id}`))).toHaveLength(1);
+    for (const gate of framing.reviewGates) expect(reviewSheets.filter((sheet) => sheet.svg.includes(`GATE-${gate.id}`))).toHaveLength(1);
+    expect(planSet.sheets.find((sheet) => sheet.number === 'A0.0')?.svg).toContain(`S4.1–S4.${reviewSheets.length}`);
   });
 });
