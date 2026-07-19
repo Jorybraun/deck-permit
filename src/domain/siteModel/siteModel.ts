@@ -3,6 +3,7 @@ import { deriveHouseReference } from './propertyGeometry';
 import type { SiteAssessment, SiteModel } from './types';
 import { createTerrainSurface } from './terrain';
 import { assessExistingConditionCapture, createExistingConditionCapture } from './existingConditionCapture';
+import { assessExistingConditionFieldSurvey } from './fieldSurvey';
 
 /** Owns the editable house/terrain reference used by deck construction coordinates. */
 export function createSiteModel(property: Property, now = new Date()): SiteModel {
@@ -31,6 +32,7 @@ export function createSiteModel(property: Property, now = new Date()): SiteModel
     terrain: createTerrainSurface(),
     yardReference: { schema: 'parcel-yard-reference/v1', status: 'unselected', frontEdgeIndex: null, rearEdgeIndex: null, exteriorSideEdgeIndex: null, selectedBy: '', selectedAt: '', notes: '' },
     capture: createExistingConditionCapture(),
+    fieldSurvey: null,
     measuredBy: '',
     measuredAt: now.toISOString().slice(0, 10),
     notes: '',
@@ -63,6 +65,9 @@ export function assessSiteModel(site: SiteModel): SiteAssessment {
   if (site.status !== 'field-input-unverified') warnings.push('House geometry is reference context only. Record field measurements before professional review.');
   if (site.designWall.selectionStatus === 'unselected') errors.push('Select and confirm the house wall used by the deck design.');
   if (site.designWall.selectionStatus !== 'field-measured') warnings.push('The selected house wall has not been confirmed from field measurements.');
+  const fieldSurvey = assessExistingConditionFieldSurvey(site);
+  if (fieldSurvey.status === 'missing') warnings.push('No controlled existing-condition field worksheet is recorded; field-measured labels alone are not sufficient evidence.');
+  else if (fieldSurvey.status === 'stale') warnings.push(`Existing-condition field worksheet is stale: ${fieldSurvey.messages.join(' ')}`);
   if (site.yardReference.status === 'unselected' || site.yardReference.frontEdgeIndex === null || site.yardReference.rearEdgeIndex === null) warnings.push('Front and rear parcel edges are unconfirmed; named setback checks remain unavailable.');
   if (site.status === 'field-input-unverified' && !site.measuredBy.trim()) errors.push('Identify who recorded the field measurements.');
   if (site.designWall.rimMaterial === 'unknown') warnings.push('Rim/band substrate is unknown; ledger attachment cannot be designed.');

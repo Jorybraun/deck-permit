@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { addPlatform, addStair, createEmptyDesign, rectangularBoundary, selectDesignObject, setPlatformFramingIntent } from '../deckDesign';
-import { addTerrainGradePoint, createSiteModel, updateSiteModel } from '../siteModel';
+import { addTerrainGradePoint, createSiteModel, recordExistingConditionFieldSurvey, updateSiteModel } from '../siteModel';
 import type { Property } from '../../types';
 import { framingInputFingerprint, generateFramingDesign, isFramingStale } from './framingDesign';
 
@@ -101,10 +101,24 @@ describe('FramingDesign v2 public contract', () => {
     expect(framing.posts[framing.posts.length - 1].heightMm).toBe(900);
     expect(framing.inputFingerprint).not.toBe(firstPass.inputFingerprint);
   });
+
+  it('does not close field verification from labels alone and requires a current worksheet plus grade observations', () => {
+    const design = addPlatform(createEmptyDesign(), { boundary: rectangularBoundary(0, 0, 4000, 3000), elevationMm: 900 });
+    const labeledOnly = updateSiteModel(createSiteModel(property), {}, { selectionStatus: 'field-measured', lengthMm: 4000 });
+    expect(generateFramingDesign(design, labeledOnly, { municipality: 'Town of Sidney', snowLoadKpa: 1 }).reviewGates.find((gate) => gate.id === 'field-geometry')).toMatchObject({ status: 'required', reason: expect.stringContaining('No controlled') });
+
+    const surveyed = measuredSite();
+    let terrain = addTerrainGradePoint(surveyed.terrain, { label: 'G1', xMm: 0, yMm: 0, elevationMm: 0, source: 'homeowner-measurement', verificationStatus: 'recorded', notes: '' });
+    terrain = addTerrainGradePoint(terrain, { label: 'G2', xMm: 2000, yMm: 0, elevationMm: 20, source: 'homeowner-measurement', verificationStatus: 'recorded', notes: '' });
+    terrain = addTerrainGradePoint(terrain, { label: 'G3', xMm: 4000, yMm: 0, elevationMm: 40, source: 'homeowner-measurement', verificationStatus: 'recorded', notes: '' });
+    const complete = updateSiteModel(surveyed, { terrain });
+    expect(generateFramingDesign(design, complete, { municipality: 'Town of Sidney', snowLoadKpa: 1 }).reviewGates.find((gate) => gate.id === 'field-geometry')).toMatchObject({ status: 'not-required', reason: expect.stringContaining('controlled field worksheet') });
+  });
 });
 
 function measuredSite() {
-  return updateSiteModel(createSiteModel(property), { status: 'field-input-unverified', measuredBy: 'Homeowner' }, {
+  const provisional = updateSiteModel(createSiteModel(property), { status: 'field-input-unverified', measuredBy: 'Homeowner' }, {
     selectionStatus: 'field-measured', lengthMm: 4000, rimMaterial: 'solid-sawn', rimDepthMm: 235, cladding: 'wood-siding', flashingFeasible: 'yes',
   });
+  return recordExistingConditionFieldSurvey(provisional, { id: 'FS-TEST', recordedBy: 'Homeowner', recordedAt: '2026-07-18', instrument: 'tape-measure', wallLengthMm: 4000, wallHeightMm: provisional.designWall.wallHeightMm, houseDepthMm: provisional.houseDepthMm, openings: [], sourceEvidenceIds: [], notes: 'Test field worksheet.' });
 }

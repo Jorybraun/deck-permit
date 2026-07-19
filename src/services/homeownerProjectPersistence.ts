@@ -100,6 +100,7 @@ function normalizeSite(site: SiteModel): SiteModel {
     terrain: site.terrain?.schema === 'terrain-surface/v1' ? site.terrain : createTerrainSurface(legacySite.terrainElevationMm || 0),
     yardReference: site.yardReference?.schema === 'parcel-yard-reference/v1' ? { ...site.yardReference, rearEdgeIndex: site.yardReference.rearEdgeIndex ?? null } : { schema: 'parcel-yard-reference/v1', status: 'unselected', frontEdgeIndex: null, rearEdgeIndex: null, exteriorSideEdgeIndex: null, selectedBy: '', selectedAt: '', notes: '' },
     capture: site.capture?.schema === 'existing-condition-capture/v1' ? { ...site.capture, wallCalibrations: site.capture.wallCalibrations || [] } : createExistingConditionCapture(),
+    fieldSurvey: site.fieldSurvey?.schema === 'existing-condition-field-survey/v1' ? site.fieldSurvey : null,
     designWall: {
       ...wall,
       label: wall.label || 'Unconfirmed house side',

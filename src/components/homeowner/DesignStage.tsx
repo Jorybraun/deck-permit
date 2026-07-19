@@ -2,7 +2,7 @@ import { AlertTriangle, ArrowDown, ArrowRight, ArrowUp, Layers3, Plus, RotateCw,
 import { useEffect, useState } from 'react';
 import { stairDepartureDirection, stairLandingCandidates, suggestedPlatformElevationForBoundary, suggestPointToPointStair, type AddPlatformInput, type AddStairInput, type ClosedBoundary, type DeckDesign, type DesignAssessment, type DeckPlatform, type DeckStair, type PlatformEdgeRole } from '../../domain/deckDesign';
 import { assessDeckLifeSafety, type StairLifeSafetyAssessment } from '../../domain/framingDesign';
-import { assessSiteCompliance, assessWallOpeningCoordination, projectPropertyToLocal, terrainElevationAt, type SiteModel } from '../../domain/siteModel';
+import { assessExistingConditionFieldSurvey, assessSiteCompliance, assessWallOpeningCoordination, projectPropertyToLocal, terrainElevationAt, type SiteModel } from '../../domain/siteModel';
 import type { Property } from '../../types';
 import type { HomeownerIntent } from '../../state/homeownerProjectStore';
 import { DeckElevationEditor } from '../design/DeckElevationEditor';
@@ -76,7 +76,7 @@ export function DesignStage(props: DesignStageProps) {
       </div>
       <AiDesignStudioPanel intent={props.intent} property={props.property} site={props.site} design={props.design} onApply={props.onApplyAiDesign} />
       <PlatformLayers design={props.design} site={props.site} onSelect={props.onSelectObject} onMove={props.onMovePlatformLayer} />
-      {selected ? <PlatformInspector design={props.design} platform={selected} gradeElevationMm={terrainElevationAt(props.site.terrain, platformReferencePoint(selected)).elevationMm} onRename={props.onRenamePlatform} onSetElevation={props.onSetElevation} onSetPurpose={props.onSetPurpose} onRotate={props.onRotatePlatform} onSetFinish={props.onSetFinish} onSetFramingIntent={props.onSetFramingIntent} onSetEdgeRole={props.onSetEdgeRole} onSetEdgeLength={props.onSetEdgeLength} onInsertVertex={props.onInsertVertex} onRemove={props.onRemovePlatform} /> : selectedStair ? <StairInspector stair={selectedStair} safety={selectedStairSafety} design={props.design} onSetConstruction={props.onSetStairConstruction} onConnectLanding={props.onConnectStairLanding} onResizeSide={props.onResizeStairSide} onRemove={props.onRemoveStair} /> : <div className="p-5"><div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-5 text-center"><Layers3 className="mx-auto text-slate-400" size={24} /><strong className="mt-3 block text-sm text-slate-800">Select a platform or stair</strong><p className="mt-1 text-xs leading-5 text-slate-500">Click a deck area to edit it, or click a stair callout to inspect and remove that stair.</p></div></div>}
+      {selected ? <PlatformInspector design={props.design} site={props.site} platform={selected} gradeElevationMm={terrainElevationAt(props.site.terrain, platformReferencePoint(selected)).elevationMm} onRename={props.onRenamePlatform} onSetElevation={props.onSetElevation} onSetPurpose={props.onSetPurpose} onRotate={props.onRotatePlatform} onSetFinish={props.onSetFinish} onSetFramingIntent={props.onSetFramingIntent} onSetEdgeRole={props.onSetEdgeRole} onSetEdgeLength={props.onSetEdgeLength} onInsertVertex={props.onInsertVertex} onRemove={props.onRemovePlatform} /> : selectedStair ? <StairInspector stair={selectedStair} safety={selectedStairSafety} design={props.design} onSetConstruction={props.onSetStairConstruction} onConnectLanding={props.onConnectStairLanding} onResizeSide={props.onResizeStairSide} onRemove={props.onRemoveStair} /> : <div className="p-5"><div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-5 text-center"><Layers3 className="mx-auto text-slate-400" size={24} /><strong className="mt-3 block text-sm text-slate-800">Select a platform or stair</strong><p className="mt-1 text-xs leading-5 text-slate-500">Click a deck area to edit it, or click a stair callout to inspect and remove that stair.</p></div></div>}
 
       <div className="border-t border-slate-200 p-5">
         <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-[.12em] text-slate-500"><ShieldCheck size={15} /> Live design checks</h3>
@@ -177,8 +177,9 @@ function PlatformLayers({ design, site, onSelect, onMove }: { design: DeckDesign
   </section>;
 }
 
-function PlatformInspector({ design, platform, gradeElevationMm, onRename, onSetElevation, onSetPurpose, onRotate, onSetFinish, onSetFramingIntent, onSetEdgeRole, onSetEdgeLength, onInsertVertex, onRemove }: {
+function PlatformInspector({ design, site, platform, gradeElevationMm, onRename, onSetElevation, onSetPurpose, onRotate, onSetFinish, onSetFramingIntent, onSetEdgeRole, onSetEdgeLength, onInsertVertex, onRemove }: {
   design: DeckDesign;
+  site: SiteModel;
   platform: DeckPlatform;
   gradeElevationMm: number;
   onRename: (id: string, name: string) => void;
@@ -193,7 +194,9 @@ function PlatformInspector({ design, platform, gradeElevationMm, onRename, onSet
   onRemove: (id: string) => void;
 }) {
   const [name, setName] = useState(platform.name);
+  const [thresholdDropMm, setThresholdDropMm] = useState(50);
   const detectedStairLandingElevation = suggestedPlatformElevationForBoundary(design, platform.boundary);
+  const thresholdGuidance = platformDoorThresholdGuidance(platform, site, thresholdDropMm);
   return <div className="grid gap-5 p-5">
     <label className="grid gap-1.5 text-xs font-bold uppercase tracking-[.1em] text-slate-500">Platform name<input value={name} onChange={(event) => setName(event.target.value)} onBlur={() => { if (name.trim() && name.trim() !== platform.name) onRename(platform.id, name); }} className="min-h-10 rounded-lg border border-slate-300 px-3 text-sm font-semibold normal-case tracking-normal text-slate-900" /></label>
     <label className="grid gap-1.5 text-[10px] font-bold uppercase tracking-[.1em] text-slate-500">Platform purpose<select value={platform.purpose ?? 'deck'} onChange={(event) => onSetPurpose(platform.id, event.target.value as 'deck' | 'landing')} className="min-h-10 rounded-lg border border-slate-300 bg-white px-3 text-xs font-semibold normal-case tracking-normal text-slate-800"><option value="deck">Deck area</option><option value="landing">Stair landing</option></select></label>
@@ -202,6 +205,7 @@ function PlatformInspector({ design, platform, gradeElevationMm, onRename, onSet
       <label className="grid gap-1.5 text-[10px] font-bold uppercase tracking-[.1em] text-slate-500">Joist spacing<select value={platform.framingIntent.joistSpacingMm} onChange={(event) => onSetFramingIntent(platform.id, { joistSpacingMm: Number(event.target.value) as 300 | 400 | 600 })} className="min-h-10 rounded-lg border border-slate-300 bg-white px-2 text-xs font-semibold normal-case tracking-normal text-slate-800"><option value="300">300 mm</option><option value="400">400 mm</option><option value="600">600 mm</option></select></label>
     </div>
     <p className="-mt-2 rounded-lg bg-slate-100 px-3 py-2 text-[10px] leading-4 text-slate-600"><strong>{platform.elevationMm - gradeElevationMm} mm above ground datum.</strong> Stairs connected to this level derive their vertical rise from this value.</p>
+    {thresholdGuidance ? <div className="-mt-2 rounded-xl border border-blue-300 bg-blue-50 p-3"><strong className="block text-xs text-blue-950">{thresholdGuidance.doorId} measured threshold controls this house edge</strong><p className="mt-1 text-[10px] leading-4 text-blue-900">Recorded threshold: EL. {thresholdGuidance.thresholdElevationMm} mm. Set the walking surface below it for drainage and door clearance; final drop, membrane upstand, door swing, accessibility and envelope detail still require review.</p><label className="mt-2 grid gap-1 text-[9px] font-bold uppercase tracking-[.08em] text-blue-900">Surface below threshold<select value={thresholdDropMm} onChange={(event) => setThresholdDropMm(Number(event.target.value))} className="min-h-9 rounded-md border border-blue-300 bg-white px-2 text-xs font-semibold normal-case tracking-normal"><option value="0">0 mm · flush intent</option><option value="25">25 mm</option><option value="50">50 mm</option><option value="100">100 mm</option></select></label><button type="button" onClick={() => onSetElevation(platform.id, thresholdGuidance.suggestedPlatformElevationMm)} className="mt-2 min-h-9 w-full rounded-lg bg-blue-800 px-3 text-xs font-bold text-white">Use {thresholdGuidance.doorId} threshold · EL. {thresholdGuidance.suggestedPlatformElevationMm} mm</button></div> : platform.edges.some((edge) => edge.role === 'house') && site.designWall.openings.some((opening) => opening.kind === 'door') ? <div className="-mt-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-[10px] leading-4 text-amber-950"><strong>Field-verify the door threshold to unlock level guidance.</strong> Photo observation alone cannot set the deck elevation.</div> : null}
     {detectedStairLandingElevation !== null && detectedStairLandingElevation !== platform.elevationMm && <div className="-mt-2 rounded-xl border border-amber-300 bg-amber-50 p-3"><strong className="block text-xs text-amber-950">A yard stair lands on this platform outline</strong><p className="mt-1 text-[10px] leading-4 text-amber-900">Point B currently expects elevation {detectedStairLandingElevation} mm. Set this platform to that level to host the stair and recalculate the complete flight.</p><button type="button" onClick={() => onSetElevation(platform.id, detectedStairLandingElevation)} className="mt-2 min-h-9 w-full rounded-lg bg-amber-800 px-3 text-xs font-bold text-white">Use detected stair landing · EL. {detectedStairLandingElevation} mm</button></div>}
     <div className="-mt-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-[10px] leading-4 text-blue-950"><strong>Surface level and assembly depth are separate.</strong> Walking surface: EL. {platform.elevationMm} mm · decking: {platform.finish.deckingThicknessMm} mm. Joist and beam depths are selected from spans and loads during framing; post/support heights then derive from the surface level, assembly, and local grade.</div>
     <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3"><h4 className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[.12em] text-emerald-900"><RotateCw size={13} /> Rotate platform</h4><div className="mt-2 grid grid-cols-3 gap-2"><button type="button" onClick={() => onRotate(platform.id, -15)} aria-label={`Rotate ${platform.name} counterclockwise 15 degrees`} className="min-h-9 rounded-md border border-emerald-300 bg-white text-xs font-bold text-emerald-900">−15°</button><button type="button" onClick={() => onRotate(platform.id, 15)} aria-label={`Rotate ${platform.name} clockwise 15 degrees`} className="min-h-9 rounded-md border border-emerald-300 bg-white text-xs font-bold text-emerald-900">+15°</button><button type="button" onClick={() => onRotate(platform.id, 90)} aria-label={`Rotate ${platform.name} clockwise 90 degrees`} className="min-h-9 rounded-md border border-emerald-300 bg-white text-xs font-bold text-emerald-900">+90°</button></div><p className="mt-2 text-[10px] leading-4 text-emerald-950">Rotates around the platform centre. Use the canvas handle for a free angle; hold Alt to suppress 15° snapping.</p></div>
@@ -221,6 +225,27 @@ function PlatformInspector({ design, platform, gradeElevationMm, onRename, onSet
     </fieldset>
     <button type="button" onClick={() => onRemove(platform.id)} className="flex min-h-10 items-center justify-center gap-2 rounded-lg border border-red-200 text-xs font-bold text-red-700 hover:bg-red-50"><Trash2 size={15} /> Remove platform</button>
   </div>;
+}
+
+export interface PlatformDoorThresholdGuidance {
+  doorId: string;
+  thresholdElevationMm: number;
+  suggestedPlatformElevationMm: number;
+}
+
+/** Returns threshold-based level guidance only when the current wall matches a controlled field worksheet. */
+export function platformDoorThresholdGuidance(platform: DeckPlatform, site: SiteModel, dropMm = 50): PlatformDoorThresholdGuidance | null {
+  if (!assessExistingConditionFieldSurvey(site).current) return null;
+  const houseIntervals = platform.edges.flatMap((edge, index) => {
+    if (edge.role !== 'house') return [];
+    const start = platform.boundary.vertices[index];
+    const end = platform.boundary.vertices[(index + 1) % platform.boundary.vertices.length];
+    return [[Math.min(start.xMm, end.xMm), Math.max(start.xMm, end.xMm)] as const];
+  });
+  const door = site.designWall.openings.find((opening) => opening.kind === 'door' && (opening.evidenceStatus === 'field-measured' || opening.evidenceStatus === 'professional-verified') && houseIntervals.some(([minimum, maximum]) => Math.min(maximum, opening.offsetMm + opening.widthMm) > Math.max(minimum, opening.offsetMm)));
+  if (!door) return null;
+  const safeDropMm = Math.max(0, Math.round(dropMm));
+  return { doorId: door.id, thresholdElevationMm: door.sillHeightMm, suggestedPlatformElevationMm: Math.max(0, door.sillHeightMm - safeDropMm) };
 }
 
 function NumberField({ icon, label, value, suffix, min, max, step = 10, onChange }: { icon: React.ReactNode; label: string; value: number; suffix: string; min: number; max: number; step?: number; onChange: (value: number) => void }) {

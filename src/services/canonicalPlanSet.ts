@@ -104,12 +104,13 @@ function existingConditionsSheet(input: CanonicalPlanSetInput, issue: IssueMeta)
   const { property, site } = input;
   const capture = assessExistingConditionCapture(site.capture, { hasDoor: site.designWall.openings.some((opening) => opening.kind === 'door') });
   const assessment = assessSiteModel(site);
+  const fieldSurvey = site.fieldSurvey;
   const provenanceRows = [
     ['House reference', `${site.referenceSource} · ${site.status}`],
     ['Selected wall', `${site.designWall.label} · ${site.designWall.selectionStatus}`],
     ['Wall / house depth', `${site.designWall.lengthMm} / ${site.houseDepthMm} mm`],
     ['Wall orientation', `reverse ${site.designWall.reverseDirection ? 'yes' : 'no'} · outward inverted ${site.designWall.invertOutward ? 'yes' : 'no'}`],
-    ['Measured by / date', `${site.measuredBy || 'unrecorded'} · ${site.measuredAt || 'unrecorded'}`],
+    ['Field worksheet', fieldSurvey ? `${fieldSurvey.id} · ${fieldSurvey.status} · ${fieldSurvey.instrument} · ${fieldSurvey.recordedBy} ${fieldSurvey.recordedAt}` : 'not recorded'],
     ['Project datum', `${site.terrain.datum.label} · EL. ${site.terrain.datum.elevationMm} · ${site.terrain.datum.source} · ${site.terrain.datum.verificationStatus}`],
     ['Grade observations', `${site.terrain.gradePoints.length} point(s)`],
     ['Photo coverage', `${capture.recordedRequiredCount}/${capture.requiredCount} required recorded · ${capture.confirmedRequiredCount}/${capture.requiredCount} confirmed`],
@@ -128,7 +129,7 @@ function existingConditionsSheet(input: CanonicalPlanSetInput, issue: IssueMeta)
     <rect x="55" y="495" width="760" height="387" class="panel"/><text class="section" x="85" y="532">CAPTURE COVERAGE</text>${table(captureRows, 85, 556, 700, 35, 180)}
     <rect x="845" y="495" width="785" height="387" class="panel"/><text class="section" x="875" y="532">EXISTING-CONDITION EVIDENCE REGISTER</text>${noteList(visibleEvidenceNotes.length ? visibleEvidenceNotes : ['No municipal or homeowner evidence records are attached to this issue.'], 875, 558, 36, 720)}
     <text class="section" x="875" y="700">UNRESOLVED CONDITIONS</text>${noteList(visibleOpenConditions.length ? visibleOpenConditions : ['No unresolved existing-condition items recorded.'], 875, 726, 28, 720)}
-    ${notice(55, 900, 1575, 52, 'EVIDENCE CONTROL', 'Raw photographs corroborate visible conditions only. Any listed two-axis calibration remains homeowner-measured and unverified. Legal boundaries, concealed construction, soil, utilities, and construction dimensions remain governed by accepted survey, field measurement, and professional evidence.')}`);
+    ${notice(55, 900, 1575, 52, 'EVIDENCE CONTROL', 'Raw photographs corroborate visible conditions only. Two-axis photo calibrations remain unverified. Controlled field worksheets preserve direct measurement provenance but remain subject to professional acceptance. Legal boundaries, concealed construction, soil, utilities, and sealed design remain governed by accepted survey and professional evidence.')}`);
 }
 
 const CAPTURE_EVIDENCE_ROWS_PER_SHEET = 8;

@@ -81,10 +81,46 @@ export interface SiteModel {
   terrain: TerrainSurface;
   yardReference: ParcelYardReference;
   capture: ExistingConditionCapture;
+  fieldSurvey?: ExistingConditionFieldSurvey | null;
   measuredBy: string;
   measuredAt: string;
   notes: string;
   updatedAt: string;
+}
+
+export type FieldMeasurementInstrument = 'tape-measure' | 'laser-distance-meter' | 'survey-instrument';
+
+export interface FieldOpeningMeasurement {
+  openingId: string;
+  kind: HouseOpening['kind'];
+  offsetMm: number;
+  widthMm: number;
+  sillHeightMm: number;
+  heightMm: number;
+}
+
+/** Controlled homeowner/professional measurements of the selected existing wall. */
+export interface ExistingConditionFieldSurvey {
+  schema: 'existing-condition-field-survey/v1';
+  id: string;
+  status: 'homeowner-recorded-unverified' | 'professional-verified';
+  recordedBy: string;
+  recordedAt: string;
+  instrument: FieldMeasurementInstrument;
+  designWallId: string;
+  wallLengthMm: number;
+  wallHeightMm: number;
+  houseDepthMm: number;
+  verticalDatum: { id: 'DATUM-1'; label: string; elevationMm: number };
+  openings: FieldOpeningMeasurement[];
+  sourceEvidenceIds: string[];
+  notes: string;
+}
+
+export interface ExistingConditionFieldSurveyAssessment {
+  status: 'missing' | 'stale' | 'current-homeowner-unverified' | 'current-professional-verified';
+  current: boolean;
+  messages: string[];
 }
 
 export interface SiteAssessment {

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { AlertTriangle, ArrowRight, Check, CheckCircle2, CircleDot, Download, ExternalLink, FileCheck2, FileText, GitBranch, HardHat, Layers3, Printer, RefreshCw, Ruler, ShieldCheck, X } from 'lucide-react';
 import type { DeckDesign } from '../../domain/deckDesign';
 import type { FramingCheck, FramingDesign, FramingReviewGate } from '../../domain/framingDesign';
-import type { SiteModel } from '../../domain/siteModel';
+import { assessExistingConditionFieldSurvey, type SiteModel } from '../../domain/siteModel';
 import { buildCanonicalReviewIssue } from '../../services/canonicalReviewIssue';
 import { canonicalPlanFingerprint } from '../../services/canonicalPlanSet';
 import { evaluateCanonicalPermitReadiness } from '../../services/canonicalPermitReadiness';
@@ -45,6 +45,7 @@ interface PermitStageProps {
 
 /** Composes reviewable framing evidence and permit readiness from canonical project state. */
 export function PermitStage({ property, site, design, framing, framingStale, designErrors, siteErrors, siteWarnings, reviewPublication, architecturalReviewPublication, reviewIssueRevision, professionalReviewCycles, verificationEvidence, sidneyApplication, permitSubmissionHistory, onGenerateFraming, onDownloadReviewSet, onDownloadCadExchange, onDownloadCalculationReport, onBackToDesign, onContinue, onPublishReview, onPublishArchitecturalReview, onImportReview, onAddVerificationEvidence, onUpdateSidneyApplication, onRecordPermitSubmission, onResolveRedline }: PermitStageProps) {
+  const fieldSurveyCurrent = assessExistingConditionFieldSurvey(site).current;
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewSheetIndex, setPreviewSheetIndex] = useState(0);
   const [previewZoom, setPreviewZoom] = useState(100);
@@ -114,7 +115,7 @@ export function PermitStage({ property, site, design, framing, framingStale, des
 
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatusCard icon={<FileCheck2 size={20} />} label="Property evidence" value={property.parcel ? 'Municipal parcel identified' : 'Required'} tone={property.parcel ? 'success' : 'warning'} />
-        <StatusCard icon={<Ruler size={20} />} label="Existing conditions" value={site.designWall.selectionStatus === 'field-measured' ? 'Field measured' : 'Field verification required'} tone={site.designWall.selectionStatus === 'field-measured' ? 'success' : 'warning'} />
+        <StatusCard icon={<Ruler size={20} />} label="Existing conditions" value={fieldSurveyCurrent ? 'Controlled field worksheet current' : 'Field verification required'} tone={fieldSurveyCurrent ? 'success' : 'warning'} />
         <StatusCard icon={<GitBranch size={20} />} label="Framing graph" value={!framing ? 'Not generated' : framingStale ? 'Stale · regenerate' : `${framing.joists.length + framing.beams.length + framing.posts.length} members`} tone={framingCurrent ? 'success' : 'warning'} />
         <StatusCard icon={<HardHat size={20} />} label="Professional gates" value={framing ? `${requiredGates.length} required` : 'Generate to identify'} tone={requiredGates.length ? 'warning' : framing ? 'success' : 'warning'} />
       </section>
