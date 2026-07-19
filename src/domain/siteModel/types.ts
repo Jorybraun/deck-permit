@@ -7,7 +7,7 @@ export interface HouseOpening {
   /** Recorded opening height. Legacy records use a diagrammatic default until measured. */
   heightMm?: number;
   /** A photograph can establish presence, but not construction dimensions without a scale workflow. */
-  evidenceStatus?: 'photo-observed' | 'field-measured' | 'professional-verified';
+  evidenceStatus?: 'photo-observed' | 'scaled-photo-derived' | 'field-measured' | 'professional-verified';
   sourceEvidenceIds?: string[];
   /** Stable analysis/observation references preserve the explicit AI-to-model admission decision. */
   sourceAiObservationRefs?: string[];
@@ -144,6 +144,40 @@ export interface AiPhotoAnalysisDraft {
   generation: { model: string; responseId: string; generatedAt: string };
 }
 
+export interface NormalizedPhotoPoint {
+  /** Horizontal image coordinate from 0 (left) to 1 (right). */
+  x: number;
+  /** Vertical image coordinate from 0 (top) to 1 (bottom). */
+  y: number;
+}
+
+export interface NormalizedPhotoBox extends NormalizedPhotoPoint {
+  width: number;
+  height: number;
+}
+
+/**
+ * One source-bound, two-axis affine measurement of a single planar wall photo.
+ * The record preserves exactly what the homeowner clicked and measured; it is
+ * never treated as a survey, photogrammetry result, or professional verification.
+ */
+export interface PhotoWallCalibration {
+  schema: 'photo-wall-calibration/v1';
+  id: string;
+  sourceEvidenceId: string;
+  openingId: string;
+  openingKind: HouseOpening['kind'];
+  method: 'two-axis-affine';
+  horizontalReference: { label: string; start: NormalizedPhotoPoint; end: NormalizedPhotoPoint; distanceMm: number };
+  verticalReference: { label: string; start: NormalizedPhotoPoint; end: NormalizedPhotoPoint; distanceMm: number };
+  openingBox: NormalizedPhotoBox;
+  result: { offsetMm: number; widthMm: number; sillHeightMm: number; heightMm: number };
+  recordedBy: string;
+  recordedAt: string;
+  status: 'homeowner-measured-unverified';
+  warnings: string[];
+}
+
 export type CaptureEvidenceChanges = Partial<Pick<CaptureEvidence, 'category' | 'label' | 'notes' | 'status' | 'observationTags' | 'viewpoint' | 'referenceLabel' | 'referenceDimensionMm'>>;
 
 /** Metadata for locally stored private capture files; bytes are owned by capture-file storage. */
@@ -152,6 +186,8 @@ export interface ExistingConditionCapture {
   evidence: CaptureEvidence[];
   /** AI observations remain a separate, homeowner-reviewed draft layer. */
   aiAnalyses?: AiPhotoAnalysisDraft[];
+  /** Explicit, source-bound photo calibrations; raw AI observations never populate these. */
+  wallCalibrations?: PhotoWallCalibration[];
 }
 
 export interface CaptureRequirement {

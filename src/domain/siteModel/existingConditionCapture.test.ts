@@ -35,7 +35,9 @@ describe('ExistingConditionCapture public contract', () => {
     expect(() => addCaptureEvidence(createExistingConditionCapture(), { ...evidence('1', 'design-wall'), mimeType: 'text/plain' })).toThrow(/must be a JPEG/);
     let capture = addCaptureEvidence(createExistingConditionCapture(), evidence('1', 'design-wall'));
     capture = addCaptureEvidence(capture, evidence('2', 'grade-context'));
+    capture = { ...capture, wallCalibrations: [{ schema: 'photo-wall-calibration/v1', id: 'cal-1', sourceEvidenceId: '1', openingId: 'W1', openingKind: 'window', method: 'two-axis-affine', horizontalReference: { label: 'wall', start: { x: 0, y: 1 }, end: { x: 1, y: 1 }, distanceMm: 5000 }, verticalReference: { label: 'height', start: { x: 0, y: 1 }, end: { x: 0, y: 0 }, distanceMm: 3000 }, openingBox: { x: .2, y: .2, width: .2, height: .4 }, result: { offsetMm: 1000, widthMm: 1000, sillHeightMm: 1200, heightMm: 1200 }, recordedBy: 'Owner', recordedAt: '2026-07-18', status: 'homeowner-measured-unverified', warnings: [] }] };
     expect(removeCaptureEvidence(capture, '1').evidence.map((record) => record.id)).toEqual(['2']);
+    expect(removeCaptureEvidence(capture, '1').wallCalibrations).toEqual([]);
   });
 
   it('keeps AI observations source-bound and homeowner-reviewed without creating measurements', () => {

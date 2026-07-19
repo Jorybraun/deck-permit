@@ -4,17 +4,19 @@
 
 This module gathers the minimum photographic evidence needed to turn a homeowner's rough deck idea into a reviewable existing-condition model. It records what each image is intended to show, preserves its identity with a SHA-256 digest, and reports whether the required views are missing, merely recorded, or homeowner-confirmed.
 
-It does not automatically infer dimensions, decide structural facts, or claim that an existing condition has been professionally verified. Originals remain local by default. Only the explicit **Analyze photos with Cerebras** action sends bounded JPEG/PNG analysis copies to the server-side vision workflow. A homeowner-accepted door/window observation may then be explicitly admitted as a source-bound, `photo-observed` wall object, but its starter dimensions remain provisional until field measured.
+It does not automatically infer dimensions, decide structural facts, or claim that an existing condition has been professionally verified. Originals remain local by default. Only the explicit **Analyze photos with Cerebras** action sends bounded JPEG/PNG analysis copies to the server-side vision workflow. A homeowner-accepted door/window observation may then be explicitly admitted as a source-bound, `photo-observed` wall object, but its starter dimensions remain provisional. The separate photo-calibration workflow can derive wall-plane dimensions only after the homeowner enters two distances they actually measured and clicks the corresponding axes and opening corners.
 
 ## Ownership and boundaries
 
 - `SiteModel.capture` owns versioned evidence metadata: category, label, original filename, MIME type, byte size, digest, time recorded, status, viewpoint, controlled observations, optional scale reference, and notes.
 - The `capture-files` IndexedDB store owns the private image bytes. Image bytes are intentionally excluded from the canonical JSON project record.
 - `existingConditionCapture.ts` owns validation, immutable metadata commands, category requirements, and readiness assessment.
+- `photoWallCalibration.ts` owns the two-axis affine calculation, validation, source binding, measurement provenance, and admission of `scaled-photo-derived` openings.
 - `captureFileStorage.ts` owns file hashing and local byte persistence.
 - `ExistingConditionCapturePanel.tsx` presents the checklist and emits typed add, update, and remove intents. It does not mutate the site model directly.
 - Framing and plan-generation modules may consume evidence identifiers and readiness results, but may not reinterpret an image as a verified measurement.
-- `SiteModel.designWall.openings` owns the editable door/window register. A record carries an evidence status; `photo-observed` proves presence only, while field or professional status is required before dimensions can govern review.
+- `SiteModel.designWall.openings` owns the editable door/window register. A record carries an evidence status: `photo-observed` proves presence only; `scaled-photo-derived` records a two-axis homeowner calibration but still requires tape/laser verification; `field-measured` and `professional-verified` describe progressively stronger evidence.
+- `SiteModel.capture.wallCalibrations` preserves both normalized reference axes, both homeowner-entered distances, the traced image box, the derived opening geometry, source photo, measurer, date, method, and limitations. Changing any controlled calibration fact changes the project fingerprint and makes generated framing stale.
 - `sourceEvidenceIds` and `sourceAiObservationRefs` bind an admitted provisional opening to the exact photo and homeowner-accepted Cerebras observation. Re-admitting the same observation is rejected.
 - `wallOpeningCoordination.ts` consumes that register with the deck geometry. It blocks surface/sill and ledger intersections and routes door access, low-window, evidence, and wall-alignment conditions to the professional-review package.
 
@@ -27,8 +29,21 @@ It does not automatically infer dimensions, decide structural facts, or claim th
 5. If requested, Cerebras returns source-bound visual observations with explicit confidence, uncertainty, and `not-measured` status. Nothing enters the wall model at this step.
 6. The homeowner accepts or rejects each observation. An accepted door/window still requires a separate **Add provisional … to wall measurement list** action.
 7. Admission creates exactly one provisional opening, preserves the photo and AI observation references, and rejects duplicates. Starter offset, width, sill, and height are visibly labelled as non-photographic defaults until field measured.
-8. C1.x schedules record the accepted AI observation and the opening record carries the same reference into the existing-condition elevation and layered DXF.
-9. Readiness is derived from the current evidence set. Required categories depend on known conditions, such as whether a door exists. Plan and framing review gates remain open until every required view is recorded and homeowner-confirmed.
+8. To measure an opening from the image, the homeowner selects its source photo, enters a known horizontal distance and a known vertical distance, then clicks H1/H2, V1/V2, and opposite opening corners O1/O2. A standard-object guess is not accepted as a measurement claim.
+9. The calibration engine solves the opening corners against the independent image-plane axes, validates the resulting offset/width/sill/height against the wall, stores the complete click and measurement record, and marks the opening `scaled-photo-derived`.
+10. C1.x schedules print the accepted AI observation and any calibration distances/result. The opening record carries the same evidence status into the existing-condition elevation and layered DXF.
+11. Readiness is derived from the current evidence set. Required categories depend on known conditions, such as whether a door exists. A scaled-photo result remains a review item until field-verified; plan and framing review gates also remain open until every required view is recorded and homeowner-confirmed.
+
+## Photo-calibration geometry
+
+The calibrated photo workflow intentionally uses a small and inspectable affine model rather than claiming single-image photogrammetry:
+
+1. The H1→H2 vector represents one measured horizontal distance on the visible wall plane.
+2. The V1→V2 vector represents one independently measured vertical distance on the same wall plane.
+3. The O1/O2 box identifies the visible opening rectangle. The four box corners are projected into the two-axis basis.
+4. Minimum and maximum horizontal coordinates yield wall offset and width. Minimum and maximum vertical coordinates yield sill/threshold height and opening height.
+
+The two reference vectors may appear skewed in the image, but they may not be coincident or nearly parallel. The workflow warns when their apparent angle suggests material perspective distortion. It does not solve lens distortion or projective depth, and it cannot establish local grade unless the selected horizontal datum is itself a measured grade reference.
 
 ## Privacy and provenance
 
@@ -47,9 +62,9 @@ None of these states alone establishes a survey coordinate, elevation, concealed
 - Unsupported or oversized files are rejected before metadata is admitted.
 - If metadata admission fails after a file is saved, the app removes the newly saved file.
 - Missing local bytes leave their metadata visible without a thumbnail so the evidence problem can be diagnosed instead of silently discarded.
-- Removing a record deletes both its local bytes and canonical metadata.
+- Removing a record deletes its local bytes, canonical metadata, AI observations, and photo-calibration records. An opening that loses its only calibration is downgraded to `photo-observed` instead of retaining a false measured status.
 - Older stored site models migrate to `site-model/v4` with an empty capture collection.
 
 ## Verification
 
-Domain tests cover conditional requirements, recorded-versus-confirmed readiness, validation, and removal. Storage tests cover hashing, file-store round trips, deletion, and invalid file rejection. The application build and browser review cover the integrated homeowner checklist and its accessible file controls.
+Domain tests cover conditional requirements, recorded-versus-confirmed readiness, validation, removal, affine derivation, invalid axes/boxes, wall bounds, source binding, and calibrated opening admission. Storage tests cover hashing, file-store round trips, deletion, and invalid file rejection. The application build and browser review cover the integrated homeowner checklist, real Lovell photo selection, AI-outline seeding, six-point calibration interaction, derived dimension preview, application to W1, warning propagation, persistence, and console errors.

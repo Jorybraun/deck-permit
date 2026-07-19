@@ -145,7 +145,16 @@ export function App() {
   const removeCapture = async (evidenceId: string) => {
     await deleteCaptureFile(evidenceId);
     const current = useHomeownerProject.getState();
-    if (current.site) current.setSite(updateSiteModel(current.site, { capture: removeCaptureEvidence(current.site.capture, evidenceId) }));
+    if (current.site) {
+      const capture = removeCaptureEvidence(current.site.capture, evidenceId);
+      const calibratedOpeningIds = new Set((capture.wallCalibrations || []).map((record) => record.openingId));
+      const openings = current.site.designWall.openings.map((opening) => ({
+        ...opening,
+        sourceEvidenceIds: (opening.sourceEvidenceIds || []).filter((id) => id !== evidenceId),
+        evidenceStatus: opening.evidenceStatus === 'scaled-photo-derived' && !calibratedOpeningIds.has(opening.id) ? 'photo-observed' as const : opening.evidenceStatus,
+      }));
+      current.setSite(updateSiteModel(current.site, { capture }, { openings }));
+    }
   };
 
   const reviseCapture = (evidenceId: string, changes: CaptureEvidenceChanges) => {

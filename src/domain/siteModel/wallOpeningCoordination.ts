@@ -47,6 +47,12 @@ export function assessWallOpeningCoordination(design: DeckDesign, site: SiteMode
       basis: 'A photograph establishes visible presence only unless a calibrated measurement workflow is recorded.',
       ruleId: 'AC-01-opening-evidence', basisType: architecturalRule(profile, 'AC-01-opening-evidence').classification,
     });
+    if (opening.evidenceStatus === 'scaled-photo-derived') checks.push({
+      id: `${opening.id}-evidence`, kind: 'opening-evidence', status: 'review', openingId: opening.id, platformId: null, horizontalOverlapMm: 0,
+      message: `${opening.id} ${opening.kind} is scaled from a homeowner-calibrated wall photo. Verify its offset, width, sill, and head with a tape or laser before professional issue.`,
+      basis: 'Two-axis affine photo calibration is a wall-plane field aid; it does not remove perspective error or establish concealed construction.',
+      ruleId: 'AC-01-opening-evidence', basisType: architecturalRule(profile, 'AC-01-opening-evidence').classification,
+    });
 
     for (const hosted of hostedEdges) {
       const alignmentOffsetMm = Math.max(Math.abs(hosted.points[0][1]), Math.abs(hosted.points[1][1]));

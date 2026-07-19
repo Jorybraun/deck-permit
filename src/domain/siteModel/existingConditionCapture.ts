@@ -49,7 +49,7 @@ export function updateCaptureEvidence(capture: ExistingConditionCapture, evidenc
 }
 
 export function removeCaptureEvidence(capture: ExistingConditionCapture, evidenceId: string): ExistingConditionCapture {
-  return { ...capture, evidence: capture.evidence.filter((record) => record.id !== evidenceId), aiAnalyses: (capture.aiAnalyses || []).map((analysis) => ({ ...analysis, observations: analysis.observations.filter((observation) => observation.sourceEvidenceId !== evidenceId) })) };
+  return { ...capture, evidence: capture.evidence.filter((record) => record.id !== evidenceId), aiAnalyses: (capture.aiAnalyses || []).map((analysis) => ({ ...analysis, observations: analysis.observations.filter((observation) => observation.sourceEvidenceId !== evidenceId) })), wallCalibrations: (capture.wallCalibrations || []).filter((record) => record.sourceEvidenceId !== evidenceId) };
 }
 
 export function recordAiPhotoAnalysis(capture: ExistingConditionCapture, analysis: AiPhotoAnalysisDraft): ExistingConditionCapture {

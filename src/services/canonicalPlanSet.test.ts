@@ -22,7 +22,8 @@ describe('canonical coordinated review set', () => {
     const selectedSite = selectHouseWall(createSiteModel(property), property, 'house', 0);
     let capture = addCaptureEvidence(selectedSite.capture, { id: 'capture-wall', category: 'design-wall', label: 'Complete wall', fileName: 'wall.jpg', mimeType: 'image/jpeg', byteSize: 1200, sha256: 'a'.repeat(64), recordedAt: '2026-07-18T00:00:00.000Z', status: 'homeowner-confirmed', notes: 'Cladding appears intact.', viewpoint: 'Rear yard looking toward house', observationTags: ['complete-wall', 'wall-corners', 'scale-reference'], referenceLabel: 'tape', referenceDimensionMm: 1000 });
     capture = recordAiPhotoAnalysis(capture, { schema: 'ai-photo-observation-draft/v1', id: 'analysis-1', summary: 'Door visible.', unknowns: ['Exact dimensions'], generation: { model: 'gemma-4-31b', responseId: 'response', generatedAt: '2026-07-18T00:00:00.000Z' }, observations: [{ id: 'observation-1', sourceEvidenceId: 'capture-wall', kind: 'door', confidence: .94, description: 'Exterior door is visible on the selected wall.', measurementStatus: 'not-measured', boundingBox: null, uncertainties: ['Perspective'], decision: 'homeowner-accepted' }] });
-    const site = { ...selectedSite, capture, measuredBy: 'Homeowner', yardReference: { ...selectedSite.yardReference, status: 'homeowner-selected' as const, frontEdgeIndex: 0, rearEdgeIndex: 2, selectedBy: 'Homeowner', selectedAt: '2026-07-18T00:00:00.000Z' }, designWall: { ...selectedSite.designWall, openings: [{ id: 'D1', kind: 'door' as const, offsetMm: 900, widthMm: 1800, sillHeightMm: 120, evidenceStatus: 'field-measured' as const, sourceEvidenceIds: ['capture-wall'], sourceAiObservationRefs: ['analysis-1:observation-1'] }] } };
+    capture = { ...capture, wallCalibrations: [{ schema: 'photo-wall-calibration/v1', id: 'cal-door-1', sourceEvidenceId: 'capture-wall', openingId: 'D1', openingKind: 'door', method: 'two-axis-affine', horizontalReference: { label: 'wall tape', start: { x: .1, y: .8 }, end: { x: .9, y: .8 }, distanceMm: 7200 }, verticalReference: { label: 'laser height', start: { x: .1, y: .8 }, end: { x: .1, y: .2 }, distanceMm: 3000 }, openingBox: { x: .2, y: .356, width: .2, height: .42 }, result: { offsetMm: 900, widthMm: 1800, sillHeightMm: 120, heightMm: 2100 }, recordedBy: 'Homeowner', recordedAt: '2026-07-18', status: 'homeowner-measured-unverified', warnings: ['Field verify.'] }] };
+    const site = { ...selectedSite, capture, measuredBy: 'Homeowner', yardReference: { ...selectedSite.yardReference, status: 'homeowner-selected' as const, frontEdgeIndex: 0, rearEdgeIndex: 2, selectedBy: 'Homeowner', selectedAt: '2026-07-18T00:00:00.000Z' }, designWall: { ...selectedSite.designWall, openings: [{ id: 'D1', kind: 'door' as const, offsetMm: 900, widthMm: 1800, sillHeightMm: 120, evidenceStatus: 'scaled-photo-derived' as const, sourceEvidenceIds: ['capture-wall'], sourceAiObservationRefs: ['analysis-1:observation-1'] }] } };
     const framing = generateFramingDesign(design, site, { municipality: 'Town of Sidney', snowLoadKpa: 1 }, '2026-07-18T00:00:00.000Z');
     const planSet = generateCanonicalPlanSet({ property, site, design, framing, issuedAt: '2026-07-18T00:00:00.000Z' });
 
@@ -64,7 +65,7 @@ describe('canonical coordinated review set', () => {
     expect(siteSheet).toContain('Municipal GIS is reference evidence, not a legal survey.');
     const existingSheet = planSet.sheets.find((sheet) => sheet.number === 'C1.0')?.svg || '';
     expect(existingSheet).toContain('EXISTING HOUSE WALL AND OPENING RECORD');
-    expect(existingSheet).toContain('D1 · 1800 W × 2100 H · SILL 120 · FIELD-MEASURED');
+    expect(existingSheet).toContain('D1 · 1800 W × 2100 H · SILL 120 · SCALED-PHOTO-DERIVED');
     expect(existingSheet).toContain('AI REF analysis-1:observation-1');
     expect(existingSheet).toContain('MEASUREMENT / DATUM PROVENANCE');
     expect(existingSheet).toContain('EXISTING-CONDITION EVIDENCE REGISTER');
@@ -77,6 +78,8 @@ describe('canonical coordinated review set', () => {
     expect(captureSchedules[0].svg).toContain('tape · 1000 mm');
     expect(captureSchedules[0].svg).toContain('SHA aaaaaaaaaaaaaaaa…');
     expect(captureSchedules[0].svg).toContain('AI ACCEPTED DOOR observation-1');
+    expect(captureSchedules[0].svg).toContain('D1: H 7200 / V 3000 mm →');
+    expect(captureSchedules[0].svg).toContain('900 OFFSET, 1800W, 120 SILL, 2100H');
     expect(planSet.sheets.find((sheet) => sheet.number === 'A2.0')?.svg).toContain('DECK, LANDING, STAIR AND GUARD PLAN');
     expect(planSet.sheets.find((sheet) => sheet.number === 'A2.0')?.svg).toContain('STAIR 1 · 900 WIDE · 3R');
     expect(planSet.sheets.find((sheet) => sheet.number === 'A2.0')?.svg).toContain('900H · DROP 900');

@@ -113,6 +113,7 @@ function existingConditionsSheet(input: CanonicalPlanSetInput, issue: IssueMeta)
     ['Project datum', `${site.terrain.datum.label} · EL. ${site.terrain.datum.elevationMm} · ${site.terrain.datum.source} · ${site.terrain.datum.verificationStatus}`],
     ['Grade observations', `${site.terrain.gradePoints.length} point(s)`],
     ['Photo coverage', `${capture.recordedRequiredCount}/${capture.requiredCount} required recorded · ${capture.confirmedRequiredCount}/${capture.requiredCount} confirmed`],
+    ['Photo calibrations', `${site.capture.wallCalibrations?.length || 0} two-axis homeowner measurement record(s)`],
   ];
   const captureRows = capture.requirements.map((requirement) => [requirement.title, `${requirement.required ? 'required' : 'supplemental'} · ${requirement.status} · ${requirement.evidenceIds.join(', ') || 'no evidence id'}`]);
   const evidenceNotes = property.evidence.map((source) => `${source.label} · ${source.authority} · ${source.status} · retrieved ${source.retrievedAt.slice(0, 10)}.`);
@@ -127,7 +128,7 @@ function existingConditionsSheet(input: CanonicalPlanSetInput, issue: IssueMeta)
     <rect x="55" y="495" width="760" height="387" class="panel"/><text class="section" x="85" y="532">CAPTURE COVERAGE</text>${table(captureRows, 85, 556, 700, 35, 180)}
     <rect x="845" y="495" width="785" height="387" class="panel"/><text class="section" x="875" y="532">EXISTING-CONDITION EVIDENCE REGISTER</text>${noteList(visibleEvidenceNotes.length ? visibleEvidenceNotes : ['No municipal or homeowner evidence records are attached to this issue.'], 875, 558, 36, 720)}
     <text class="section" x="875" y="700">UNRESOLVED CONDITIONS</text>${noteList(visibleOpenConditions.length ? visibleOpenConditions : ['No unresolved existing-condition items recorded.'], 875, 726, 28, 720)}
-    ${notice(55, 900, 1575, 52, 'EVIDENCE CONTROL', 'Photographs and municipal geometry corroborate visible conditions only. Legal boundaries, concealed construction, soil, utilities, and field dimensions remain governed by accepted survey, measurement, and professional evidence.')}`);
+    ${notice(55, 900, 1575, 52, 'EVIDENCE CONTROL', 'Raw photographs corroborate visible conditions only. Any listed two-axis calibration remains homeowner-measured and unverified. Legal boundaries, concealed construction, soil, utilities, and construction dimensions remain governed by accepted survey, field measurement, and professional evidence.')}`);
 }
 
 const CAPTURE_EVIDENCE_ROWS_PER_SHEET = 8;
@@ -142,13 +143,13 @@ function captureEvidenceScheduleSheets(input: CanonicalPlanSetInput, issue: Issu
     return makeSheet(id, 'Existing-Condition Photo Evidence Schedule', 'NTS · SOURCE FILES GOVERN', `C1.${pageIndex + 1}`, input, issue, `
       <rect x="55" y="82" width="1575" height="820" class="panel"/><text class="section" x="80" y="118">PHOTO OBSERVATIONS &amp; INTEGRITY RECORDS · ${pageIndex + 1}/${pageCount}</text>
       <text class="tiny" x="80" y="137">SOURCE FILES REMAIN PRIVATE UNTIL EXPLICIT PACKAGE ASSEMBLY · METADATA AND OBSERVATIONS ARE BOUND TO ${issue.fingerprint}</text>
-      ${captureEvidenceTable(pageRecords, input.site.capture.aiAnalyses || [], pageIndex * CAPTURE_EVIDENCE_ROWS_PER_SHEET, 80, 152, 1525, 78)}
+      ${captureEvidenceTable(pageRecords, input.site.capture.aiAnalyses || [], input.site.capture.wallCalibrations || [], pageIndex * CAPTURE_EVIDENCE_ROWS_PER_SHEET, 80, 152, 1525, 78)}
       <text class="tiny" x="80" y="875">${records.length} TOTAL CAPTURE RECORD(S) · ROWS ${pageRecords.length ? pageIndex * CAPTURE_EVIDENCE_ROWS_PER_SHEET + 1 : 0}–${pageIndex * CAPTURE_EVIDENCE_ROWS_PER_SHEET + pageRecords.length} SHOWN · COMPLETE BYTES AND SHA-256 VALIDATED DURING PACKAGE ASSEMBLY</text>
-      <text class="title-warning" x="80" y="900">OBSERVATIONS DESCRIBE VISIBLE CONDITIONS ONLY · THEY DO NOT CALIBRATE THE IMAGE OR ESTABLISH CONCEALED CONSTRUCTION, LEGAL BOUNDARIES OR STRUCTURAL CAPACITY</text>`);
+      <text class="title-warning" x="80" y="900">RAW OBSERVATIONS DO NOT SET GEOMETRY · LISTED TWO-AXIS CALIBRATIONS REMAIN HOMEOWNER-MEASURED AND UNVERIFIED · NO CONCEALED CONSTRUCTION OR CAPACITY IS INFERRED</text>`);
   });
 }
 
-function captureEvidenceTable(records: CaptureEvidence[], analyses: NonNullable<SiteModel['capture']['aiAnalyses']>, offset: number, x: number, y: number, width: number, rowHeight: number): string {
+function captureEvidenceTable(records: CaptureEvidence[], analyses: NonNullable<SiteModel['capture']['aiAnalyses']>, calibrations: NonNullable<SiteModel['capture']['wallCalibrations']>, offset: number, x: number, y: number, width: number, rowHeight: number): string {
   const headers = ['TAG / RECORD', 'CATEGORY', 'STATUS', 'VIEWPOINT', 'VISIBLE OBSERVATIONS', 'SCALE REFERENCE', 'NOTES / INTEGRITY'];
   const columnWidths = [160, 150, 110, 230, 340, 190, width - 1180];
   const boundaries = columnWidths.reduce<number[]>((items, column) => [...items, items[items.length - 1] + column], [x]);
@@ -157,7 +158,8 @@ function captureEvidenceTable(records: CaptureEvidence[], analyses: NonNullable<
   const body = source.map((record, rowIndex) => {
     const yy = y + 48 + rowIndex * rowHeight;
     if (!record) return `<rect x="${x}" y="${yy}" width="${width}" height="${rowHeight}" class="schedule-row"/><text class="schedule-text" x="${x + 8}" y="${yy + 26}">—</text><text class="note" x="${boundaries[1] + 8}" y="${yy + 26}">No homeowner photo evidence is recorded for this issue.</text>`;
-    const reference = record.referenceDimensionMm ? `${record.referenceLabel || 'reference'} · ${record.referenceDimensionMm} mm` : 'none recorded';
+    const calibrationNotes = calibrations.filter((calibration) => calibration.sourceEvidenceId === record.id).map((calibration) => `${calibration.openingId}: H ${calibration.horizontalReference.distanceMm} / V ${calibration.verticalReference.distanceMm} mm → ${calibration.result.offsetMm} OFFSET, ${calibration.result.widthMm}W, ${calibration.result.sillHeightMm} SILL, ${calibration.result.heightMm}H · ${calibration.recordedBy} ${calibration.recordedAt}`);
+    const reference = [record.referenceDimensionMm ? `${record.referenceLabel || 'reference'} · ${record.referenceDimensionMm} mm` : 'none recorded', ...calibrationNotes].join(' · ');
     const acceptedAi = analyses.flatMap((analysis) => analysis.observations.filter((observation) => observation.sourceEvidenceId === record.id && observation.decision === 'homeowner-accepted').map((observation) => `AI ACCEPTED ${observation.kind.toUpperCase()} ${observation.id}: ${observation.description}`));
     const values = [`EV-${String(offset + rowIndex + 1).padStart(2, '0')} · ${record.id.slice(0, 12)}`, record.category, record.status, record.viewpoint || 'not recorded', (record.observationTags || []).join(', ') || 'none recorded', reference, `${record.notes || 'No condition note'}${acceptedAi.length ? ` · ${acceptedAi.join(' · ')}` : ''} · SHA ${record.sha256.slice(0, 16)}…`];
     return `<rect x="${x}" y="${yy}" width="${width}" height="${rowHeight}" class="schedule-row"/>${values.map((value, columnIndex) => wrapped(value, boundaries[columnIndex] + 6, yy + 16, columnWidths[columnIndex] - 12, 7.1, 9, 6)).join('')}`;
