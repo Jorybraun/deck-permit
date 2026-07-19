@@ -18,7 +18,8 @@ describe('wall opening coordination', () => {
     const site = siteWithOpening({ id: 'W1', kind: 'window', offsetMm: 800, widthMm: 1200, sillHeightMm: 900, heightMm: 1200, evidenceStatus: 'field-measured' });
     const assessment = assessWallOpeningCoordination(platform(875, 'freestanding'), site);
     expect(assessment.status).toBe('blocked');
-    expect(assessment.checks).toContainEqual(expect.objectContaining({ kind: 'window-clearance', status: 'blocked', openingId: 'W1', platformId: 'P1', horizontalOverlapMm: 1200 }));
+    expect(assessment).toMatchObject({ schema: 'wall-opening-coordination/v2', profile: { schema: 'architectural-coordination-profile/v1' } });
+    expect(assessment.checks).toContainEqual(expect.objectContaining({ kind: 'window-clearance', status: 'blocked', openingId: 'W1', platformId: 'P1', horizontalOverlapMm: 1200, ruleId: 'AC-04-window-deck-interaction', basisType: 'project-review-assumption' }));
   });
 
   it('reviews a low window without claiming its use or egress classification', () => {
@@ -53,5 +54,16 @@ describe('wall opening coordination', () => {
     const site = siteWithOpening({ id: 'W1', kind: 'window', offsetMm: 800, widthMm: 1200, sillHeightMm: 1800, heightMm: 900, evidenceStatus: 'field-measured' });
     const assessment = assessWallOpeningCoordination(platform(450, 'freestanding', 500), site);
     expect(assessment.checks).toContainEqual(expect.objectContaining({ kind: 'house-edge-alignment', status: 'blocked' }));
+  });
+
+  it('labels every numeric tolerance as an editable model or review assumption with traceable sources', () => {
+    const assessment = assessWallOpeningCoordination(platform(450), siteWithOpening({ id: 'W1', kind: 'window', offsetMm: 800, widthMm: 1200, sillHeightMm: 900, heightMm: 1200, evidenceStatus: 'field-measured' }), 'Town of Sidney');
+    const parameterizedRules = assessment.profile.rules.filter((rule) => rule.parameters.length > 0);
+    expect(parameterizedRules.every((rule) => ['model-integrity', 'project-review-assumption'].includes(rule.classification))).toBe(true);
+    expect(parameterizedRules.flatMap((rule) => rule.parameters).every((parameter) => parameter.editableAtProfessionalReview && parameter.unit === 'mm')).toBe(true);
+    expect(assessment.profile.sources).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'bcbc-2024-revision-2', locator: expect.stringContaining('Division B') }),
+      expect.objectContaining({ id: 'sidney-residential-deck-guide', locator: expect.stringContaining('Plan Details') }),
+    ]));
   });
 });

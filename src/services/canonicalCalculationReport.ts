@@ -4,7 +4,7 @@ import { assessSiteCompliance, calculateSiteClearances, projectPropertyToLocal, 
 import type { Property } from '../types';
 import { canonicalPlanFingerprint } from './canonicalPlanSet';
 
-export const CANONICAL_CALCULATION_REPORT_SCHEMA = 'permitly-canonical-calculation-report/v1' as const;
+export const CANONICAL_CALCULATION_REPORT_SCHEMA = 'permitly-canonical-calculation-report/v2' as const;
 
 export interface CanonicalCalculationReport {
   schema: typeof CANONICAL_CALCULATION_REPORT_SCHEMA;
@@ -202,6 +202,7 @@ export function buildCanonicalCalculationReport(input: CalculationReportInput): 
       'Demand values are coordination calculations only; member resistance and connector capacity are not established except where an encoded prescriptive table screen is explicitly recorded.',
       'Footing sizing is a bearing-area screen using assumed soil capacity. Depth, frost, concrete, reinforcement, uplift, sliding, utilities, drainage, and settlement remain unresolved.',
       'Ledger substrate, envelope integration, lateral load path, guards, stairs, stringer notching, connections, corrosion compatibility, and proprietary hardware require project-specific professional resolution.',
+      'Architectural coordination values classified as project-review assumptions are proximity screens, not adopted-code limits; the qualified reviewer must accept, replace, or remove them for the issued design.',
       'Municipal GIS, homeowner measurements, photographs, and terrain observations remain subject to the evidence status recorded on C1.0.',
       'This report is not authenticated engineering and is not authorization to construct.',
     ],
@@ -225,7 +226,16 @@ export async function buildCanonicalCalculationPdf(report: CanonicalCalculationR
     pdf.setFont('helvetica', 'normal'); pdf.setFontSize(size); pdf.setTextColor(55, 67, 61);
     const lines = pdf.splitTextToSize(value, contentWidth - indent); ensure(lines.length * (size + 3) + 5); pdf.text(lines, margin + indent, y); y += lines.length * (size + 3) + 5;
   };
-  const keyValue = (label: string, value: string) => { ensure(18); pdf.setFontSize(8.5); pdf.setFont('helvetica', 'bold'); pdf.setTextColor(42, 55, 48); pdf.text(label, margin, y); pdf.setFont('helvetica', 'normal'); pdf.text(value, margin + 145, y); y += 17; };
+  const keyValue = (label: string, value: string) => {
+    pdf.setFontSize(8.5);
+    const labelLines = pdf.splitTextToSize(label, 132);
+    const valueLines = pdf.splitTextToSize(value, contentWidth - 145);
+    const lineCount = Math.max(labelLines.length, valueLines.length);
+    ensure(lineCount * 11 + 6);
+    pdf.setFont('helvetica', 'bold'); pdf.setTextColor(42, 55, 48); pdf.text(labelLines, margin, y);
+    pdf.setFont('helvetica', 'normal'); pdf.text(valueLines, margin + 145, y);
+    y += lineCount * 11 + 6;
+  };
   const rule = () => { ensure(12); pdf.setDrawColor(190, 198, 193); pdf.line(margin, y, pageWidth - margin, y); y += 12; };
 
   pdf.setFillColor(23, 74, 55); pdf.rect(0, 0, pageWidth, 118, 'F');
@@ -254,10 +264,16 @@ export async function buildCanonicalCalculationPdf(report: CanonicalCalculationR
 
   heading('Door, window, and ledger coordination', 12);
   keyValue('Coordination status', report.openingCoordination.status.toUpperCase());
+  keyValue('Rule profile', `${report.openingCoordination.profile.id} · ${report.openingCoordination.profile.adoptedCode}`);
   keyValue('Outstanding checks', `${report.openingCoordination.blockedCount} blocked / ${report.openingCoordination.reviewCount} review`);
+  report.openingCoordination.profile.rules.forEach((rule) => {
+    const parameters = rule.parameters.map((parameter) => `${parameter.label} ${parameter.value} ${parameter.unit}`).join(' · ');
+    keyValue(`${rule.id} · ${rule.classification.replace(/-/g, ' ')}`, parameters || rule.title);
+    paragraph(`${rule.statement} Required resolution: ${rule.requiredResolution}`, 8.5, 10);
+  });
   report.openingCoordination.checks.forEach((check) => {
-    keyValue(`${check.status.toUpperCase()} · ${check.openingId || check.platformId || check.kind}`, `${check.kind.replace(/-/g, ' ')}${check.horizontalOverlapMm ? ` · ${check.horizontalOverlapMm} mm wall overlap` : ''}`);
-    paragraph(check.message, 8.5, 10);
+    keyValue(`${check.status.toUpperCase()} · ${check.openingId || check.platformId || check.kind}`, `${check.kind.replace(/-/g, ' ')} · ${check.ruleId} · ${check.basisType.replace(/-/g, ' ')}${check.horizontalOverlapMm ? ` · ${check.horizontalOverlapMm} mm wall overlap` : ''}`);
+    paragraph(`${check.message} Basis: ${check.basis}`, 8.5, 10);
   });
 
   newPage(); heading('1. Platform systems', 17);
@@ -302,7 +318,7 @@ export async function buildCanonicalCalculationPdf(report: CanonicalCalculationR
 
   heading('8. Automated checks', 17); report.checks.forEach((check) => { heading(`${check.status.toUpperCase()} - ${check.title}`, 10.5); paragraph(check.result); paragraph(`Basis: ${check.basis}`, 8.5); rule(); });
   heading('9. Professional review gates', 17); report.reviewGates.forEach((gate) => { heading(`${gate.status.toUpperCase()} - ${gate.title}`, 10.5); paragraph(`${gate.discipline}: ${gate.reason}`); rule(); });
-  heading('10. Sources and scope', 17); report.sources.forEach((source) => { heading(source.title, 10.5); paragraph(`${source.edition} | ${source.scope}`); paragraph(source.url, 8); source.exclusions.forEach((item) => paragraph(`- Excluded: ${item}`, 8.5, 10)); rule(); });
+  heading('10. Sources and scope', 17); report.sources.forEach((source) => { heading(source.title, 10.5); paragraph(`${source.edition}${source.locator ? ` | Locator: ${source.locator}` : ''} | ${source.scope}`); paragraph(source.url, 8); source.exclusions.forEach((item) => paragraph(`- Excluded: ${item}`, 8.5, 10)); rule(); });
   heading('11. Limitations', 17); report.limitations.forEach((item) => paragraph(`- ${item}`, 9, 10));
 
   const pageCount = pdf.getNumberOfPages();

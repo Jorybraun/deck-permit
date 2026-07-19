@@ -14,9 +14,10 @@ The report records:
 - post and footing reaction, required and provided bearing area, and bearing pressure;
 - stair endpoints, rise/run geometry, stringer count, and linked connection IDs;
 - every keyed structural connection work package and coordinated design action;
-- automated checks, professional review gates, sources, exclusions, and limitations.
+- every wall-opening rule ID, its classification, editable parameters, required professional resolution, and source IDs;
+- automated checks, professional review gates, source locators/URLs, exclusions, and limitations.
 
-The structured contract is `permitly-canonical-calculation-report/v1`. The reviewer exchange validates the schema, bounds, issue metadata, design fingerprint, numerical demand records, unresolved footing depth, and fail-closed connection status before storing a package.
+The structured contract is `permitly-canonical-calculation-report/v2`. The reviewer exchange validates the schema, bounds, issue metadata, design fingerprint, numerical demand records, unresolved footing depth, fail-closed connection status, and embedded architectural coordination profile before storing a package.
 
 ## Deliberate boundary
 

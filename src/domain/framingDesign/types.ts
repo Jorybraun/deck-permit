@@ -283,6 +283,7 @@ export interface FramingRuleSource {
   title: string;
   edition: string;
   url: string;
+  locator?: string;
   scope: string;
   exclusions: string[];
 }

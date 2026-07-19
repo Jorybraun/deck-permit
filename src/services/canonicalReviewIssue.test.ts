@@ -22,13 +22,14 @@ describe('canonical professional review issue', () => {
     expect(issue.manifest).toMatchObject({ revision: 4, generatedAt: '2026-07-18T12:05:00.000Z', designFingerprint: expect.stringMatching(/^DP-[A-F0-9]{8}$/) });
     expect(issue.manifest.sheetIds).toEqual(expect.arrayContaining(['cover', 'existing-conditions', 'capture-schedule', 'site', 'deck-plan', 'foundations', 'foundation-schedule', 'framing', 'connection-schedule', 'elevations', 'sections', 'details', 'assembly-schedule', 'calculations', 'review-schedule']));
     expect(issue.reviewPackage.manifest).toEqual(issue.manifest);
-    const reviewPageCount = Math.max(1, Math.ceil((framing.platformSystems.length + framing.checks.length + framing.reviewGates.length) / 12));
+    const reviewPageCount = Math.max(1, Math.ceil((framing.platformSystems.length + framing.checks.length + framing.reviewGates.length + framing.openingCoordination.profile.rules.length + framing.openingCoordination.profile.sources.length) / 8));
     expect(issue.reviewPackage.planset).toHaveLength(12 + Math.max(1, Math.ceil(framing.connections.length / 12)) + Math.max(1, Math.ceil(framing.footings.length / 15)) + reviewPageCount);
     expect(issue.reviewPackage.planset.every((sheet) => sheet.revision === 4 && sheet.designFingerprint === issue.manifest.designFingerprint)).toBe(true);
     expect(issue.reviewPackage.deck.canonical).toMatchObject({ schema: 'permitly-canonical-review-snapshot/v1', units: 'mm', design: { schema: 'deck-design/v1' }, framing: { schema: 'framing-design/v2' } });
     expect(issue.reviewPackage.cadExchange).toMatchObject({ schema: 'permitly-project-cad-exchange/v1', units: 'mm', designFingerprint: issue.manifest.designFingerprint, notForConstruction: true });
     expect(issue.reviewPackage.cadExchange?.dxf).toContain(issue.manifest.designFingerprint);
-    expect(issue.reviewPackage.calculationReport).toMatchObject({ schema: 'permitly-canonical-calculation-report/v1', designFingerprint: issue.manifest.designFingerprint, revision: 4, notForConstruction: true });
+    expect(issue.reviewPackage.calculationReport).toMatchObject({ schema: 'permitly-canonical-calculation-report/v2', designFingerprint: issue.manifest.designFingerprint, revision: 4, notForConstruction: true });
+    expect(issue.reviewPackage.planset.some((sheet) => sheet.svg.includes('AC-03-door-landing-transition') && sheet.svg.includes('PROJECT REVIEW ASSUMPTION'))).toBe(true);
     expect(issue.reviewPackage.calculationReport?.connections.length).toBe(framing.connections.length);
     expect(issue.reviewPackage.report.checks.length).toBeGreaterThan(0);
   });

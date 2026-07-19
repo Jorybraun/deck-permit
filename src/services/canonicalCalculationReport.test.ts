@@ -34,7 +34,9 @@ describe('canonical structural calculation report', () => {
     expect(report.siteClearance).toMatchObject({ authority: 'municipal-gis-reference', status: expect.stringMatching(/reference-only|outside-or-crossing/) });
     expect(report.siteClearance.dimensions.length).toBeGreaterThan(0);
     expect(report.siteCompliance).toMatchObject({ scope: 'modeled-platform-stair-landing-and-footing-extents', setbackStatus: 'orientation-required', coverage: { referenceCoveragePercent: expect.any(Number), proposedStairAndLandingFootprintSqM: expect.any(Number) } });
-    expect(report.openingCoordination).toMatchObject({ schema: 'wall-opening-coordination/v1', status: expect.stringMatching(/pass|review|blocked/) });
+    expect(report.openingCoordination).toMatchObject({ schema: 'wall-opening-coordination/v2', status: expect.stringMatching(/pass|review|blocked/), profile: { id: 'bcbc-2024-sidney-deck-openings-v1', schema: 'architectural-coordination-profile/v1' } });
+    expect(report.openingCoordination.profile.rules.every((rule) => rule.id.startsWith('AC-') && rule.classification)).toBe(true);
+    expect(report.sources.some((source) => source.id === 'sidney-residential-deck-guide' && source.locator)).toBe(true);
     expect(report.joistGroups.length).toBeGreaterThan(0);
     expect(report.joistGroups[0]).toMatchObject({ lineLoadKnM: expect.any(Number), momentDemandKnM: expect.any(Number), shearDemandKn: expect.any(Number) });
     expect(report.joistGroups[0].momentDemandKnM).toBeGreaterThan(0);

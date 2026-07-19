@@ -1,5 +1,5 @@
 import { assessStairPlanGeometry, type DeckDesign, type DeckPlatform, type PointMm } from '../deckDesign';
-import { assessExistingConditionCapture, assessWallOpeningCoordination, terrainElevationAt, type SiteModel, type WallOpeningCoordinationAssessment } from '../siteModel';
+import { architecturalCoordinationProfileForMunicipality, assessExistingConditionCapture, assessWallOpeningCoordination, terrainElevationAt, type SiteModel, type WallOpeningCoordinationAssessment } from '../siteModel';
 import { boundaryBounds, clipAxisLine, isAxisAlignedRectangle, isHorizontal, lineLength, platformEdgePoints, stationsAlong } from './geometry';
 import { codeProfileForMunicipality, CWC_DECK_GUIDE, lifeSafetySourceForProfile, selectPreliminarySections } from './rules';
 import type { BeamMember, FramingCheck, FramingDesign, FramingReviewGate, FramingStatus, GenerateFramingInput, JoistMember, LedgerMember, LifeSafetyAssessment, PlatformFramingSystem, StairStringerMember } from './types';
@@ -22,7 +22,7 @@ export function generateFramingDesign(design: DeckDesign, site: SiteModel, input
   const treatment = input.treatment || 'incised';
   const codeProfile = codeProfileForMunicipality(input.municipality);
   const lifeSafety = assessDeckLifeSafety(design, site);
-  const openingCoordination = assessWallOpeningCoordination(design, site);
+  const openingCoordination = assessWallOpeningCoordination(design, site, input.municipality);
   const soilBearingKpa = input.soilBearingKpa || DEFAULT_SOIL_BEARING_KPA;
   const assumptions = {
     deadLoadKpa: DEAD_LOAD_KPA,
@@ -144,7 +144,7 @@ export function generateFramingDesign(design: DeckDesign, site: SiteModel, input
     codeProfile, assumptions, platformSystems, joists, beams, ledgers, posts, footings, guards, lifeSafety, openingCoordination, stairStringers,
     stairOpenings: stairConnectionFraming.openings, stairTrimmers: stairConnectionFraming.trimmers, stairConnections: stairConnectionFraming.connections,
     connections,
-    checks, reviewGates, sources: [CWC_DECK_GUIDE, lifeSafetySourceForProfile(codeProfile)], status: hasEngineering ? 'engineering-required' : 'review-required',
+    checks, reviewGates, sources: uniqueSources([CWC_DECK_GUIDE, lifeSafetySourceForProfile(codeProfile), ...openingCoordination.profile.sources]), status: hasEngineering ? 'engineering-required' : 'review-required',
   };
 }
 
@@ -154,12 +154,13 @@ export function framingInputFingerprint(design: DeckDesign, site: SiteModel, inp
     stairs: design.stairs.map((stair) => ({ id: stair.id, from: stair.from, to: stair.to, fromEdgeId: stair.fromEdgeId, toEdgeId: stair.toEdgeId, startMm: stair.startMm, endMm: stair.endMm, directionDeg: stair.directionDeg, widthMm: stair.widthMm, riserCount: stair.riserCount, riserHeightMm: stair.riserHeightMm, treadDepthMm: stair.treadDepthMm, totalRunMm: stair.totalRunMm, stringerCount: stair.stringerCount, handrailSides: stair.handrailSides })),
     site: { terrain: site.terrain, capture: site.capture.evidence.map(({ id, category, sha256, status }) => ({ id, category, sha256, status })), wall: { selectionStatus: site.designWall.selectionStatus, sourceBuildingId: site.designWall.sourceBuildingId, sourceEdgeIndex: site.designWall.sourceEdgeIndex, lengthMm: site.designWall.lengthMm, rimMaterial: site.designWall.rimMaterial, rimDepthMm: site.designWall.rimDepthMm, cladding: site.designWall.cladding, flashingFeasible: site.designWall.flashingFeasible, openings: site.designWall.openings.map(({ id, kind, offsetMm, widthMm, sillHeightMm, heightMm, evidenceStatus }) => ({ id, kind, offsetMm, widthMm, sillHeightMm, heightMm, evidenceStatus })) } },
     input: { municipality: input.municipality, snowLoadKpa: input.snowLoadKpa, treatment: input.treatment || 'incised', soilBearingKpa: input.soilBearingKpa || DEFAULT_SOIL_BEARING_KPA },
+    architecturalCoordinationProfile: architecturalCoordinationProfileForMunicipality(input.municipality),
   };
   return `fd2-${fnv1a(JSON.stringify(structuralInput))}`;
 }
 
 export function isFramingStale(framing: FramingDesign | null, design: DeckDesign, site: SiteModel, input: GenerateFramingInput): boolean {
-  return !framing || framing.schema !== 'framing-design/v2' || framing.lifeSafety?.schema !== 'life-safety-screen/v2' || framing.openingCoordination?.schema !== 'wall-opening-coordination/v1' || framing.inputFingerprint !== framingInputFingerprint(design, site, input);
+  return !framing || framing.schema !== 'framing-design/v2' || framing.lifeSafety?.schema !== 'life-safety-screen/v2' || framing.openingCoordination?.schema !== 'wall-opening-coordination/v2' || framing.inputFingerprint !== framingInputFingerprint(design, site, input);
 }
 
 function resolveJoistAxis(platform: DeckPlatform, housePoints: readonly [PointMm, PointMm] | null): 'x' | 'y' {
@@ -262,3 +263,4 @@ function buildReviewGates(site: SiteModel, engineering: boolean, ledgerCount: nu
 function average(values: readonly number[]): number { return values.reduce((sum, value) => sum + value, 0) / Math.max(1, values.length); }
 function round(value: number, decimals: number): number { const scale = 10 ** decimals; return Math.round(value * scale) / scale; }
 function fnv1a(value: string): string { let hash = 0x811c9dc5; for (let index = 0; index < value.length; index += 1) { hash ^= value.charCodeAt(index); hash = Math.imul(hash, 0x01000193); } return (hash >>> 0).toString(16).padStart(8, '0'); }
+function uniqueSources(sources: FramingDesign['sources']): FramingDesign['sources'] { return [...new Map(sources.map((source) => [source.id, source])).values()]; }

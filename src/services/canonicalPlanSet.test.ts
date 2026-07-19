@@ -33,8 +33,8 @@ describe('canonical coordinated review set', () => {
     const sectionNumbers = design.platforms.map((_, index) => `S3.${index}`);
     const capturePageCount = Math.max(1, Math.ceil(site.capture.evidence.length / 8));
     const captureNumbers = Array.from({ length: capturePageCount }, (_, index) => `C1.${index + 1}`);
-    const reviewControlCount = framing.platformSystems.length + framing.checks.length + framing.reviewGates.length;
-    const reviewPageCount = Math.max(1, Math.ceil(reviewControlCount / 12));
+    const reviewControlCount = framing.platformSystems.length + framing.checks.length + framing.reviewGates.length + framing.openingCoordination.profile.rules.length + framing.openingCoordination.profile.sources.length;
+    const reviewPageCount = Math.max(1, Math.ceil(reviewControlCount / 8));
     const reviewNumbers = Array.from({ length: reviewPageCount }, (_, index) => `S4.${index + 1}`);
     expect(planSet.sheets).toHaveLength(10 + capturePageCount + foundationPageCount + connectionPageCount + sectionNumbers.length + reviewPageCount);
     expect(planSet.sheets.map((sheet) => sheet.number)).toEqual(['A0.0', 'C1.0', ...captureNumbers, 'A1.0', 'A2.0', 'S1.0', ...foundationNumbers, 'S2.0', ...connectionNumbers, 'A3.0', ...sectionNumbers, 'A4.0', 'A4.1', 'S4.0', ...reviewNumbers]);
@@ -138,6 +138,8 @@ describe('canonical coordinated review set', () => {
     for (const system of framing.platformSystems) expect(reviewSchedules.filter((sheet) => sheet.svg.includes(`SYS-${system.platformId}`))).toHaveLength(1);
     for (const check of framing.checks) expect(reviewSchedules.filter((sheet) => sheet.svg.includes(`CHECK-${check.id}`))).toHaveLength(1);
     for (const gate of framing.reviewGates) expect(reviewSchedules.filter((sheet) => sheet.svg.includes(`GATE-${gate.id}`))).toHaveLength(1);
+    for (const rule of framing.openingCoordination.profile.rules) expect(reviewSchedules.filter((sheet) => sheet.svg.includes(rule.id))).toHaveLength(1);
+    for (const source of framing.openingCoordination.profile.sources) expect(reviewSchedules.filter((sheet) => sheet.svg.includes(`SRC-${source.id}`))).toHaveLength(1);
 
     const movedDoorSite = { ...site, designWall: { ...site.designWall, openings: [{ ...site.designWall.openings[0], offsetMm: 1200 }] } };
     expect(canonicalPlanFingerprint({ property, site: movedDoorSite, design, framing })).not.toBe(planSet.fingerprint);

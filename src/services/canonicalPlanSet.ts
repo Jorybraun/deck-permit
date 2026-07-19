@@ -6,7 +6,7 @@ import type { PlanSheet, Property } from '../types';
 import { renderOrthographicElevationSvg } from './orthographicElevationSvg';
 
 const CONTENT_BOTTOM = 970;
-export const CANONICAL_PLAN_SET_SCHEMA = 'permitly-canonical-plan-set/v10' as const;
+export const CANONICAL_PLAN_SET_SCHEMA = 'permitly-canonical-plan-set/v11' as const;
 
 interface CanonicalPlanSetInput {
   property: Property;
@@ -126,7 +126,7 @@ function existingConditionsSheet(input: CanonicalPlanSetInput, issue: IssueMeta)
   ];
   const captureRows = capture.requirements.map((requirement) => [requirement.title, `${requirement.required ? 'required' : 'supplemental'} · ${requirement.status} · ${requirement.evidenceIds.join(', ') || 'no evidence id'}`]);
   const evidenceNotes = property.evidence.map((source) => `${source.label} · ${source.authority} · ${source.status} · retrieved ${source.retrievedAt.slice(0, 10)}.`);
-  const openingConditions = input.framing.openingCoordination.checks.filter((check) => check.status !== 'pass').map((check) => `${check.status === 'blocked' ? 'BLOCKED' : 'VERIFY'} — ${check.message}`);
+  const openingConditions = input.framing.openingCoordination.checks.filter((check) => check.status !== 'pass').map((check) => `${check.status === 'blocked' ? 'BLOCKED' : 'VERIFY'} · ${check.ruleId} · ${check.basisType.toUpperCase().replace(/-/g, ' ')} — ${check.message}`);
   const openConditions = [...assessment.errors.map((item) => `BLOCKED — ${item}`), ...openingConditions, ...assessment.warnings.map((item) => `VERIFY — ${item}`)];
   const visibleEvidenceNotes = boundedNotes([...evidenceNotes, `${site.capture.evidence.length} homeowner capture record(s) are fully scheduled on C1.1+.`], 4, 'additional municipal evidence record(s) are indexed in the review package.');
   const visibleOpenConditions = boundedNotes(openConditions, 6, 'additional unresolved condition(s) remain in the project review gates.');
@@ -462,10 +462,10 @@ function calculationSheet(input: CanonicalPlanSetInput, issue: IssueMeta): PlanS
     <text class="section" x="780" y="70">FRAMING CHECKS · SUMMARY</text>${framing.checks.slice(0, 6).map((check, index) => statusBox(780, 95 + index * 90, 850, check.status.toUpperCase(), check.title, check.status, `${check.result} Basis: ${check.basis}`)).join('')}
     <text class="section" x="780" y="680">PROFESSIONAL REVIEW GATES</text>${framing.reviewGates.slice(0, 4).map((gate, index) => statusBox(780, 705 + index * 56, 850, `${gate.discipline.toUpperCase()} · ${gate.status.toUpperCase()}`, gate.title, gate.status === 'required' ? 'blocked' : 'pass')).join('')}
     <text class="tiny" x="780" y="940">SUMMARY ONLY · ALL ${framing.checks.length} CHECK(S) AND ${framing.reviewGates.length} REVIEW GATE(S) ARE SCHEDULED ON S4.1+</text>
-    <text class="tiny" x="70" y="946">COMPANION CALCULATION BOOKLET · permitly-canonical-calculation-report/v1 · ${issue.fingerprint} · MEMBER DEMANDS / REACTIONS / BEARING SCREENS / CONNECTION ACTIONS</text>`);
+    <text class="tiny" x="70" y="946">COMPANION CALCULATION BOOKLET · permitly-canonical-calculation-report/v2 · ${issue.fingerprint} · MEMBER DEMANDS / REACTIONS / BEARING SCREENS / CONNECTION ACTIONS</text>`);
 }
 
-const REVIEW_CONTROL_ROWS_PER_SHEET = 12;
+const REVIEW_CONTROL_ROWS_PER_SHEET = 8;
 
 /** Prints the complete professional review scope; S4.0 remains a visual summary only. */
 function reviewControlScheduleSheets(input: CanonicalPlanSetInput, issue: IssueMeta): PlanSheet[] {
@@ -473,6 +473,22 @@ function reviewControlScheduleSheets(input: CanonicalPlanSetInput, issue: IssueM
     ...input.framing.platformSystems.map((system) => ({ id: `SYS-${system.platformId}`, type: 'SYSTEM', status: system.status, object: system.platformId, title: `${system.supportStrategy} · ${system.joistDesignSpanMm} mm span`, detail: system.explanation })),
     ...input.framing.checks.map((check) => ({ id: `CHECK-${check.id}`, type: 'CHECK', status: check.status, object: check.objectId, title: check.title, detail: `${check.result} · Basis: ${check.basis}` })),
     ...input.framing.reviewGates.map((gate) => ({ id: `GATE-${gate.id}`, type: 'WORK PACKAGE', status: gate.status, object: gate.discipline, title: gate.title, detail: gate.reason })),
+    ...input.framing.openingCoordination.profile.rules.map((rule) => ({
+      id: rule.id,
+      type: 'ARCH RULE',
+      status: rule.classification,
+      object: 'openings',
+      title: rule.title,
+      detail: `${rule.statement} Parameters: ${rule.parameters.map((parameter) => `${parameter.id}=${parameter.value}${parameter.unit}`).join(', ') || 'none'}. Sources: ${rule.sourceIds.join(', ') || 'model contract'}. Resolution: ${rule.requiredResolution}`,
+    })),
+    ...input.framing.openingCoordination.profile.sources.map((source) => ({
+      id: `SRC-${source.id}`,
+      type: 'SOURCE',
+      status: 'reference',
+      object: 'code / authority',
+      title: source.title,
+      detail: `${source.edition} · ${source.locator} · ${source.url}`,
+    })),
   ];
   const pageCount = Math.max(1, Math.ceil(rows.length / REVIEW_CONTROL_ROWS_PER_SHEET));
   return Array.from({ length: pageCount }, (_, pageIndex) => {
@@ -481,9 +497,9 @@ function reviewControlScheduleSheets(input: CanonicalPlanSetInput, issue: IssueM
     return makeSheet(id, 'Professional Review Control Schedule', 'NTS · WRITTEN SCHEDULE GOVERNS', `S4.${pageIndex + 1}`, input, issue, `
       <rect x="55" y="82" width="1575" height="800" class="panel"/><text class="section" x="80" y="118">SYSTEM SCREENS, CHECKS &amp; PROFESSIONAL WORK PACKAGES · ${pageIndex + 1}/${pageCount}</text>
       <text class="tiny" x="80" y="137">EVERY ROW IS BOUND TO THIS DESIGN FINGERPRINT · REQUIRED WORK MUST BE RESOLVED BY THE RESPONSIBLE QUALIFIED PARTY BEFORE ACCEPTANCE</text>
-      ${reviewControlTable(pageRows, 80, 152, 1525, 48)}
-      <text class="tiny" x="80" y="810">${rows.length} TOTAL CONTROL RECORD(S) · ROWS ${pageRows.length ? pageIndex * REVIEW_CONTROL_ROWS_PER_SHEET + 1 : 0}–${pageIndex * REVIEW_CONTROL_ROWS_PER_SHEET + pageRows.length} SHOWN</text>
-      <text class="title-warning" x="80" y="850">A PASSING SOFTWARE SCREEN IS NOT A PROFESSIONAL ACCEPTANCE, SEALED DESIGN OR AUTHORIZATION TO CONSTRUCT</text>`);
+      ${reviewControlTable(pageRows, 80, 152, 1525, 74)}
+      <text class="tiny" x="80" y="842">${rows.length} TOTAL CONTROL RECORD(S) · ROWS ${pageRows.length ? pageIndex * REVIEW_CONTROL_ROWS_PER_SHEET + 1 : 0}–${pageIndex * REVIEW_CONTROL_ROWS_PER_SHEET + pageRows.length} SHOWN</text>
+      <text class="title-warning" x="80" y="874">A PASSING SOFTWARE SCREEN IS NOT A PROFESSIONAL ACCEPTANCE, SEALED DESIGN OR AUTHORIZATION TO CONSTRUCT</text>`);
   });
 }
 
@@ -496,7 +512,7 @@ function reviewControlTable(rows: Array<{ id: string; type: string; status: stri
   const body = source.map((row, rowIndex) => {
     const yy = y + (rowIndex + 1) * rowHeight;
     const values = [row.id, row.type, row.status.toUpperCase().replace(/-/g, ' '), row.object, row.title, row.detail];
-    return `<rect x="${x}" y="${yy}" width="${width}" height="${rowHeight}" class="schedule-row"/>${values.map((value, columnIndex) => columnIndex >= 4 ? wrapped(value, boundaries[columnIndex] + 6, yy + 14, columnWidths[columnIndex] - 12, 7.2, 8.5, 3) : `<text class="schedule-text" x="${boundaries[columnIndex] + 6}" y="${yy + rowHeight * .58}">${esc(value)}</text>`).join('')}`;
+    return `<rect x="${x}" y="${yy}" width="${width}" height="${rowHeight}" class="schedule-row"/>${values.map((value, columnIndex) => columnIndex >= 4 ? wrapped(value, boundaries[columnIndex] + 6, yy + 14, columnWidths[columnIndex] - 12, 7.2, 8.5, columnIndex === 5 ? 6 : 4) : `<text class="schedule-text" x="${boundaries[columnIndex] + 6}" y="${yy + rowHeight * .58}">${esc(value)}</text>`).join('')}`;
   }).join('');
   const bottom = y + rowHeight * (source.length + 1);
   const verticals = boundaries.slice(1, -1).map((boundary) => `<line x1="${boundary}" y1="${y}" x2="${boundary}" y2="${bottom}" class="thin"/>`).join('');
