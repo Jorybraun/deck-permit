@@ -2,17 +2,21 @@ import { createOrthographicProjection } from '../domain/architecturalViews';
 import type { DeckDesign, DeckPlatform, PointMm } from '../domain/deckDesign';
 import type { FramingDesign } from '../domain/framingDesign';
 import { assessExistingConditionCapture, assessSiteCompliance, assessSiteModel, calculateSiteClearances, deriveProposedSiteComponents, deriveReferenceSetbackGuides, projectPropertyToLocal, terrainElevationAt, type CaptureEvidence, type LocalPropertyGeometry, type ProposedSiteComponent, type ReferenceSetbackGuide, type SiteClearanceAssessment, type SiteComplianceAssessment, type SiteModel } from '../domain/siteModel';
-import type { PlanSheet, Property } from '../types';
+import type { PlanSheet, ProfessionalReviewCycle, Property } from '../types';
+import { buildCanonicalCalculationReport } from './canonicalCalculationReport';
+import { canonicalPlanFingerprint } from './canonicalDesignFingerprint';
+import { validateProfessionalWorkResolutions } from './professionalWorkResolution';
 import { renderOrthographicElevationSvg } from './orthographicElevationSvg';
 
 const CONTENT_BOTTOM = 970;
-export const CANONICAL_PLAN_SET_SCHEMA = 'permitly-canonical-plan-set/v11' as const;
+export { CANONICAL_PLAN_SET_SCHEMA, canonicalPlanFingerprint } from './canonicalDesignFingerprint';
 
 interface CanonicalPlanSetInput {
   property: Property;
   site: SiteModel;
   design: DeckDesign;
   framing: FramingDesign;
+  reviewCycles?: ProfessionalReviewCycle[];
   revision?: number;
   issuedAt?: string;
 }
@@ -22,29 +26,11 @@ export interface CanonicalPlanSet {
   sheets: PlanSheet[];
 }
 
-/** Fingerprints every controlled fact that can affect the coordinated review issue. */
-export function canonicalPlanFingerprint(input: CanonicalPlanSetInput): string {
-  const { generatedAt: _generatedAt, ...controlledFraming } = input.framing;
-  const { updatedAt: _updatedAt, ...controlledSite } = input.site;
-  const controlledIssue = {
-    schema: CANONICAL_PLAN_SET_SCHEMA,
-    property: {
-      address: input.property.address,
-      parcel: input.property.parcel,
-      buildings: input.property.buildings,
-      zoning: input.property.zoning,
-      buildableEnvelope: input.property.buildableEnvelope,
-      snowLoad: input.property.snowLoad,
-      evidence: input.property.evidence,
-    },
-    site: controlledSite,
-    design: input.design,
-    framing: controlledFraming,
-  };
-  return `DP-${fnv1a32(JSON.stringify(controlledIssue))}`;
-}
-
 interface IssueMeta { fingerprint: string; revision: number; issuedAt: string }
+
+interface AcceptedProfessionalCoordination {
+  cycle: ProfessionalReviewCycle;
+}
 
 /** Generates a coordinated 11×17 review set, adding schedule continuations when the model needs them. */
 export function generateCanonicalPlanSet(input: CanonicalPlanSetInput): CanonicalPlanSet {
@@ -53,14 +39,16 @@ export function generateCanonicalPlanSet(input: CanonicalPlanSetInput): Canonica
     revision: input.revision || 1,
     issuedAt: input.issuedAt || new Date().toISOString(),
   };
+  const professionalCoordination = acceptedProfessionalCoordination(input, issue);
   const foundationSchedules = foundationScheduleSheets(input, issue);
   const connectionSchedules = connectionScheduleSheets(input, issue);
   const sections = sectionSheets(input, issue);
   const assemblySchedules = assemblyScheduleSheets(input, issue);
   const reviewSchedules = reviewControlScheduleSheets(input, issue);
   const captureSchedules = captureEvidenceScheduleSheets(input, issue);
+  const professionalResolutionSchedules = professionalResolutionSheets(input, issue, professionalCoordination);
   const sheets = [
-    coverSheet(input, issue, captureSchedules.length, foundationSchedules.length, connectionSchedules.length, sections.length, assemblySchedules.length, reviewSchedules.length),
+    coverSheet(input, issue, captureSchedules.length, foundationSchedules.length, connectionSchedules.length, sections.length, assemblySchedules.length, reviewSchedules.length, professionalResolutionSchedules.length),
     existingConditionsSheet(input, issue),
     ...captureSchedules,
     siteSheet(input, issue),
@@ -71,15 +59,16 @@ export function generateCanonicalPlanSet(input: CanonicalPlanSetInput): Canonica
     ...connectionSchedules,
     elevationSheet(input, issue),
     ...sections,
-    detailSheet(input, issue),
+    detailSheet(input, issue, professionalCoordination),
     ...assemblySchedules,
     calculationSheet(input, issue),
     ...reviewSchedules,
+    ...professionalResolutionSchedules,
   ];
   return { fingerprint: issue.fingerprint, sheets };
 }
 
-function coverSheet(input: CanonicalPlanSetInput, issue: IssueMeta, captureScheduleCount: number, foundationScheduleCount: number, connectionScheduleCount: number, sectionCount: number, assemblyScheduleCount: number, reviewScheduleCount: number): PlanSheet {
+function coverSheet(input: CanonicalPlanSetInput, issue: IssueMeta, captureScheduleCount: number, foundationScheduleCount: number, connectionScheduleCount: number, sectionCount: number, assemblyScheduleCount: number, reviewScheduleCount: number, professionalResolutionScheduleCount: number): PlanSheet {
   const { property, site, design, framing } = input;
   const totalArea = design.platforms.reduce((sum, platform) => sum + polygonArea(platform.boundary.vertices.map((vertex): PointMm => [vertex.xMm, vertex.yMm])) / 1_000_000, 0);
   const projectRows = [
@@ -98,6 +87,7 @@ function coverSheet(input: CanonicalPlanSetInput, issue: IssueMeta, captureSched
     ['S1.0', 'Foundation and post plan'], [foundationScheduleCount === 1 ? 'S1.1' : `S1.1–S1.${foundationScheduleCount}`, 'All footing and post design-control records'], ['S2.0', 'Framing plan and member schedule'], [connectionScheduleCount === 1 ? 'S2.1' : `S2.1–S2.${connectionScheduleCount}`, 'All keyed structural connection design controls'], ['A3.0', 'Platform and stair elevations'],
     [sectionCount === 1 ? 'S3.0' : `S3.0–S3.${sectionCount - 1}`, 'Building section for every modeled platform'], ['A4.0', 'Stair, guard, footing, connection details'], [assemblyScheduleCount === 1 ? 'A4.1' : `A4.1–A4.${assemblyScheduleCount}`, 'All stair and guard design-control schedules'], ['S4.0', 'Design basis and review summary'], [reviewScheduleCount === 1 ? 'S4.1' : `S4.1–S4.${reviewScheduleCount}`, 'All system screens, checks, and review work packages'],
   ];
+  if (professionalResolutionScheduleCount) indexRows.push([professionalResolutionScheduleCount === 1 ? 'R1.0' : `R1.0–R1.${professionalResolutionScheduleCount - 1}`, 'Accepted professional resolution coordination record · sealed evidence governs']);
   const required = framing.reviewGates.filter((gate) => gate.status === 'required');
   return makeSheet('cover', 'Cover & Project Data', 'NTS', 'A0.0', input, issue, `
     <text class="sheet-heading" x="70" y="92">DECK PERMIT REVIEW SET</text>
@@ -390,19 +380,70 @@ function sectionSheet(input: CanonicalPlanSetInput, issue: IssueMeta, platformId
     ${notice(1120, 760, 510, 122, 'PLATFORM SECTION LIMIT', `This section coordinates ${platform?.name || 'this platform'} only. It does not specify proprietary connectors, fasteners, flashing transitions, reinforcement, frost depth, uplift resistance, or lateral bracing until reviewed.`)}`);
 }
 
-function detailSheet(input: CanonicalPlanSetInput, issue: IssueMeta): PlanSheet {
+function detailSheet(input: CanonicalPlanSetInput, issue: IssueMeta, professionalCoordination: AcceptedProfessionalCoordination | null): PlanSheet {
   const stair = input.design.stairs[0];
   const guard = input.framing.guards[0];
   const requirements = boundedNotes(unique(input.framing.connections.flatMap((connection) => connection.requirements)), 5, 'additional connection requirement(s) remain in the controlled model.');
+  const connectionResolutions = professionalCoordination?.cycle.structuralResolutions.filter((resolution) => resolution.kind === 'connection') || [];
+  const resolutionReference = professionalCoordination ? `See R1.0+ · evidence ${professionalCoordination.cycle.evidenceId}` : 'Connection tags are located on S2.0';
   return makeSheet('details', 'Stair, Guard, Footing & Connection Details', 'NTS · DIMENSIONS SHOWN', 'A4.0', input, issue, `
     <text class="view-title" x="390" y="66" text-anchor="middle">D1 · STAIR GEOMETRY</text>${stairDetail(stair, input.framing.stairConnections.filter((connection) => connection.stairId === stair?.id), input.framing.lifeSafety.stairs.find((item) => item.stairId === stair?.id), 70, 95, 650, 350)}
     <text class="view-title" x="1040" y="66" text-anchor="middle">D2 · GUARD CODE SCREEN / INTENT</text>${guardDetail(guard, 740, 95, 580, 350)}
     <text class="view-title" x="1480" y="66" text-anchor="middle">D3 · FOOTING INTENT</text>${footingDetail(input.framing.footings[0], 1350, 95, 280, 350)}
     <rect x="55" y="480" width="1050" height="402" class="panel"/><text class="section" x="80" y="516">KEYED STRUCTURAL CONNECTION SCHEDULE</text>${connectionScheduleSvg(input.framing.connections, 80, 540, 1000, 315)}
     <rect x="1135" y="480" width="495" height="402" class="panel"/><text class="section" x="1160" y="516">CONNECTION DESIGN CONTROL</text>
-    ${table([['Work packages', `${input.framing.connections.length} keyed group(s)`], ['Resolved hardware', `0 of ${input.framing.connections.length}`], ['Capacity claim', 'None — professional or proprietary design required'], ['Plan reference', 'Connection tags are located on S2.0']], 1160, 540, 445, 44, 125)}
+    ${table([['Work packages', `${input.framing.connections.length} keyed group(s)`], ['Resolved packages', `${connectionResolutions.length} of ${input.framing.connections.length}`], ['Resolution status', professionalCoordination ? 'Accepted coordination record attached; sealed evidence governs' : 'Professional or proprietary design required'], ['Plan reference', resolutionReference]], 1160, 540, 445, 44, 125)}
     <text class="section" x="1160" y="745">REVIEWER RESOLUTION REQUIREMENTS</text>${noteList(requirements.length ? requirements : ['No generated connection groups.'], 1160, 772, 29, 430)}
-    <text class="title-warning" x="1160" y="862">HARDWARE / FASTENERS / CORROSION CLASS UNRESOLVED</text>`);
+    <text class="title-warning" x="1160" y="862">${professionalCoordination ? 'MACHINE RECORD SUPPLEMENTS SEALED PROFESSIONAL EVIDENCE · SEE R1.0+' : 'HARDWARE / FASTENERS / CORROSION CLASS UNRESOLVED'}</text>`);
+}
+
+const PROFESSIONAL_RESOLUTION_ROWS_PER_SHEET = 6;
+
+function acceptedProfessionalCoordination(input: CanonicalPlanSetInput, issue: IssueMeta): AcceptedProfessionalCoordination | null {
+  const accepted = (input.reviewCycles || [])
+    .filter((cycle) => cycle.decision === 'accepted' && cycle.sourceDesignFingerprint === issue.fingerprint)
+    .sort((first, second) => Date.parse(second.importedAt) - Date.parse(first.importedAt))[0];
+  if (!accepted) return null;
+  const report = buildCanonicalCalculationReport({ ...input, generatedAt: issue.issuedAt, revision: issue.revision });
+  validateProfessionalWorkResolutions(accepted.structuralResolutions || [], report, accepted.decision);
+  return { cycle: accepted };
+}
+
+/** Coordinates every accepted professional work-package answer back into the exact drawing issue. */
+function professionalResolutionSheets(input: CanonicalPlanSetInput, issue: IssueMeta, coordination: AcceptedProfessionalCoordination | null): PlanSheet[] {
+  if (!coordination) return [];
+  const { cycle } = coordination;
+  const resolutions = cycle.structuralResolutions;
+  const pageCount = Math.max(1, Math.ceil(resolutions.length / PROFESSIONAL_RESOLUTION_ROWS_PER_SHEET));
+  return Array.from({ length: pageCount }, (_, pageIndex) => {
+    const pageRows = resolutions.slice(pageIndex * PROFESSIONAL_RESOLUTION_ROWS_PER_SHEET, (pageIndex + 1) * PROFESSIONAL_RESOLUTION_ROWS_PER_SHEET);
+    const id: PlanSheet['id'] = pageIndex === 0 ? 'professional-resolutions' : `professional-resolutions-${pageIndex + 1}`;
+    return makeSheet(id, 'Professional Resolution Coordination Record', 'NTS · SEALED EVIDENCE GOVERNS', `R1.${pageIndex}`, input, issue, `
+      <rect x="55" y="82" width="1575" height="155" class="panel"/>
+      <text class="section" x="80" y="116">ACCEPTED PROFESSIONAL REVIEW COORDINATION · ${pageIndex + 1}/${pageCount}</text>
+      ${table([['Reviewer', `${cycle.issuerName} · ${cycle.issuerRole.toUpperCase()} · licence ${cycle.licenseNumber}`], ['Controlled issue', `${issue.fingerprint} · accepted/imported ${cycle.importedAt}`], ['Sealed evidence', cycle.evidenceId]], 80, 132, 1030, 30, 150)}
+      ${notice(1140, 102, 460, 110, 'SUPPLEMENTAL RECORD — NOT A SEAL', 'This generated schedule transcribes structured reviewer answers. The separately supplied sealed PDF identified above governs professional authorship, scope, signature, and authentication.')}
+      <rect x="55" y="255" width="1575" height="650" class="panel"/>
+      <text class="section" x="80" y="291">WORK-PACKAGE RESOLUTIONS · ROWS ${pageIndex * PROFESSIONAL_RESOLUTION_ROWS_PER_SHEET + 1}–${pageIndex * PROFESSIONAL_RESOLUTION_ROWS_PER_SHEET + pageRows.length} OF ${resolutions.length}</text>
+      ${professionalResolutionTable(pageRows, 80, 306, 1525, 92)}
+      <text class="title-warning" x="80" y="934">ACCEPTANCE RECORDED FOR ${issue.fingerprint} ONLY · DESIGN CHANGES INVALIDATE THIS COORDINATION · MUNICIPAL ACCEPTANCE AND CONSTRUCTION AUTHORIZATION ARE SEPARATE</text>`);
+  });
+}
+
+function professionalResolutionTable(resolutions: ProfessionalReviewCycle['structuralResolutions'], x: number, y: number, width: number, rowHeight: number): string {
+  const headers = ['PACKAGE', 'KIND / DISPOSITION', 'SELECTED SPECIFICATION', 'CAPACITY / TABLE / PRODUCT BASIS', 'DRAWING / CALC / SEALED DOC', 'NOTES'];
+  const columnWidths = [155, 190, 330, 330, 260, width - 1265];
+  const boundaries = columnWidths.reduce<number[]>((items, column) => [...items, items[items.length - 1] + column], [x]);
+  const headerHeight = 38;
+  const header = `<rect x="${x}" y="${y}" width="${width}" height="${headerHeight}" class="schedule-head"/>${headers.map((value, index) => wrapped(value, boundaries[index] + 5, y + 15, columnWidths[index] - 10, 7, 9, 2)).join('')}`;
+  const body = resolutions.map((resolution, rowIndex) => {
+    const yy = y + headerHeight + rowIndex * rowHeight;
+    const values = [resolution.workPackageId, `${resolution.kind.replace(/-/g, ' ')} · ${resolution.disposition.replace(/-/g, ' ')}`, resolution.specification || 'See sealed document', resolution.capacityBasis || 'See sealed document', resolution.documentReference, resolution.notes || '—'];
+    return `<rect x="${x}" y="${yy}" width="${width}" height="${rowHeight}" class="schedule-row"/>${values.map((value, columnIndex) => wrapped(value, boundaries[columnIndex] + 5, yy + 16, columnWidths[columnIndex] - 10, 7.2, 9, 8)).join('')}`;
+  }).join('');
+  const bottom = y + headerHeight + resolutions.length * rowHeight;
+  const verticals = boundaries.slice(1, -1).map((boundary) => `<line x1="${boundary}" y1="${y}" x2="${boundary}" y2="${bottom}" class="thin"/>`).join('');
+  return `${header}${body}${verticals}`;
 }
 
 const ASSEMBLY_ROWS_PER_SHEET = 15;
@@ -697,6 +738,5 @@ function averagePoint(points: PointMm[]): PointMm { const count = Math.max(1, po
 function polygonArea(points: PointMm[]): number { return Math.abs(points.reduce((sum, point, index) => { const next = points[(index + 1) % points.length]; return sum + point[0] * next[1] - next[0] * point[1]; }, 0) / 2); }
 function openPointRing(points: PointMm[]): PointMm[] { return points.length > 1 && points[0][0] === points[points.length - 1][0] && points[0][1] === points[points.length - 1][1] ? points.slice(0, -1) : points; }
 function unique(values: string[]): string[] { return [...new Set(values)]; }
-function fnv1a32(value: string): string { let hash = 0x811c9dc5; for (let index = 0; index < value.length; index += 1) { hash ^= value.charCodeAt(index); hash = Math.imul(hash, 0x01000193); } return (hash >>> 0).toString(16).padStart(8, '0').toUpperCase(); }
 function pad(value: number): string { return String(value).padStart(2, '0'); }
 function esc(value: string): string { return value.replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' })[character] || character); }

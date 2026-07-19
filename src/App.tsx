@@ -1,15 +1,15 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Check, FileCheck2, FileText, Hammer, Home, Lightbulb, MapPin, Menu, PencilRuler, Save, X } from 'lucide-react';
 import { assessDesign } from './domain/deckDesign';
-import { generateFramingDesign, isFramingStale, type GenerateFramingInput } from './domain/framingDesign';
-import { addCaptureEvidence, addTerrainGradePoint, assessExistingConditionCapture, assessSiteModel, createExistingConditionCapture, createSiteModel, flipHouseWallDirection, recordAiPhotoAnalysis, removeCaptureEvidence, removeTerrainGradePoint, reviewAiPhotoObservation, rotateHouseWallAlignment, selectHouseWall, updateCaptureEvidence, updateSiteModel, updateTerrainGradePoint, type CaptureCategory, type CaptureEvidence, type CaptureEvidenceChanges } from './domain/siteModel';
+import { generateFramingDesign, isFramingStale, type FramingDesign, type GenerateFramingInput } from './domain/framingDesign';
+import { addCaptureEvidence, addTerrainGradePoint, assessExistingConditionCapture, assessSiteModel, createExistingConditionCapture, createSiteModel, flipHouseWallDirection, recordAiPhotoAnalysis, removeCaptureEvidence, removeTerrainGradePoint, reviewAiPhotoObservation, rotateHouseWallAlignment, selectHouseWall, updateCaptureEvidence, updateSiteModel, updateTerrainGradePoint, type CaptureCategory, type CaptureEvidence, type CaptureEvidenceChanges, type SiteModel } from './domain/siteModel';
 import { lookupProperty, lookupPropertyFromAddress, PropertyLookupError, suggestAddresses } from './services/propertyLookup';
 import { lookupSnowLoad, lookupZoning } from './services/zoning';
-import { generateCanonicalPlanSet } from './services/canonicalPlanSet';
+import { canonicalPlanFingerprint, generateCanonicalPlanSet } from './services/canonicalPlanSet';
 import { downloadVectorPlanPdf } from './services/vectorPlanPdf';
 import { downloadProjectCadExchange } from './services/projectCadExchange';
 import { buildCanonicalCalculationReport, downloadCanonicalCalculationPdf } from './services/canonicalCalculationReport';
-import { useHomeownerProject, type ProjectStage } from './state/homeownerProjectStore';
+import { useHomeownerProject, type HomeownerProjectState, type ProjectStage } from './state/homeownerProjectStore';
 import { IdeaStage } from './components/homeowner/IdeaStage';
 import { PropertyStage, type PropertyResearchState } from './components/homeowner/PropertyStage';
 import { DesignStage } from './components/homeowner/DesignStage';
@@ -62,7 +62,8 @@ export function App() {
 
   const currentReviewSheets = () => {
     if (!project.site || !project.framing || framingStale) throw new Error('Regenerate the framing graph before issuing the coordinated review set.');
-    return generateCanonicalPlanSet({ property: project.property, site: project.site, design: project.design, framing: project.framing }).sheets;
+    const issueMeta = currentIssueMeta(project, project.site, project.framing);
+    return generateCanonicalPlanSet({ property: project.property, site: project.site, design: project.design, framing: project.framing, reviewCycles: project.professionalReviewCycles, ...issueMeta }).sheets;
   };
 
   const downloadReviewSet = async () => {
@@ -76,7 +77,7 @@ export function App() {
 
   const downloadCadExchange = () => {
     if (!project.site || !project.framing || framingStale) throw new Error('Regenerate the framing graph before exporting the coordinated CAD model.');
-    try { downloadProjectCadExchange({ property: project.property, site: project.site, design: project.design, framing: project.framing }); }
+    try { downloadProjectCadExchange({ property: project.property, site: project.site, design: project.design, framing: project.framing, generatedAt: currentIssueMeta(project, project.site, project.framing).issuedAt }); }
     catch (reason) {
       const error = reason instanceof Error ? reason : new Error('The layered DXF could not be downloaded.');
       project.setError(error.message);
@@ -87,7 +88,8 @@ export function App() {
   const downloadCalculationReport = async () => {
     if (!project.site || !project.framing || framingStale) throw new Error('Regenerate the framing graph before exporting the coordinated calculation report.');
     try {
-      const report = buildCanonicalCalculationReport({ property: project.property, site: project.site, design: project.design, framing: project.framing });
+      const issueMeta = currentIssueMeta(project, project.site, project.framing);
+      const report = buildCanonicalCalculationReport({ property: project.property, site: project.site, design: project.design, framing: project.framing, revision: issueMeta.revision, generatedAt: issueMeta.issuedAt });
       await downloadCanonicalCalculationPdf(report);
     } catch (reason) {
       const error = reason instanceof Error ? reason : new Error('The calculation report could not be downloaded.');
@@ -207,6 +209,15 @@ export function App() {
     {navOpen && <button type="button" className="mobile-scrim lg:hidden" onClick={() => setNavOpen(false)} aria-label="Close navigation" />}
     {project.error && <div className="fixed bottom-4 left-1/2 z-[70] flex max-w-lg -translate-x-1/2 items-start gap-3 rounded-xl border border-red-200 bg-white px-4 py-3 text-sm text-red-800 shadow-2xl" role="alert"><span className="flex-1">{project.error}</span><button type="button" onClick={() => project.setError(null)} aria-label="Dismiss error"><X size={16} /></button></div>}
   </div>;
+}
+
+function currentIssueMeta(project: HomeownerProjectState, site: SiteModel, framing: FramingDesign): { revision: number; issuedAt?: string } {
+  const fingerprint = canonicalPlanFingerprint({ property: project.property, site, design: project.design, framing });
+  const publicationIsCurrent = project.reviewPublication?.designFingerprint === fingerprint;
+  return {
+    revision: publicationIsCurrent ? project.reviewPublication?.revision || project.reviewIssueRevision : project.reviewIssueRevision + 1,
+    issuedAt: publicationIsCurrent ? project.reviewPublication?.issueIssuedAt : undefined,
+  };
 }
 
 function normalizeStage(stage: ProjectStage, hasSite: boolean, hasDesign: boolean): ProjectStage {

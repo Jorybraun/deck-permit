@@ -52,6 +52,9 @@ export function PermitStage({ property, site, design, framing, framingStale, des
   const framingCurrent = Boolean(framing && !framingStale);
   const requiredGates = framing?.reviewGates.filter((gate) => gate.status === 'required') || [];
   const currentFingerprint = framing ? canonicalPlanFingerprint({ property, site, design, framing }) : '';
+  const acceptedProfessionalReview = professionalReviewCycles
+    .filter((cycle) => cycle.decision === 'accepted' && cycle.sourceDesignFingerprint === currentFingerprint)
+    .sort((first, second) => Date.parse(second.importedAt) - Date.parse(first.importedAt))[0];
   const publicationIsCurrent = reviewPublication?.designFingerprint === currentFingerprint;
   const issueRevision = publicationIsCurrent ? reviewPublication?.revision || reviewIssueRevision : reviewIssueRevision + 1;
   const reviewIssue = useMemo(() => framingCurrent && framing ? buildCanonicalReviewIssue({ property, site, design, framing, reviewCycles: professionalReviewCycles, revision: issueRevision, issuedAt: publicationIsCurrent ? reviewPublication?.issueIssuedAt : undefined }) : null, [design, framing, framingCurrent, issueRevision, professionalReviewCycles, property, publicationIsCurrent, reviewPublication?.issueIssuedAt, site]);
@@ -79,6 +82,7 @@ export function PermitStage({ property, site, design, framing, framingStale, des
     { id: 'A4.1+', name: 'All stair & guard design-control schedules', status: framingCurrent ? 'review' : 'blocked' },
     { id: 'S4.0', name: 'Design basis, checks & review gates', status: framingCurrent ? 'review' : 'blocked' },
     { id: 'S4.1+', name: 'All system screens, checks & professional work packages', status: framingCurrent ? 'review' : 'blocked' },
+    ...(acceptedProfessionalReview ? [{ id: 'R1.0+', name: 'Accepted professional resolution coordination record', status: 'reference' as const }] : []),
   ] as const;
   const downloadReviewSet = async () => {
     if (pdfStatus === 'building') return;

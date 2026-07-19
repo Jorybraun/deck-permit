@@ -2,7 +2,7 @@ import type { DeckDesign } from '../domain/deckDesign';
 import type { FramingDesign, StructuralConnectionGroup } from '../domain/framingDesign';
 import { assessSiteCompliance, calculateSiteClearances, projectPropertyToLocal, type SiteClearanceAssessment, type SiteComplianceAssessment, type SiteModel } from '../domain/siteModel';
 import type { Property } from '../types';
-import { canonicalPlanFingerprint } from './canonicalPlanSet';
+import { canonicalPlanFingerprint } from './canonicalDesignFingerprint';
 
 export const CANONICAL_CALCULATION_REPORT_SCHEMA = 'permitly-canonical-calculation-report/v2' as const;
 
