@@ -4,13 +4,16 @@ import { stairDepartureDirection, stairLandingCandidates, suggestedPlatformEleva
 import { assessDeckLifeSafety, type StairLifeSafetyAssessment } from '../../domain/framingDesign';
 import { assessSiteCompliance, assessWallOpeningCoordination, projectPropertyToLocal, terrainElevationAt, type SiteModel } from '../../domain/siteModel';
 import type { Property } from '../../types';
+import type { HomeownerIntent } from '../../state/homeownerProjectStore';
 import { DeckElevationEditor } from '../design/DeckElevationEditor';
 import { DeckPlanEditor } from '../design/DeckPlanEditor';
+import { AiDesignStudioPanel } from './AiDesignStudioPanel';
 
 interface DesignStageProps {
   design: DeckDesign;
   site: SiteModel;
   property: Property;
+  intent: HomeownerIntent;
   assessment: DesignAssessment;
   canUndo: boolean;
   canRedo: boolean;
@@ -40,6 +43,7 @@ interface DesignStageProps {
   onMirrorProperty: () => void;
   onRotateProperty: () => void;
   onContinue: () => void;
+  onApplyAiDesign: (design: DeckDesign) => void;
 }
 
 /** Composes the plan canvas with exact properties for the selected construction region. */
@@ -70,6 +74,7 @@ export function DesignStage(props: DesignStageProps) {
         <h2 className="mt-1 font-[Manrope] text-xl font-bold text-slate-950">Shape, levels & access</h2>
         <p className="mt-2 text-xs leading-5 text-slate-600">Draw platforms against the measured house. Each platform can move, change shape, and sit at its own elevation.</p>
       </div>
+      <AiDesignStudioPanel intent={props.intent} property={props.property} site={props.site} design={props.design} onApply={props.onApplyAiDesign} />
       <PlatformLayers design={props.design} site={props.site} onSelect={props.onSelectObject} onMove={props.onMovePlatformLayer} />
       {selected ? <PlatformInspector design={props.design} platform={selected} gradeElevationMm={terrainElevationAt(props.site.terrain, platformReferencePoint(selected)).elevationMm} onRename={props.onRenamePlatform} onSetElevation={props.onSetElevation} onSetPurpose={props.onSetPurpose} onRotate={props.onRotatePlatform} onSetFinish={props.onSetFinish} onSetFramingIntent={props.onSetFramingIntent} onSetEdgeRole={props.onSetEdgeRole} onSetEdgeLength={props.onSetEdgeLength} onInsertVertex={props.onInsertVertex} onRemove={props.onRemovePlatform} /> : selectedStair ? <StairInspector stair={selectedStair} safety={selectedStairSafety} design={props.design} onSetConstruction={props.onSetStairConstruction} onConnectLanding={props.onConnectStairLanding} onResizeSide={props.onResizeStairSide} onRemove={props.onRemoveStair} /> : <div className="p-5"><div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-5 text-center"><Layers3 className="mx-auto text-slate-400" size={24} /><strong className="mt-3 block text-sm text-slate-800">Select a platform or stair</strong><p className="mt-1 text-xs leading-5 text-slate-500">Click a deck area to edit it, or click a stair callout to inspect and remove that stair.</p></div></div>}
 

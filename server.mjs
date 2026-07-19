@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { ReviewExchangeError, ReviewExchangeStore } from './server/reviewExchangeStore.mjs';
 import { MunicipalDeliveryError, MunicipalDeliveryService } from './server/municipalDelivery.mjs';
+import { AiDesignError, OpenAiDesignService } from './server/openaiDesignService.mjs';
 
 const app = express();
 const port = Number(process.env.PORT || 4173);
@@ -10,6 +11,7 @@ const root = dirname(fileURLToPath(import.meta.url));
 const reviewExchange = new ReviewExchangeStore(process.env.DECK_PERMIT_DATA_DIR || join(root, '.deck-permit-data'));
 const dataDirectory = process.env.DECK_PERMIT_DATA_DIR || join(root, '.deck-permit-data');
 const municipalDelivery = new MunicipalDeliveryService({ apiKey: process.env.RESEND_API_KEY, fromEmail: process.env.PERMIT_SUBMISSION_FROM_EMAIL, dataDirectory });
+const aiDesign = new OpenAiDesignService({ apiKey: process.env.OPENAI_API_KEY, designModel: process.env.OPENAI_DESIGN_MODEL, reviewModel: process.env.OPENAI_REVIEW_MODEL });
 app.use(express.json({ limit: '22mb' }));
 const arcgisBase = 'https://services5.arcgis.com/MNn7A6yzK94Hggl3/arcgis/rest/services';
 const datasets = {
@@ -18,6 +20,25 @@ const datasets = {
 };
 
 const sidneyApplicationUrl = 'https://www.sidney.ca/wp-content/uploads/Building-Permit-Application-SF-2F-Demo-Accessory.pdf';
+
+app.get('/api/ai/capabilities', (_request, response) => {
+  response.set('cache-control', 'no-store').json(aiDesign.capabilities());
+});
+
+app.post('/api/ai/design-proposal', async (request, response, next) => {
+  try { response.status(201).set('cache-control', 'no-store').json(await aiDesign.proposeDesign(request.body)); }
+  catch (error) { next(error); }
+});
+
+app.post('/api/ai/design-review', async (request, response, next) => {
+  try { response.status(201).set('cache-control', 'no-store').json(await aiDesign.reviewDesign(request.body)); }
+  catch (error) { next(error); }
+});
+
+app.post('/api/ai/photo-analysis', async (request, response, next) => {
+  try { response.status(201).set('cache-control', 'no-store').json(await aiDesign.analyzePhotos(request.body)); }
+  catch (error) { next(error); }
+});
 
 app.post('/api/review-exchange', async (request, response, next) => {
   try {
@@ -86,6 +107,7 @@ for (const [route, upstream] of Object.entries(datasets)) {
 app.use((error, _request, response, _next) => {
   if (error instanceof ReviewExchangeError) return response.status(error.status).json({ error: error.code, message: error.message });
   if (error instanceof MunicipalDeliveryError) return response.status(error.status).json({ error: error.code, message: error.message });
+  if (error instanceof AiDesignError) return response.status(error.status).json({ error: error.code, message: error.message });
   if (error?.type === 'entity.too.large') return response.status(413).json({ error: 'payload-too-large', message: 'The package exceeds the 22 MB request limit.' });
   console.error('Unhandled server error', error);
   response.status(500).json({ error: 'server-error', message: 'The request could not be completed.' });

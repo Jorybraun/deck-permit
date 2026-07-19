@@ -10,7 +10,7 @@ describe('ExistingConditionCapturePanel', () => {
       viewpoint: 'Rear yard looking north', observationTags: ['complete-wall', 'wall-corners', 'window-opening', 'scale-reference'], referenceLabel: 'tape', referenceDimensionMm: 1000,
     };
     const capture = { ...createExistingConditionCapture(), evidence: [record] };
-    const html = renderToStaticMarkup(<ExistingConditionCapturePanel capture={capture} assessment={assessExistingConditionCapture(capture, { hasDoor: false })} previewUrls={{}} onAddFiles={vi.fn()} onUpdateEvidence={vi.fn()} onRemoveEvidence={vi.fn()} />);
+    const html = renderToStaticMarkup(<ExistingConditionCapturePanel capture={capture} assessment={assessExistingConditionCapture(capture, { hasDoor: false })} previewUrls={{}} onAddFiles={vi.fn()} onUpdateEvidence={vi.fn()} onRemoveEvidence={vi.fn()} onAnalyze={vi.fn()} onReviewAiObservation={vi.fn()} />);
 
     expect(html).toContain('Document what this photo proves');
     expect(html).toContain('Viewpoint / direction');
@@ -22,5 +22,6 @@ describe('ExistingConditionCapturePanel', () => {
     expect(html).toContain('Rear yard looking north');
     expect(html).toContain('No visible damage.');
     expect(html).toContain('Structured observations appear on C1.x');
+    expect(html).toContain('store: false');
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addCaptureEvidence, assessExistingConditionCapture, captureObservationSummary, createExistingConditionCapture, removeCaptureEvidence, updateCaptureEvidence } from './existingConditionCapture';
+import { addCaptureEvidence, assessExistingConditionCapture, captureObservationSummary, createExistingConditionCapture, recordAiPhotoAnalysis, removeCaptureEvidence, reviewAiPhotoObservation, updateCaptureEvidence } from './existingConditionCapture';
 import type { CaptureCategory } from './types';
 
 const evidence = (id: string, category: CaptureCategory) => ({
@@ -34,5 +34,15 @@ describe('ExistingConditionCapture public contract', () => {
     let capture = addCaptureEvidence(createExistingConditionCapture(), evidence('1', 'design-wall'));
     capture = addCaptureEvidence(capture, evidence('2', 'grade-context'));
     expect(removeCaptureEvidence(capture, '1').evidence.map((record) => record.id)).toEqual(['2']);
+  });
+
+  it('keeps AI observations source-bound and homeowner-reviewed without creating measurements', () => {
+    let capture = addCaptureEvidence(createExistingConditionCapture(), evidence('1', 'design-wall'));
+    capture = recordAiPhotoAnalysis(capture, { schema: 'ai-photo-observation-draft/v1', id: 'analysis-1', summary: 'Rear wall visible', generation: { model: 'test', responseId: 'response', generatedAt: '2026-07-18T12:00:00.000Z' }, unknowns: ['Exact opening size'], observations: [{ id: 'observation-1', sourceEvidenceId: '1', kind: 'window', confidence: .88, description: 'Window visible', measurementStatus: 'not-measured', boundingBox: null, uncertainties: ['Perspective'], decision: 'proposed' }] });
+    expect(capture.aiAnalyses?.[0].observations[0]).toMatchObject({ sourceEvidenceId: '1', measurementStatus: 'not-measured', decision: 'proposed' });
+    capture = reviewAiPhotoObservation(capture, 'analysis-1', 'observation-1', 'homeowner-accepted');
+    expect(capture.aiAnalyses?.[0].observations[0].decision).toBe('homeowner-accepted');
+    expect(removeCaptureEvidence(capture, '1').aiAnalyses?.[0].observations).toHaveLength(0);
+    expect(() => recordAiPhotoAnalysis(capture, { ...capture.aiAnalyses![0], id: 'bad', observations: [{ ...capture.aiAnalyses![0].observations[0], sourceEvidenceId: 'missing' }] })).toThrow(/admitted source photo/);
   });
 });

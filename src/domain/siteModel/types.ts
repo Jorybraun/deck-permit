@@ -120,12 +120,36 @@ export interface CaptureEvidence {
   referenceDimensionMm?: number | null;
 }
 
+export type AiPhotoObservationKind = 'house-wall' | 'door' | 'window' | 'landing' | 'stair' | 'grade' | 'vent-service' | 'drainage' | 'obstruction' | 'other';
+export interface AiPhotoObservationDraft {
+  id: string;
+  sourceEvidenceId: string;
+  kind: AiPhotoObservationKind;
+  confidence: number;
+  description: string;
+  measurementStatus: 'not-measured';
+  boundingBox: { x: number; y: number; width: number; height: number } | null;
+  uncertainties: string[];
+  decision: 'proposed' | 'homeowner-accepted' | 'homeowner-rejected';
+}
+
+export interface AiPhotoAnalysisDraft {
+  schema: 'ai-photo-observation-draft/v1';
+  id: string;
+  summary: string;
+  observations: AiPhotoObservationDraft[];
+  unknowns: string[];
+  generation: { model: string; responseId: string; generatedAt: string };
+}
+
 export type CaptureEvidenceChanges = Partial<Pick<CaptureEvidence, 'category' | 'label' | 'notes' | 'status' | 'observationTags' | 'viewpoint' | 'referenceLabel' | 'referenceDimensionMm'>>;
 
 /** Metadata for locally stored private capture files; bytes are owned by capture-file storage. */
 export interface ExistingConditionCapture {
   schema: 'existing-condition-capture/v1';
   evidence: CaptureEvidence[];
+  /** AI observations remain a separate, homeowner-reviewed draft layer. */
+  aiAnalyses?: AiPhotoAnalysisDraft[];
 }
 
 export interface CaptureRequirement {

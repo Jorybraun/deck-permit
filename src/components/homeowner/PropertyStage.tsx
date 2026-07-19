@@ -30,11 +30,13 @@ interface PropertyStageProps {
   onAddCaptureFiles: (category: CaptureCategory, files: File[]) => Promise<void>;
   onUpdateCaptureEvidence: (evidenceId: string, changes: CaptureEvidenceChanges) => void;
   onRemoveCaptureEvidence: (evidenceId: string) => Promise<void>;
+  onAnalyzeCapture: () => Promise<void>;
+  onReviewAiObservation: (analysisId: string, observationId: string, decision: 'homeowner-accepted' | 'homeowner-rejected') => void;
   onContinue: () => void;
 }
 
 /** Lets a homeowner research a parcel and turn reference geometry into explicit field inputs. */
-export function PropertyStage({ property, site, research, onResearch, onResearchAddress, onSuggestAddresses, onSelectWall, onUpdateSite, onUpdateTerrainDatum, onAddTerrainPoint, onUpdateTerrainPoint, onRemoveTerrainPoint, captureAssessment, capturePreviewUrls, onAddCaptureFiles, onUpdateCaptureEvidence, onRemoveCaptureEvidence, onContinue }: PropertyStageProps) {
+export function PropertyStage({ property, site, research, onResearch, onResearchAddress, onSuggestAddresses, onSelectWall, onUpdateSite, onUpdateTerrainDatum, onAddTerrainPoint, onUpdateTerrainPoint, onRemoveTerrainPoint, captureAssessment, capturePreviewUrls, onAddCaptureFiles, onUpdateCaptureEvidence, onRemoveCaptureEvidence, onAnalyzeCapture, onReviewAiObservation, onContinue }: PropertyStageProps) {
   const [address, setAddress] = useState(property.address?.fullAddress || '');
   const [addressOptions, setAddressOptions] = useState<Address[]>([]);
   const [suggestionStatus, setSuggestionStatus] = useState<'idle' | 'loading' | 'ready'>('idle');
@@ -113,7 +115,7 @@ export function PropertyStage({ property, site, research, onResearch, onResearch
             <label className="grid gap-1.5 text-xs font-bold uppercase tracking-[.08em] text-slate-500">Measured date<input type="date" value={site.measuredAt} onChange={(event) => onUpdateSite({ measuredAt: event.target.value })} className="min-h-11 rounded-lg border border-slate-300 px-3 text-sm font-normal normal-case tracking-normal text-slate-800" /></label>
           </div>
           <WallOpeningEditor site={site} onUpdateOpenings={(openings) => onUpdateSite({}, { openings })} />
-          <ExistingConditionCapturePanel capture={site.capture} assessment={captureAssessment} previewUrls={capturePreviewUrls} onAddFiles={onAddCaptureFiles} onUpdateEvidence={onUpdateCaptureEvidence} onRemoveEvidence={onRemoveCaptureEvidence} />
+          <ExistingConditionCapturePanel capture={site.capture} assessment={captureAssessment} previewUrls={capturePreviewUrls} onAddFiles={onAddCaptureFiles} onUpdateEvidence={onUpdateCaptureEvidence} onRemoveEvidence={onRemoveCaptureEvidence} onAnalyze={onAnalyzeCapture} onReviewAiObservation={onReviewAiObservation} />
           <TerrainCapturePanel terrain={site.terrain} onUpdateDatum={onUpdateTerrainDatum} onAddPoint={onAddTerrainPoint} onUpdatePoint={onUpdateTerrainPoint} onRemovePoint={onRemoveTerrainPoint} />
           <div className="mt-5 flex justify-end"><button type="button" onClick={onContinue} className="flex min-h-11 items-center gap-2 rounded-lg bg-emerald-800 px-5 text-sm font-bold text-white">Open deck designer <ArrowRight size={16} /></button></div>
         </section>

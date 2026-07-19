@@ -1,4 +1,4 @@
-import type { CaptureCategory, CaptureEvidence, CaptureEvidenceChanges, CaptureObservationTag, ExistingConditionCapture, ExistingConditionCaptureAssessment } from './types';
+import type { AiPhotoAnalysisDraft, CaptureCategory, CaptureEvidence, CaptureEvidenceChanges, CaptureObservationTag, ExistingConditionCapture, ExistingConditionCaptureAssessment } from './types';
 
 export const MAX_CAPTURE_FILE_BYTES = 30 * 1024 * 1024;
 export const CAPTURE_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'] as const;
@@ -49,7 +49,25 @@ export function updateCaptureEvidence(capture: ExistingConditionCapture, evidenc
 }
 
 export function removeCaptureEvidence(capture: ExistingConditionCapture, evidenceId: string): ExistingConditionCapture {
-  return { ...capture, evidence: capture.evidence.filter((record) => record.id !== evidenceId) };
+  return { ...capture, evidence: capture.evidence.filter((record) => record.id !== evidenceId), aiAnalyses: (capture.aiAnalyses || []).map((analysis) => ({ ...analysis, observations: analysis.observations.filter((observation) => observation.sourceEvidenceId !== evidenceId) })) };
+}
+
+export function recordAiPhotoAnalysis(capture: ExistingConditionCapture, analysis: AiPhotoAnalysisDraft): ExistingConditionCapture {
+  if (analysis.schema !== 'ai-photo-observation-draft/v1' || !analysis.id) throw new Error('AI photo analysis requires a versioned ID.');
+  const evidenceIds = new Set(capture.evidence.map((record) => record.id));
+  if (analysis.observations.some((observation) => !evidenceIds.has(observation.sourceEvidenceId))) throw new Error('AI photo observations must reference an admitted source photo.');
+  return { ...capture, aiAnalyses: [...(capture.aiAnalyses || []).filter((item) => item.id !== analysis.id), analysis] };
+}
+
+export function reviewAiPhotoObservation(capture: ExistingConditionCapture, analysisId: string, observationId: string, decision: 'homeowner-accepted' | 'homeowner-rejected'): ExistingConditionCapture {
+  let found = false;
+  const aiAnalyses = (capture.aiAnalyses || []).map((analysis) => analysis.id !== analysisId ? analysis : { ...analysis, observations: analysis.observations.map((observation) => {
+    if (observation.id !== observationId) return observation;
+    found = true;
+    return { ...observation, decision };
+  }) });
+  if (!found) throw new Error(`AI photo observation ${observationId} was not found.`);
+  return { ...capture, aiAnalyses };
 }
 
 export function assessExistingConditionCapture(capture: ExistingConditionCapture, options: { hasDoor: boolean }): ExistingConditionCaptureAssessment {
