@@ -401,7 +401,7 @@ const PROFESSIONAL_RESOLUTION_ROWS_PER_SHEET = 6;
 
 function acceptedProfessionalCoordination(input: CanonicalPlanSetInput, issue: IssueMeta): AcceptedProfessionalCoordination | null {
   const accepted = (input.reviewCycles || [])
-    .filter((cycle) => cycle.decision === 'accepted' && cycle.sourceDesignFingerprint === issue.fingerprint)
+    .filter((cycle) => cycle.decision === 'accepted' && cycle.sourceDesignFingerprint === issue.fingerprint && (cycle.professionalDiscipline === 'structural' || (cycle.issuerRole === 'engineer' && !cycle.professionalDiscipline)))
     .sort((first, second) => Date.parse(second.importedAt) - Date.parse(first.importedAt))[0];
   if (!accepted) return null;
   const report = buildCanonicalCalculationReport({ ...input, generatedAt: issue.issuedAt, revision: issue.revision });

@@ -23,11 +23,12 @@ export function CanonicalReviewPanel({ issue, publication, reviewCycles, verific
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const fingerprint = issue.manifest.designFingerprint;
-  const currentPublication = publication?.designFingerprint === fingerprint ? publication : null;
+  const currentPublication = publication?.designFingerprint === fingerprint && publication.discipline === 'structural' ? publication : null;
+  const structuralCycles = reviewCycles.filter((cycle) => cycle.professionalDiscipline === 'structural' || (cycle.issuerRole === 'engineer' && !cycle.professionalDiscipline));
   const acceptedReview = verificationEvidence.find((item) => item.kind === 'sealed-structural-review' && item.decision === 'accepted' && item.designFingerprint === fingerprint && item.issuerRole === 'engineer' && item.professionalDiscipline === 'structural' && item.professionalRegistry === 'egbc' && Boolean(item.firmName) && Boolean(item.permitToPracticeNumber));
-  const currentChangeRequest = reviewCycles.find((cycle) => cycle.sourceDesignFingerprint === fingerprint && cycle.decision === 'changes-requested');
-  const acceptedCycle = reviewCycles.find((cycle) => cycle.sourceDesignFingerprint === fingerprint && cycle.decision === 'accepted');
-  const unanswered = unansweredRequiredRedlines(reviewCycles);
+  const currentChangeRequest = structuralCycles.find((cycle) => cycle.sourceDesignFingerprint === fingerprint && cycle.decision === 'changes-requested');
+  const acceptedCycle = structuralCycles.find((cycle) => cycle.sourceDesignFingerprint === fingerprint && cycle.decision === 'accepted');
+  const unanswered = unansweredRequiredRedlines(structuralCycles);
 
   const publish = async () => {
     if (unanswered.length) return setError(`Respond to ${unanswered.length} required professional redline${unanswered.length === 1 ? '' : 's'} before issuing another review revision.`);
@@ -97,7 +98,7 @@ function ReviewStep({ number, label, complete }: { number: string; label: string
   return <li className={`flex min-h-12 items-center gap-3 rounded-lg border px-3 ${complete ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-slate-50'}`}><span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full text-xs font-black ${complete ? 'bg-emerald-700 text-white' : 'bg-slate-200 text-slate-600'}`}>{complete ? <CheckCircle2 size={15} /> : number}</span><span className="text-xs font-bold text-slate-800">{label}</span></li>;
 }
 
-function RedlineResponse({ cycle, redline, targetFingerprint, onResolve, onError }: {
+export function RedlineResponse({ cycle, redline, targetFingerprint, onResolve, onError }: {
   cycle: ProfessionalReviewCycle;
   redline: ProfessionalReviewCycle['redlines'][number];
   targetFingerprint: string;

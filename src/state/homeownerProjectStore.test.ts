@@ -3,8 +3,8 @@ import { rectangularBoundary } from '../domain/deckDesign';
 import type { PermitSubmissionRecord, ReviewExchangePublication } from '../types';
 import { useHomeownerProject } from './homeownerProjectStore';
 
-function publication(revision: number): ReviewExchangePublication {
-  return { projectId: `rvw_${revision}`, ownerToken: 'owner-token', reviewerUrl: `https://example.test/review/${revision}`, designFingerprint: `DP-ABCDEF0${revision}`, revision, issueIssuedAt: `2026-07-18T12:0${revision}:00.000Z`, publishedAt: `2026-07-18T12:0${revision}:01.000Z`, expiresAt: '2026-08-17T12:00:00.000Z' };
+function publication(revision: number, discipline: ReviewExchangePublication['discipline'] = 'structural'): ReviewExchangePublication {
+  return { projectId: `rvw_${discipline}_${revision}`, ownerToken: 'owner-token', reviewerUrl: `https://example.test/review/${discipline}/${revision}`, designFingerprint: `DP-ABCDEF0${revision}`, discipline, revision, issueIssuedAt: `2026-07-18T12:0${revision}:00.000Z`, publishedAt: `2026-07-18T12:0${revision}:01.000Z`, expiresAt: '2026-08-17T12:00:00.000Z' };
 }
 
 const receipt: PermitSubmissionRecord = {
@@ -40,8 +40,10 @@ describe('homeowner professional review revision state', () => {
     const project = useHomeownerProject.getState();
     project.addPlatform({ boundary: rectangularBoundary(0, 0, 4000, 3000), elevationMm: 900 });
     useHomeownerProject.getState().setReviewPublication(publication(1));
+    useHomeownerProject.getState().setArchitecturalReviewPublication(publication(1, 'architectural'));
     useHomeownerProject.getState().undoDesign();
     expect(useHomeownerProject.getState().reviewPublication).toBeNull();
+    expect(useHomeownerProject.getState().architecturalReviewPublication).toBeNull();
   });
 });
 

@@ -50,7 +50,7 @@ export class ReviewExchangeStore {
   async submitReview(id, token, review) {
     return this.#withLock(id, async () => {
       const record = await this.#readAuthorized(id, token, 'reviewer');
-      validateReview(review, record.reviewPackage.manifest.designFingerprint, record.reviewPackage.planset.map((sheet) => sheet.id), record.reviewPackage.calculationReport);
+      validateReview(review, record.reviewPackage.reviewScope, record.reviewPackage.manifest.designFingerprint, record.reviewPackage.planset.map((sheet) => sheet.id), record.reviewPackage.calculationReport);
       const updated = { ...record, updatedAt: new Date().toISOString(), review };
       await this.#write(updated);
       return publicReview(review);
@@ -107,8 +107,10 @@ function validateReviewPackage(value) {
   if (!value.manifest || !FINGERPRINT_PATTERN.test(value.manifest.designFingerprint)) throw new ReviewExchangeError(400, 'invalid-fingerprint', 'A valid design fingerprint is required.');
   if (!value.property || typeof value.property.address !== 'string' || !value.property.address.trim()) throw new ReviewExchangeError(400, 'invalid-property', 'A project address is required.');
   if (!value.deck || !Number.isFinite(value.deck.area) || value.deck.area <= 0) throw new ReviewExchangeError(400, 'invalid-deck', 'Deck geometry is required.');
-  if (value.reviewScope?.discipline !== 'structural' || value.reviewScope?.responsibleProfessional !== 'engineer' || !Array.isArray(value.reviewScope?.acceptanceRequires) || !['sealed-pdf', 'egbc-directory-confirmation', 'permit-to-practice', 'complete-work-package-resolutions'].every((requirement) => value.reviewScope.acceptanceRequires.includes(requirement))) throw new ReviewExchangeError(400, 'invalid-review-scope', 'The review package must declare the structural engineer acceptance scope.');
-  if (!Array.isArray(value.planset) || value.planset.length < 1 || value.planset.length > 20) throw new ReviewExchangeError(400, 'invalid-planset', 'One to twenty drawing sheets are required.');
+  const structuralScope = value.reviewScope?.discipline === 'structural' && value.reviewScope?.responsibleProfessional === 'engineer' && ['sealed-pdf', 'egbc-directory-confirmation', 'permit-to-practice', 'complete-work-package-resolutions'].every((requirement) => value.reviewScope.acceptanceRequires?.includes(requirement));
+  const architecturalScope = value.reviewScope?.discipline === 'architectural' && value.reviewScope?.responsibleProfessional === 'architect' && value.reviewScope?.permitRequirement === 'optional-coordination-unless-required-by-authority' && ['sealed-pdf', 'aibc-directory-confirmation', 'certificate-of-practice-firm'].every((requirement) => value.reviewScope.acceptanceRequires?.includes(requirement));
+  if (!structuralScope && !architecturalScope) throw new ReviewExchangeError(400, 'invalid-review-scope', 'The review package must declare a supported structural-engineering or architectural-coordination scope.');
+  if (!Array.isArray(value.planset) || value.planset.length < 1 || value.planset.length > 60) throw new ReviewExchangeError(400, 'invalid-planset', 'One to sixty drawing sheets are required.');
   if (value.planset.some((sheet) => typeof sheet?.svg !== 'string' || sheet.svg.length < 20 || sheet.svg.length > 1_500_000)) throw new ReviewExchangeError(400, 'invalid-sheet', 'Each drawing sheet must contain a bounded SVG document.');
   if (value.cadExchange !== undefined) validateCadExchange(value.cadExchange, value.manifest.designFingerprint);
   if (value.calculationReport !== undefined) validateCalculationReport(value.calculationReport, value.manifest.designFingerprint);
@@ -130,7 +132,7 @@ function validateCadExchange(value, expectedFingerprint) {
 }
 
 function validateCalculationReport(value, expectedFingerprint) {
-  if (!value || typeof value !== 'object' || value.schema !== 'permitly-canonical-calculation-report/v1' || value.issuePurpose !== 'professional-review' || value.notForConstruction !== true) {
+  if (!value || typeof value !== 'object' || value.schema !== 'permitly-canonical-calculation-report/v2' || value.issuePurpose !== 'professional-review' || value.notForConstruction !== true) {
     throw new ReviewExchangeError(400, 'invalid-calculation-report', 'The calculation report contract is invalid.');
   }
   if (value.designFingerprint !== expectedFingerprint) throw new ReviewExchangeError(409, 'calculation-revision-mismatch', 'The calculation report does not match the published drawing revision.');
@@ -164,14 +166,18 @@ function validateCalculationReport(value, expectedFingerprint) {
   }
 }
 
-function validateReview(review, expectedFingerprint, publishedSheetIds, calculationReport) {
+function validateReview(review, reviewScope, expectedFingerprint, publishedSheetIds, calculationReport) {
   if (!review || typeof review !== 'object') throw new ReviewExchangeError(400, 'invalid-review', 'A review decision is required.');
   if (review.designFingerprint !== expectedFingerprint) throw new ReviewExchangeError(409, 'revision-mismatch', 'The review does not match the published design revision.');
   if (!['accepted', 'changes-requested'].includes(review.decision)) throw new ReviewExchangeError(400, 'invalid-decision', 'The review decision is invalid.');
-  if (review.issuerRole !== 'engineer' || review.professionalDiscipline !== 'structural' || !boundedText(review.issuerName, 2, 200) || !boundedText(review.licenseNumber, 2, 100)) throw new ReviewExchangeError(400, 'invalid-professional-scope', 'An accepted structural review requires a named EGBC engineering professional acting in the structural discipline.');
-  if (!boundedText(review.firmName, 2, 200) || !boundedText(review.permitToPracticeNumber, 2, 100)) throw new ReviewExchangeError(400, 'invalid-permit-to-practice', 'Record the engineering practice and its EGBC Permit to Practice number.');
-  const expectedRegistry = 'egbc';
-  const expectedRegistryUrl = 'https://www.egbc.ca/registrant-directory';
+  if (!boundedText(review.issuerName, 2, 200) || !boundedText(review.licenseNumber, 2, 100) || !boundedText(review.firmName, 2, 200)) throw new ReviewExchangeError(400, 'invalid-professional-scope', 'Record the responsible professional and authorized practice for this review discipline.');
+  const structural = reviewScope?.discipline === 'structural';
+  if (structural && (review.issuerRole !== 'engineer' || review.professionalDiscipline !== 'structural')) throw new ReviewExchangeError(400, 'invalid-professional-scope', 'An accepted structural review requires a named EGBC engineering professional acting in the structural discipline.');
+  if (!structural && (review.issuerRole !== 'architect' || review.professionalDiscipline !== 'architectural')) throw new ReviewExchangeError(400, 'invalid-professional-scope', 'An architectural coordination review requires a named Architect AIBC acting in the architectural discipline.');
+  if (structural && !boundedText(review.permitToPracticeNumber, 2, 100)) throw new ReviewExchangeError(400, 'invalid-permit-to-practice', 'Record the engineering practice and its EGBC Permit to Practice number.');
+  if (!structural && review.practiceAuthorization !== 'aibc-certificate-of-practice-confirmed-by-user') throw new ReviewExchangeError(400, 'invalid-certificate-of-practice', 'Confirm that the architect practises through the recorded active AIBC Certificate-of-Practice firm.');
+  const expectedRegistry = structural ? 'egbc' : 'aibc';
+  const expectedRegistryUrl = structural ? 'https://www.egbc.ca/registrant-directory' : 'https://aibc.ca/resources/online-directory-test/';
   const registryCheckedAt = new Date(review.registryCheckedAt);
   const registryAge = Date.now() - registryCheckedAt.getTime();
   if (review.professionalRegistry !== expectedRegistry || review.registryUrl !== expectedRegistryUrl || review.registryStatus !== 'directory-confirmed-by-user' || !Number.isFinite(registryCheckedAt.getTime()) || registryAge < -60_000 || registryAge > 30 * 86_400_000) throw new ReviewExchangeError(400, 'registry-unconfirmed', 'A current check of the correct official professional directory is required.');
@@ -182,7 +188,8 @@ function validateReview(review, expectedFingerprint, publishedSheetIds, calculat
   if (review.byteSize !== pdf.length) throw new ReviewExchangeError(400, 'size-mismatch', 'The PDF byte size does not match its metadata.');
   if (tokenHashBytes(pdf) !== review.sha256.toLowerCase()) throw new ReviewExchangeError(400, 'digest-mismatch', 'The PDF digest does not match its bytes.');
   validateRedlines(review.redlines || [], expectedFingerprint, review.decision, publishedSheetIds);
-  validateStructuralResolutions(review.structuralResolutions || [], calculationReport, expectedFingerprint, review.decision);
+  if (structural) validateStructuralResolutions(review.structuralResolutions || [], calculationReport, expectedFingerprint, review.decision);
+  else if ((review.structuralResolutions || []).length) throw new ReviewExchangeError(400, 'unexpected-structural-resolutions', 'Architectural coordination cannot resolve structural engineering work packages.');
 }
 
 function validateStructuralResolutions(resolutions, report, expectedFingerprint, decision) {

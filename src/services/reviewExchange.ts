@@ -5,11 +5,7 @@ import type { CanonicalCalculationReport } from './canonicalCalculationReport';
 import type { ProfessionalWorkResolution } from './professionalWorkResolution';
 
 export interface ReviewPackagePayload {
-  reviewScope: {
-    discipline: 'structural';
-    responsibleProfessional: 'engineer';
-    acceptanceRequires: Array<'sealed-pdf' | 'egbc-directory-confirmation' | 'permit-to-practice' | 'complete-work-package-resolutions'>;
-  };
+  reviewScope: StructuralReviewScope | ArchitecturalReviewScope;
   manifest: PermitManifest;
   property: { address: string; pid: string; legalDescription: string; municipality: string; zone: string };
   deck: ReviewDeckPayload;
@@ -39,17 +35,43 @@ export interface ReviewBasisPayload {
   framingStatus?: unknown;
 }
 
-export interface ReviewSubmission extends Omit<VerificationEvidence, 'issuerRole' | 'licenseNumber' | 'decision' | 'designFingerprint'> {
-  issuerRole: 'engineer';
-  professionalDiscipline: 'structural';
-  firmName: string;
-  permitToPracticeNumber: string;
+interface ReviewSubmissionBase extends Omit<VerificationEvidence, 'issuerRole' | 'licenseNumber' | 'decision' | 'designFingerprint' | 'professionalDiscipline'> {
   licenseNumber: string;
   decision: 'accepted' | 'changes-requested';
   designFingerprint: string;
   pdfBase64: string;
   redlines: ReviewRedline[];
+}
+
+export interface StructuralReviewSubmission extends ReviewSubmissionBase {
+  issuerRole: 'engineer';
+  professionalDiscipline: 'structural';
+  firmName: string;
+  permitToPracticeNumber: string;
   structuralResolutions: ProfessionalWorkResolution[];
+}
+
+export interface ArchitecturalReviewSubmission extends ReviewSubmissionBase {
+  issuerRole: 'architect';
+  professionalDiscipline: 'architectural';
+  firmName: string;
+  practiceAuthorization: 'aibc-certificate-of-practice-confirmed-by-user';
+  structuralResolutions: [];
+}
+
+export type ReviewSubmission = StructuralReviewSubmission | ArchitecturalReviewSubmission;
+
+export interface StructuralReviewScope {
+  discipline: 'structural';
+  responsibleProfessional: 'engineer';
+  acceptanceRequires: Array<'sealed-pdf' | 'egbc-directory-confirmation' | 'permit-to-practice' | 'complete-work-package-resolutions'>;
+}
+
+export interface ArchitecturalReviewScope {
+  discipline: 'architectural';
+  responsibleProfessional: 'architect';
+  acceptanceRequires: Array<'sealed-pdf' | 'aibc-directory-confirmation' | 'certificate-of-practice-firm'>;
+  permitRequirement: 'optional-coordination-unless-required-by-authority';
 }
 
 export interface ReviewerExchangeResult {
@@ -80,8 +102,16 @@ export function buildReviewPackage(property: Property, deck: Deck, planset: Plan
   };
 }
 
-export function structuralReviewScope(): ReviewPackagePayload['reviewScope'] {
+export function structuralReviewScope(): StructuralReviewScope {
   return { discipline: 'structural', responsibleProfessional: 'engineer', acceptanceRequires: ['sealed-pdf', 'egbc-directory-confirmation', 'permit-to-practice', 'complete-work-package-resolutions'] };
+}
+
+export function architecturalReviewScope(): ArchitecturalReviewScope {
+  return { discipline: 'architectural', responsibleProfessional: 'architect', acceptanceRequires: ['sealed-pdf', 'aibc-directory-confirmation', 'certificate-of-practice-firm'], permitRequirement: 'optional-coordination-unless-required-by-authority' };
+}
+
+export function reviewPackageForDiscipline(reviewPackage: ReviewPackagePayload, discipline: 'structural' | 'architectural'): ReviewPackagePayload {
+  return { ...reviewPackage, reviewScope: discipline === 'structural' ? structuralReviewScope() : architecturalReviewScope() };
 }
 
 export async function publishReviewExchange(reviewPackage: ReviewPackagePayload): Promise<ReviewExchangePublication> {
@@ -90,7 +120,7 @@ export async function publishReviewExchange(reviewPackage: ReviewPackagePayload)
   const reviewerUrl = new URL(window.location.href);
   reviewerUrl.search = `?reviewProject=${encodeURIComponent(result.id)}`;
   reviewerUrl.hash = `reviewToken=${encodeURIComponent(result.reviewerToken)}`;
-  return { projectId: result.id, ownerToken: result.ownerToken, reviewerUrl: reviewerUrl.toString(), designFingerprint: reviewPackage.manifest.designFingerprint, revision: reviewPackage.manifest.revision, issueIssuedAt: reviewPackage.manifest.generatedAt, publishedAt: result.createdAt, expiresAt: result.expiresAt };
+  return { projectId: result.id, ownerToken: result.ownerToken, reviewerUrl: reviewerUrl.toString(), designFingerprint: reviewPackage.manifest.designFingerprint, discipline: reviewPackage.reviewScope.discipline, revision: reviewPackage.manifest.revision, issueIssuedAt: reviewPackage.manifest.generatedAt, publishedAt: result.createdAt, expiresAt: result.expiresAt };
 }
 
 export async function getReviewerExchange(projectId: string, reviewerToken: string): Promise<ReviewerExchangeResult> {

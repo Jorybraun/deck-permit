@@ -9,6 +9,7 @@ import { evaluateCanonicalPermitReadiness } from '../../services/canonicalPermit
 import type { PermitSubmissionRecord, ProfessionalReviewCycle, Property, ReviewExchangePublication, ReviewRedlineResolution, SidneyApplicationData, VerificationEvidence } from '../../types';
 import { FramingPlanPreview } from './FramingPlanPreview';
 import { CanonicalReviewPanel } from './CanonicalReviewPanel';
+import { ArchitecturalReviewPanel } from './ArchitecturalReviewPanel';
 import { CanonicalPermitPackagePanel } from './CanonicalPermitPackagePanel';
 
 interface PermitStageProps {
@@ -21,6 +22,7 @@ interface PermitStageProps {
   siteErrors: string[];
   siteWarnings: string[];
   reviewPublication: ReviewExchangePublication | null;
+  architecturalReviewPublication: ReviewExchangePublication | null;
   reviewIssueRevision: number;
   professionalReviewCycles: ProfessionalReviewCycle[];
   verificationEvidence: VerificationEvidence[];
@@ -33,6 +35,7 @@ interface PermitStageProps {
   onBackToDesign: () => void;
   onContinue: () => void;
   onPublishReview: (publication: ReviewExchangePublication) => void;
+  onPublishArchitecturalReview: (publication: ReviewExchangePublication) => void;
   onImportReview: (evidence: VerificationEvidence, cycle: ProfessionalReviewCycle) => void;
   onAddVerificationEvidence: (evidence: VerificationEvidence) => void;
   onUpdateSidneyApplication: (changes: Partial<SidneyApplicationData>) => void;
@@ -41,7 +44,7 @@ interface PermitStageProps {
 }
 
 /** Composes reviewable framing evidence and permit readiness from canonical project state. */
-export function PermitStage({ property, site, design, framing, framingStale, designErrors, siteErrors, siteWarnings, reviewPublication, reviewIssueRevision, professionalReviewCycles, verificationEvidence, sidneyApplication, permitSubmissionHistory, onGenerateFraming, onDownloadReviewSet, onDownloadCadExchange, onDownloadCalculationReport, onBackToDesign, onContinue, onPublishReview, onImportReview, onAddVerificationEvidence, onUpdateSidneyApplication, onRecordPermitSubmission, onResolveRedline }: PermitStageProps) {
+export function PermitStage({ property, site, design, framing, framingStale, designErrors, siteErrors, siteWarnings, reviewPublication, architecturalReviewPublication, reviewIssueRevision, professionalReviewCycles, verificationEvidence, sidneyApplication, permitSubmissionHistory, onGenerateFraming, onDownloadReviewSet, onDownloadCadExchange, onDownloadCalculationReport, onBackToDesign, onContinue, onPublishReview, onPublishArchitecturalReview, onImportReview, onAddVerificationEvidence, onUpdateSidneyApplication, onRecordPermitSubmission, onResolveRedline }: PermitStageProps) {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewSheetIndex, setPreviewSheetIndex] = useState(0);
   const [previewZoom, setPreviewZoom] = useState(100);
@@ -53,11 +56,11 @@ export function PermitStage({ property, site, design, framing, framingStale, des
   const requiredGates = framing?.reviewGates.filter((gate) => gate.status === 'required') || [];
   const currentFingerprint = framing ? canonicalPlanFingerprint({ property, site, design, framing }) : '';
   const acceptedProfessionalReview = professionalReviewCycles
-    .filter((cycle) => cycle.decision === 'accepted' && cycle.sourceDesignFingerprint === currentFingerprint)
+    .filter((cycle) => cycle.decision === 'accepted' && cycle.sourceDesignFingerprint === currentFingerprint && (cycle.professionalDiscipline === 'structural' || (cycle.issuerRole === 'engineer' && !cycle.professionalDiscipline)))
     .sort((first, second) => Date.parse(second.importedAt) - Date.parse(first.importedAt))[0];
-  const publicationIsCurrent = reviewPublication?.designFingerprint === currentFingerprint;
-  const issueRevision = publicationIsCurrent ? reviewPublication?.revision || reviewIssueRevision : reviewIssueRevision + 1;
-  const reviewIssue = useMemo(() => framingCurrent && framing ? buildCanonicalReviewIssue({ property, site, design, framing, reviewCycles: professionalReviewCycles, revision: issueRevision, issuedAt: publicationIsCurrent ? reviewPublication?.issueIssuedAt : undefined }) : null, [design, framing, framingCurrent, issueRevision, professionalReviewCycles, property, publicationIsCurrent, reviewPublication?.issueIssuedAt, site]);
+  const currentIssuePublication = reviewPublication?.designFingerprint === currentFingerprint ? reviewPublication : architecturalReviewPublication?.designFingerprint === currentFingerprint ? architecturalReviewPublication : null;
+  const issueRevision = currentIssuePublication?.revision || reviewIssueRevision + 1;
+  const reviewIssue = useMemo(() => framingCurrent && framing ? buildCanonicalReviewIssue({ property, site, design, framing, reviewCycles: professionalReviewCycles, revision: issueRevision, issuedAt: currentIssuePublication?.issueIssuedAt }) : null, [currentIssuePublication?.issueIssuedAt, design, framing, framingCurrent, issueRevision, professionalReviewCycles, property, site]);
   const permitApplication = useMemo(() => ({
     ...sidneyApplication,
     civicAddress: sidneyApplication.civicAddress || property.address?.fullAddress || '',
@@ -155,6 +158,7 @@ export function PermitStage({ property, site, design, framing, framingStale, des
         </div>
       </section>
       {reviewIssue && <CanonicalReviewPanel issue={reviewIssue} publication={reviewPublication} reviewCycles={professionalReviewCycles} verificationEvidence={verificationEvidence} onPublish={onPublishReview} onImportReview={onImportReview} onResolveRedline={onResolveRedline} />}
+      {reviewIssue && <ArchitecturalReviewPanel issue={reviewIssue} publication={architecturalReviewPublication} reviewCycles={professionalReviewCycles} verificationEvidence={verificationEvidence} onPublish={onPublishArchitecturalReview} onImportReview={onImportReview} onResolveRedline={onResolveRedline} />}
       {reviewIssue && permitReadiness && <CanonicalPermitPackagePanel issue={reviewIssue} property={property} application={permitApplication} readiness={permitReadiness} evidence={verificationEvidence} reviewCycles={professionalReviewCycles} submissionHistory={permitSubmissionHistory} onUpdateApplication={onUpdateSidneyApplication} onRecordEvidence={onAddVerificationEvidence} onSubmission={onRecordPermitSubmission} />}
     </div>
   </main>{previewOpen && reviewSheets.length > 0 && <div className="fixed inset-0 z-[90] flex flex-col bg-[#17211c]/95" role="dialog" aria-modal="true" aria-label="Permit drawing set preview">

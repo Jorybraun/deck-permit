@@ -38,6 +38,7 @@ export interface HomeownerProjectState {
   design: DeckDesign;
   framing: FramingDesign | null;
   reviewPublication: ReviewExchangePublication | null;
+  architecturalReviewPublication: ReviewExchangePublication | null;
   reviewIssueRevision: number;
   professionalReviewCycles: ProfessionalReviewCycle[];
   verificationEvidence: VerificationEvidence[];
@@ -57,6 +58,7 @@ export interface HomeownerProjectState {
   replaceDesign: (design: DeckDesign) => void;
   setFraming: (framing: FramingDesign | null) => void;
   setReviewPublication: (publication: ReviewExchangePublication | null) => void;
+  setArchitecturalReviewPublication: (publication: ReviewExchangePublication | null) => void;
   importProfessionalReview: (evidence: VerificationEvidence, cycle: ProfessionalReviewCycle) => void;
   addVerificationEvidence: (evidence: VerificationEvidence) => void;
   updateSidneyApplication: (changes: Partial<SidneyApplicationData>) => void;
@@ -104,6 +106,7 @@ const freshState = () => ({
   design: createEmptyDesign(),
   framing: null as FramingDesign | null,
   reviewPublication: null as ReviewExchangePublication | null,
+  architecturalReviewPublication: null as ReviewExchangePublication | null,
   reviewIssueRevision: 0,
   professionalReviewCycles: [] as ProfessionalReviewCycle[],
   verificationEvidence: [] as VerificationEvidence[],
@@ -121,14 +124,19 @@ export const useHomeownerProject = create<HomeownerProjectState>((set) => ({
   persistenceStatus: 'loading',
   lastSavedAt: null,
   setStage: (stage) => set({ stage }),
-  setProperty: (property) => set((state) => ({ property, error: null, reviewPublication: null, builderShareConsent: invalidateBuilderConsent(state.builderShareConsent), sidneyApplication: { ...state.sidneyApplication, civicAddress: property.address?.fullAddress || state.sidneyApplication.civicAddress } })),
-  setSite: (site) => set((state) => ({ site, reviewPublication: null, builderShareConsent: invalidateBuilderConsent(state.builderShareConsent) })),
+  setProperty: (property) => set((state) => ({ property, error: null, reviewPublication: null, architecturalReviewPublication: null, builderShareConsent: invalidateBuilderConsent(state.builderShareConsent), sidneyApplication: { ...state.sidneyApplication, civicAddress: property.address?.fullAddress || state.sidneyApplication.civicAddress } })),
+  setSite: (site) => set((state) => ({ site, reviewPublication: null, architecturalReviewPublication: null, builderShareConsent: invalidateBuilderConsent(state.builderShareConsent) })),
   updateIntent: (changes) => set((state) => ({ intent: { ...state.intent, ...changes }, builderShareConsent: invalidateBuilderConsent(state.builderShareConsent) })),
   replaceDesign: (design) => set((state) => commitDesign(state, design)),
-  setFraming: (framing) => set((state) => ({ framing, reviewPublication: null, builderShareConsent: invalidateBuilderConsent(state.builderShareConsent) })),
+  setFraming: (framing) => set((state) => ({ framing, reviewPublication: null, architecturalReviewPublication: null, builderShareConsent: invalidateBuilderConsent(state.builderShareConsent) })),
   setReviewPublication: (reviewPublication) => set((state) => ({
     reviewPublication,
     reviewIssueRevision: reviewPublication ? Math.max(state.reviewIssueRevision, reviewPublication.revision || state.reviewIssueRevision + 1) : state.reviewIssueRevision,
+    builderShareConsent: invalidateBuilderConsent(state.builderShareConsent),
+  })),
+  setArchitecturalReviewPublication: (architecturalReviewPublication) => set((state) => ({
+    architecturalReviewPublication,
+    reviewIssueRevision: architecturalReviewPublication ? Math.max(state.reviewIssueRevision, architecturalReviewPublication.revision || state.reviewIssueRevision + 1) : state.reviewIssueRevision,
     builderShareConsent: invalidateBuilderConsent(state.builderShareConsent),
   })),
   importProfessionalReview: (evidence, cycle) => set((state) => ({
@@ -165,12 +173,12 @@ export const useHomeownerProject = create<HomeownerProjectState>((set) => ({
   undoDesign: () => set((state) => {
     const previous = state.designHistory[state.designHistory.length - 1];
     if (!previous) return state;
-    return { design: previous, designHistory: state.designHistory.slice(0, -1), designFuture: [state.design, ...state.designFuture], reviewPublication: null, builderShareConsent: invalidateBuilderConsent(state.builderShareConsent) };
+    return { design: previous, designHistory: state.designHistory.slice(0, -1), designFuture: [state.design, ...state.designFuture], reviewPublication: null, architecturalReviewPublication: null, builderShareConsent: invalidateBuilderConsent(state.builderShareConsent) };
   }),
   redoDesign: () => set((state) => {
     const next = state.designFuture[0];
     if (!next) return state;
-    return { design: next, designHistory: [...state.designHistory, state.design].slice(-50), designFuture: state.designFuture.slice(1), reviewPublication: null, builderShareConsent: invalidateBuilderConsent(state.builderShareConsent) };
+    return { design: next, designHistory: [...state.designHistory, state.design].slice(-50), designFuture: state.designFuture.slice(1), reviewPublication: null, architecturalReviewPublication: null, builderShareConsent: invalidateBuilderConsent(state.builderShareConsent) };
   }),
   setLoading: (loading) => set({ loading }),
   setError: (error) => set({ error }),
@@ -178,7 +186,7 @@ export const useHomeownerProject = create<HomeownerProjectState>((set) => ({
 }));
 
 function commitDesign(state: Pick<HomeownerProjectState, 'design' | 'designHistory' | 'builderShareConsent'>, design: DeckDesign) {
-  return { design, designHistory: [...state.designHistory, state.design].slice(-50), designFuture: [] as DeckDesign[], error: null, reviewPublication: null, builderShareConsent: invalidateBuilderConsent(state.builderShareConsent) };
+  return { design, designHistory: [...state.designHistory, state.design].slice(-50), designFuture: [] as DeckDesign[], error: null, reviewPublication: null, architecturalReviewPublication: null, builderShareConsent: invalidateBuilderConsent(state.builderShareConsent) };
 }
 
 function invalidateBuilderConsent(consent: BuilderShareConsent): BuilderShareConsent {

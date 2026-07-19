@@ -7,6 +7,7 @@ import { ReviewExchangeError, ReviewExchangeStore } from './reviewExchangeStore.
 
 const fingerprint = 'DP-ABCDEF12';
 const reviewScope = { discipline: 'structural', responsibleProfessional: 'engineer', acceptanceRequires: ['sealed-pdf', 'egbc-directory-confirmation', 'permit-to-practice', 'complete-work-package-resolutions'] };
+const architecturalReviewScope = { discipline: 'architectural', responsibleProfessional: 'architect', acceptanceRequires: ['sealed-pdf', 'aibc-directory-confirmation', 'certificate-of-practice-firm'], permitRequirement: 'optional-coordination-unless-required-by-authority' };
 const reviewPackage = {
   reviewScope,
   manifest: { designFingerprint: fingerprint }, property: { address: '2423 Lovell Ave' }, deck: { area: 12 },
@@ -17,6 +18,11 @@ const review = {
   id: 'evidence-1', gateId: 'structural-review', kind: 'sealed-structural-review', fileName: 'sealed.pdf', mimeType: 'application/pdf', byteSize: pdf.length,
   pdfBase64: pdf.toString('base64'), sha256: createHash('sha256').update(pdf).digest('hex'), issuerName: 'Test Engineer', issuerRole: 'engineer', professionalDiscipline: 'structural', licenseNumber: '12345', firmName: 'Test Engineering Ltd.', permitToPracticeNumber: '1000123',
   decision: 'accepted', designFingerprint: fingerprint, professionalRegistry: 'egbc', registryUrl: 'https://www.egbc.ca/registrant-directory', registryCheckedAt: new Date().toISOString(), registryStatus: 'directory-confirmed-by-user', recordedAt: new Date().toISOString(), status: 'recorded-unverified', structuralResolutions: [],
+};
+const architecturalReview = {
+  ...review,
+  id: 'architectural-evidence-1', gateId: 'architectural-review', kind: 'sealed-architectural-review', issuerName: 'Test Architect', issuerRole: 'architect', professionalDiscipline: 'architectural', licenseNumber: 'AIBC-12345', firmName: 'Test Architecture Inc.', permitToPracticeNumber: undefined,
+  practiceAuthorization: 'aibc-certificate-of-practice-confirmed-by-user', professionalRegistry: 'aibc', registryUrl: 'https://aibc.ca/resources/online-directory-test/', structuralResolutions: [],
 };
 
 describe('ReviewExchangeStore', () => {
@@ -55,6 +61,20 @@ describe('ReviewExchangeStore', () => {
       .rejects.toEqual(expect.objectContaining<Partial<ReviewExchangeError>>({ status: 400, code: 'invalid-permit-to-practice' }));
   });
 
+  it('records an independent Architect AIBC sealed coordination review without granting structural authority', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'deck-review-'));
+    const store = new ReviewExchangeStore(directory);
+    const created = await store.create({ ...reviewPackage, reviewScope: architecturalReviewScope });
+    const result = await store.submitReview(created.id, created.reviewerToken, architecturalReview);
+    expect(result).toMatchObject({ issuerRole: 'architect', professionalDiscipline: 'architectural', kind: 'sealed-architectural-review', firmName: 'Test Architecture Inc.' });
+    await expect(store.submitReview(created.id, created.reviewerToken, { ...architecturalReview, issuerRole: 'engineer', professionalDiscipline: 'structural', professionalRegistry: 'egbc', registryUrl: 'https://www.egbc.ca/registrant-directory' }))
+      .rejects.toEqual(expect.objectContaining<Partial<ReviewExchangeError>>({ status: 400, code: 'invalid-professional-scope' }));
+    await expect(store.submitReview(created.id, created.reviewerToken, { ...architecturalReview, practiceAuthorization: undefined }))
+      .rejects.toEqual(expect.objectContaining<Partial<ReviewExchangeError>>({ status: 400, code: 'invalid-certificate-of-practice' }));
+    await expect(store.submitReview(created.id, created.reviewerToken, { ...architecturalReview, structuralResolutions: [{ id: 'not-allowed' }] }))
+      .rejects.toEqual(expect.objectContaining<Partial<ReviewExchangeError>>({ status: 400, code: 'unexpected-structural-resolutions' }));
+  });
+
   it('accepts only a bounded CAD exchange tied to the published fingerprint', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'deck-review-'));
     const store = new ReviewExchangeStore(directory);
@@ -75,7 +95,7 @@ describe('ReviewExchangeStore', () => {
     const directory = await mkdtemp(join(tmpdir(), 'deck-review-'));
     const store = new ReviewExchangeStore(directory);
     const calculationReport = {
-      schema: 'permitly-canonical-calculation-report/v1', designFingerprint: fingerprint, generatedAt: new Date().toISOString(), revision: 2,
+      schema: 'permitly-canonical-calculation-report/v2', designFingerprint: fingerprint, generatedAt: new Date().toISOString(), revision: 2,
       issuePurpose: 'professional-review', status: 'engineering-required', notForConstruction: true,
       project: { address: '2423 Lovell Ave', pid: 'PID', municipality: 'Sidney', codeProfile: 'BCBC 2024' },
       designBasis: { deadLoadKpa: 0.5, liveLoadKpa: 1.9, snowLoadKpa: 1, governingAreaLoadKpa: 1.9, assumedSoilBearingKpa: 75, lumber: 'SPF No. 2', treatment: 'exterior' },
@@ -91,6 +111,8 @@ describe('ReviewExchangeStore', () => {
     const structuredResolution = (id: string, workPackageId: string, kind: string) => ({ schema: 'permitly-professional-work-resolution/v1', id, designFingerprint: fingerprint, workPackageId, kind, disposition: 'specified', specification: 'Professionally selected assembly', capacityBasis: 'Sealed calculation section 4', documentReference: 'SK-01 / Calc 4', notes: '', recordedAt: new Date().toISOString() });
     const structuralResolutions = [structuredResolution('resolution_sys_p1', 'SYS:P1', 'platform-system'), structuredResolution('resolution_fnd_p1', 'FND:P1', 'foundation-system'), structuredResolution('resolution_conn_p1', 'C-P1-B1', 'connection')];
     expect((await store.submitReview(created.id, created.reviewerToken, { ...review, structuralResolutions })).structuralResolutions).toHaveLength(3);
+    await expect(store.create({ ...reviewPackage, calculationReport: { ...calculationReport, schema: 'permitly-canonical-calculation-report/v1' } }))
+      .rejects.toEqual(expect.objectContaining<Partial<ReviewExchangeError>>({ status: 400, code: 'invalid-calculation-report' }));
     await expect(store.create({ ...reviewPackage, calculationReport: { ...calculationReport, designFingerprint: 'DP-00000000' } }))
       .rejects.toEqual(expect.objectContaining<Partial<ReviewExchangeError>>({ status: 409, code: 'calculation-revision-mismatch' }));
     await expect(store.create({ ...reviewPackage, calculationReport: { ...calculationReport, joistGroups: [{ spacingMm: -1 }] } }))

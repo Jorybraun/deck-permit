@@ -47,6 +47,7 @@ export function createProfessionalReviewCycle(input: {
     professionalDiscipline?: 'structural' | 'architectural';
     firmName?: string;
     permitToPracticeNumber?: string;
+    practiceAuthorization?: 'aibc-certificate-of-practice-confirmed-by-user';
     recordedAt: string;
     redlines?: ReviewRedline[];
     structuralResolutions?: ProfessionalWorkResolution[];
@@ -64,6 +65,7 @@ export function createProfessionalReviewCycle(input: {
     professionalDiscipline: input.review.professionalDiscipline,
     firmName: input.review.firmName,
     permitToPracticeNumber: input.review.permitToPracticeNumber,
+    practiceAuthorization: input.review.practiceAuthorization,
     importedAt: new Date().toISOString(),
     evidenceId: input.review.id,
     redlines: input.review.redlines || [],

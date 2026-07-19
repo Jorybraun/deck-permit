@@ -317,6 +317,7 @@ export type VerificationEvidenceKind =
   | 'field-report'
   | 'soil-report'
   | 'sealed-structural-review'
+  | 'sealed-architectural-review'
   | 'application-checklist';
 
 export interface VerificationEvidence {
@@ -340,6 +341,7 @@ export interface VerificationEvidence {
   professionalDiscipline?: 'structural' | 'architectural' | 'survey';
   firmName?: string;
   permitToPracticeNumber?: string;
+  practiceAuthorization?: 'aibc-certificate-of-practice-confirmed-by-user';
   recordedAt: string;
   status: 'recorded-unverified';
 }
@@ -362,6 +364,7 @@ export interface ReviewExchangePublication {
   ownerToken: string;
   reviewerUrl: string;
   designFingerprint: string;
+  discipline: 'structural' | 'architectural';
   revision?: number;
   issueIssuedAt?: string;
   publishedAt: string;
@@ -404,6 +407,7 @@ export interface ProfessionalReviewCycle {
   professionalDiscipline?: 'structural' | 'architectural';
   firmName?: string;
   permitToPracticeNumber?: string;
+  practiceAuthorization?: 'aibc-certificate-of-practice-confirmed-by-user';
   importedAt: string;
   evidenceId: string;
   redlines: ReviewRedline[];
