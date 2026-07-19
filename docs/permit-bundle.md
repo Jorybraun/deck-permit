@@ -25,7 +25,7 @@ Dependency direction is UI → permit bundle → artifact services/evidence read
 
 - `README-FIRST.txt`: readiness, revision, limitations, outstanding gates, and submission contact.
 - `01-application/`: unsigned official prefill and current signed/checklist evidence when recorded.
-- `02-drawings/`: coordinated twelve-sheet-minimum 11×17 vector PDF with paginated S2.x connection schedules, one S3.x section per platform, and A4.x stair/guard schedules, plus the calculation booklet and layered millimetre DXF carrying one design fingerprint.
+- `02-drawings/`: coordinated thirteen-sheet-minimum 11×17 vector PDF with paginated S1.x footing/post schedules, S2.x connection schedules, one S3.x section per platform, and A4.x stair/guard schedules, plus the calculation booklet and layered millimetre DXF carrying one design fingerprint.
 - `03-evidence/`: integrity-checked site captures, owner-signed application evidence, and current professional evidence.
 - `04-records/`: canonical project, calculation report, canonical submission manifest, professional structural-resolution records, and a SHA-256 package index covering every preceding file.
 - `05-stale-evidence/`: integrity-checked evidence belonging to another design fingerprint. It is retained for audit and never satisfies current readiness.

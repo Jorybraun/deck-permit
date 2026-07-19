@@ -27,9 +27,11 @@ describe('canonical coordinated review set', () => {
     expect(planSet.fingerprint).not.toBe(`DP-${framing.inputFingerprint.slice(-8).toUpperCase()}`);
     const connectionPageCount = Math.max(1, Math.ceil(framing.connections.length / 12));
     const connectionNumbers = Array.from({ length: connectionPageCount }, (_, index) => `S2.${index + 1}`);
+    const foundationPageCount = Math.max(1, Math.ceil(framing.footings.length / 15));
+    const foundationNumbers = Array.from({ length: foundationPageCount }, (_, index) => `S1.${index + 1}`);
     const sectionNumbers = design.platforms.map((_, index) => `S3.${index}`);
-    expect(planSet.sheets).toHaveLength(10 + connectionPageCount + sectionNumbers.length);
-    expect(planSet.sheets.map((sheet) => sheet.number)).toEqual(['A0.0', 'C1.0', 'A1.0', 'A2.0', 'S1.0', 'S2.0', ...connectionNumbers, 'A3.0', ...sectionNumbers, 'A4.0', 'A4.1', 'S4.0']);
+    expect(planSet.sheets).toHaveLength(10 + foundationPageCount + connectionPageCount + sectionNumbers.length);
+    expect(planSet.sheets.map((sheet) => sheet.number)).toEqual(['A0.0', 'C1.0', 'A1.0', 'A2.0', 'S1.0', ...foundationNumbers, 'S2.0', ...connectionNumbers, 'A3.0', ...sectionNumbers, 'A4.0', 'A4.1', 'S4.0']);
     expect(planSet.sheets.every((sheet) => sheet.designFingerprint === planSet.fingerprint)).toBe(true);
     for (const sheet of planSet.sheets) {
       const errors: string[] = [];
@@ -63,6 +65,12 @@ describe('canonical coordinated review set', () => {
     expect(planSet.sheets.find((sheet) => sheet.number === 'A2.0')?.svg).toContain('900H · DROP 900');
     expect(planSet.sheets.find((sheet) => sheet.number === 'S1.0')?.svg).toContain('FOOTING / POST COORDINATE SCHEDULE');
     expect(planSet.sheets.find((sheet) => sheet.number === 'S1.0')?.svg).toContain('FOUNDATION DESIGN GATE');
+    const foundationSchedules = planSet.sheets.filter((sheet) => sheet.id === 'foundation-schedule' || sheet.id.startsWith('foundation-schedule-'));
+    expect(foundationSchedules).toHaveLength(foundationPageCount);
+    expect(foundationSchedules[0].svg).toContain('FOOTING &amp; POST DESIGN CONTROL');
+    expect(foundationSchedules[0].svg).toContain('DO NOT EXCAVATE FROM THIS SCHEDULE');
+    expect(foundationSchedules[0].svg).toContain('SOIL, FROST, DEPTH, THICKNESS, REINFORCEMENT, UPLIFT');
+    for (const footing of framing.footings) expect(foundationSchedules.filter((sheet) => sheet.svg.includes(footing.id))).toHaveLength(1);
     expect(planSet.sheets.find((sheet) => sheet.number === 'S2.0')?.svg).toContain('Stair framing');
     expect(planSet.sheets.find((sheet) => sheet.number === 'S2.0')?.svg).toContain('ST1-FROM-HDR');
     expect(planSet.sheets.find((sheet) => sheet.number === 'S2.0')?.svg).toContain('P1-C1');
@@ -130,6 +138,10 @@ describe('canonical coordinated review set', () => {
       expect(scheduleSheets.filter((sheet) => sheet.svg.includes(guard.id))).toHaveLength(1);
     }
     expect(planSet.sheets.find((sheet) => sheet.number === 'A0.0')?.svg).toContain('A4.1–A4.2');
+    const foundationSheets = planSet.sheets.filter((sheet) => sheet.id === 'foundation-schedule' || sheet.id.startsWith('foundation-schedule-'));
+    expect(foundationSheets.length).toBeGreaterThan(1);
+    for (const footing of framing.footings) expect(foundationSheets.filter((sheet) => sheet.svg.includes(footing.id))).toHaveLength(1);
+    expect(planSet.sheets.find((sheet) => sheet.number === 'A0.0')?.svg).toContain(`S1.1–S1.${foundationSheets.length}`);
     const connectionSheets = planSet.sheets.filter((sheet) => sheet.id === 'connection-schedule' || sheet.id.startsWith('connection-schedule-'));
     expect(connectionSheets.length).toBeGreaterThan(1);
     for (const connection of framing.connections) expect(connectionSheets.filter((sheet) => sheet.svg.includes(connection.id))).toHaveLength(1);

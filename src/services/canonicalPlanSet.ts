@@ -6,7 +6,7 @@ import type { PlanSheet, Property } from '../types';
 import { renderOrthographicElevationSvg } from './orthographicElevationSvg';
 
 const CONTENT_BOTTOM = 970;
-export const CANONICAL_PLAN_SET_SCHEMA = 'permitly-canonical-plan-set/v7' as const;
+export const CANONICAL_PLAN_SET_SCHEMA = 'permitly-canonical-plan-set/v8' as const;
 
 interface CanonicalPlanSetInput {
   property: Property;
@@ -53,15 +53,17 @@ export function generateCanonicalPlanSet(input: CanonicalPlanSetInput): Canonica
     revision: input.revision || 1,
     issuedAt: input.issuedAt || new Date().toISOString(),
   };
+  const foundationSchedules = foundationScheduleSheets(input, issue);
   const connectionSchedules = connectionScheduleSheets(input, issue);
   const sections = sectionSheets(input, issue);
   const assemblySchedules = assemblyScheduleSheets(input, issue);
   const sheets = [
-    coverSheet(input, issue, connectionSchedules.length, sections.length, assemblySchedules.length),
+    coverSheet(input, issue, foundationSchedules.length, connectionSchedules.length, sections.length, assemblySchedules.length),
     existingConditionsSheet(input, issue),
     siteSheet(input, issue),
     deckPlanSheet(input, issue),
     foundationSheet(input, issue),
+    ...foundationSchedules,
     framingSheet(input, issue),
     ...connectionSchedules,
     elevationSheet(input, issue),
@@ -73,7 +75,7 @@ export function generateCanonicalPlanSet(input: CanonicalPlanSetInput): Canonica
   return { fingerprint: issue.fingerprint, sheets };
 }
 
-function coverSheet(input: CanonicalPlanSetInput, issue: IssueMeta, connectionScheduleCount: number, sectionCount: number, assemblyScheduleCount: number): PlanSheet {
+function coverSheet(input: CanonicalPlanSetInput, issue: IssueMeta, foundationScheduleCount: number, connectionScheduleCount: number, sectionCount: number, assemblyScheduleCount: number): PlanSheet {
   const { property, site, design, framing } = input;
   const totalArea = design.platforms.reduce((sum, platform) => sum + polygonArea(platform.boundary.vertices.map((vertex): PointMm => [vertex.xMm, vertex.yMm])) / 1_000_000, 0);
   const projectRows = [
@@ -89,7 +91,7 @@ function coverSheet(input: CanonicalPlanSetInput, issue: IssueMeta, connectionSc
   ];
   const indexRows = [
     ['A0.0', 'Cover, project data, drawing index'], ['C1.0', 'Evidence and existing conditions'], ['A1.0', 'Site and property relationship'], ['A2.0', 'Dimensioned deck and landing plan'],
-    ['S1.0', 'Foundation and post plan'], ['S2.0', 'Framing plan and member schedule'], [connectionScheduleCount === 1 ? 'S2.1' : `S2.1–S2.${connectionScheduleCount}`, 'All keyed structural connection design controls'], ['A3.0', 'Platform and stair elevations'],
+    ['S1.0', 'Foundation and post plan'], [foundationScheduleCount === 1 ? 'S1.1' : `S1.1–S1.${foundationScheduleCount}`, 'All footing and post design-control records'], ['S2.0', 'Framing plan and member schedule'], [connectionScheduleCount === 1 ? 'S2.1' : `S2.1–S2.${connectionScheduleCount}`, 'All keyed structural connection design controls'], ['A3.0', 'Platform and stair elevations'],
     [sectionCount === 1 ? 'S3.0' : `S3.0–S3.${sectionCount - 1}`, 'Building section for every modeled platform'], ['A4.0', 'Stair, guard, footing, connection details'], [assemblyScheduleCount === 1 ? 'A4.1' : `A4.1–A4.${assemblyScheduleCount}`, 'All stair and guard design-control schedules'], ['S4.0', 'Design basis, checks, review gates'],
   ];
   const required = framing.reviewGates.filter((gate) => gate.status === 'required');
@@ -98,7 +100,7 @@ function coverSheet(input: CanonicalPlanSetInput, issue: IssueMeta, connectionSc
     <text class="subheading" x="70" y="128">${esc(property.address?.fullAddress || 'Address unconfirmed')}</text>
     ${notice(70, 160, 1560, 78, 'ISSUED FOR COORDINATED PROFESSIONAL REVIEW — NOT FOR CONSTRUCTION', 'Field geometry, structural capacity, footings, connections, guards, stairs, and municipal requirements remain subject to the review gates shown in this set.')}
     <text class="section" x="70" y="286">PROJECT DATA</text>${table(projectRows, 70, 310, 850, 48, 185)}
-    <text class="section" x="970" y="286">DRAWING INDEX</text>${table(indexRows, 970, 310, 660, 26, 100)}
+    <text class="section" x="970" y="286">DRAWING INDEX</text>${table(indexRows, 970, 310, 660, 24, 100)}
     <text class="section" x="970" y="648">REQUIRED REVIEW WORK PACKAGES</text>
     ${required.slice(0, 5).map((gate, index) => statusBox(970, 675 + index * 52, 660, gate.discipline.toUpperCase(), gate.title, 'review')).join('')}
     ${notice(70, 790, 850, 120, 'GENERAL NOTES', 'Do not scale drawings. Written dimensions govern. Verify property boundaries, house wall, openings, grade, utilities, and existing construction before issue. No construction may begin until the authority having jurisdiction issues a permit and required professional documents are accepted.')}`);
@@ -218,6 +220,55 @@ function framingSheet(input: CanonicalPlanSetInput, issue: IssueMeta): PlanSheet
     <rect x="1210" y="82" width="420" height="800" class="panel"/><text class="section" x="1240" y="120">MEMBER SCHEDULE</text>${table(schedule, 1240, 144, 360, 43, 115)}
     <text class="section" x="1240" y="550">PLAN NOTES</text>${noteList(['Member coordinates derive from the current canonical platform polygons.', 'Joist/beam sections marked Engineer design are layout intent only.', 'Footing sizes use assumed soil bearing; frost, uplift, reinforcement, and depth remain unresolved.', 'Provide reviewed connectors, blocking, splices, bearing, bracing, and lateral load path.'], 1240, 578, 55, 340)}
     ${notice(1210, 820, 420, 62, 'STRUCTURAL REVIEW', `${input.framing.reviewGates.filter((gate) => gate.status === 'required' && gate.discipline === 'structural').length} structural work packages remain required.`)}`);
+}
+
+const FOUNDATION_ROWS_PER_SHEET = 15;
+
+/** Keeps every footing/post record readable while S1.0 remains the spatial coordinate plan. */
+function foundationScheduleSheets(input: CanonicalPlanSetInput, issue: IssueMeta): PlanSheet[] {
+  const pageCount = Math.max(1, Math.ceil(input.framing.footings.length / FOUNDATION_ROWS_PER_SHEET));
+  return Array.from({ length: pageCount }, (_, pageIndex) => {
+    const startIndex = pageIndex * FOUNDATION_ROWS_PER_SHEET;
+    const footings = input.framing.footings.slice(startIndex, startIndex + FOUNDATION_ROWS_PER_SHEET);
+    const number = `S1.${pageIndex + 1}`;
+    const id: PlanSheet['id'] = pageIndex === 0 ? 'foundation-schedule' : `foundation-schedule-${pageIndex + 1}`;
+    return makeSheet(id, 'Footing & Post Design Control Schedule', 'NTS · COORDINATES IN mm', number, input, issue, `
+      <rect x="55" y="82" width="1575" height="800" class="panel"/><text class="section" x="80" y="118">FOOTING &amp; POST DESIGN CONTROL · ${pageIndex + 1}/${pageCount}</text>
+      <text class="tiny" x="80" y="137">COORDINATES FROM PROJECT DATUM ON S1.0 · SIZES ARE PRELIMINARY BEARING AREAS ONLY · DO NOT EXCAVATE FROM THIS SCHEDULE</text>
+      ${foundationControlTable(footings, input.framing, input.site, startIndex, 80, 152, 1525, 40)}
+      <text class="tiny" x="80" y="810">${input.framing.footings.length} TOTAL FOOTING/POST RECORD(S) · ROWS ${footings.length ? startIndex + 1 : 0}–${startIndex + footings.length} SHOWN · TAGS LOCATED ON S1.0</text>
+      <text class="title-warning" x="80" y="850">REVIEWER MUST RESOLVE SOIL, FROST, DEPTH, THICKNESS, REINFORCEMENT, UPLIFT, LATERAL, DRAINAGE, UTILITIES AND SETBACKS</text>`);
+  });
+}
+
+function foundationControlTable(footings: FramingDesign['footings'], framing: FramingDesign, site: SiteModel, startIndex: number, x: number, y: number, width: number, rowHeight: number): string {
+  const headers = ['TAG', 'MODEL ID', 'PLATFORM', 'X', 'Y', 'SIZE', 'R kN', 'POST / H', 'GRADE', 'SOIL', 'REQUIRED PROFESSIONAL RESOLUTION'];
+  const columnWidths = [70, 200, 80, 75, 75, 110, 65, 175, 75, 75, width - 1000];
+  const boundaries = columnWidths.reduce<number[]>((items, column) => [...items, items[items.length - 1] + column], [x]);
+  const header = `<rect x="${x}" y="${y}" width="${width}" height="${rowHeight}" class="schedule-head"/>${headers.map((value, index) => `<text class="schedule-label" x="${boundaries[index] + 5}" y="${y + rowHeight * .62}">${value}</text>`).join('')}`;
+  const source = footings.length ? footings : [null];
+  const rows = source.map((footing, rowIndex) => {
+    const yy = y + (rowIndex + 1) * rowHeight;
+    const post = footing ? framing.posts.find((candidate) => candidate.id === footing.postId) : undefined;
+    const grade = footing ? terrainElevationAt(site.terrain, footing.centerMm).elevationMm : null;
+    const values = footing ? [
+      `F${String(startIndex + rowIndex + 1).padStart(2, '0')}`,
+      footing.id,
+      footing.platformId,
+      String(Math.round(footing.centerMm[0])),
+      String(Math.round(footing.centerMm[1])),
+      `${footing.widthMm}×${footing.lengthMm}`,
+      footing.estimatedReactionKn.toFixed(1),
+      `${(post?.section || 'DESIGN').replace('Engineer design', 'ENG')} / ${post?.heightMm ?? '—'}`,
+      String(grade ?? '—'),
+      `${footing.assumedSoilBearingKpa} kPa`,
+      'Depth / frost / thickness / reinforcement / uplift / lateral / drainage / utilities / setback review required',
+    ] : ['—', 'No generated footings', '—', '—', '—', '—', '—', '—', '—', '—', 'Regenerate framing after drawing a supported platform.'];
+    return `<rect x="${x}" y="${yy}" width="${width}" height="${rowHeight}" class="schedule-row"/>${values.map((value, columnIndex) => columnIndex === values.length - 1 ? wrapped(value, boundaries[columnIndex] + 5, yy + 14, columnWidths[columnIndex] - 10, 7.2, 8.5, 3) : `<text class="schedule-text" x="${boundaries[columnIndex] + 5}" y="${yy + rowHeight * .58}">${esc(value)}</text>`).join('')}`;
+  }).join('');
+  const bottom = y + rowHeight * (source.length + 1);
+  const verticals = boundaries.slice(1, -1).map((boundary) => `<line x1="${boundary}" y1="${y}" x2="${boundary}" y2="${bottom}" class="thin"/>`).join('');
+  return `${header}${rows}${verticals}`;
 }
 
 function countLabel(count: number, singular: string): string {
