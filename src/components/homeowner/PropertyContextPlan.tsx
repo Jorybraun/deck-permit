@@ -19,6 +19,8 @@ export function PropertyContextPlan({ property, site, onSelectWall, onSelectFron
   const primaryRing = primary ? openBuildingRing(primary) : [];
   const parcelRing = openRing(property.parcel.polygon);
   const setbackBands = buildSetbackBands(parcelRing, property, site, transform);
+  const wallLengthMm = site.designWall.lengthMm || 0;
+  const selectedWallEdge = primary && site.designWall.sourceBuildingId === primary.id && site.designWall.sourceEdgeIndex != null && site.designWall.sourceEdgeIndex >= 0 && site.designWall.sourceEdgeIndex < primaryRing.length ? site.designWall.sourceEdgeIndex : null;
   return <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
     <div className="flex flex-col gap-2 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"><div><h3 className="font-[Manrope] text-lg font-bold text-slate-950">Whole property & house reference</h3><p className="mt-1 text-xs text-slate-600">Click the property line along the street to name the front/rear/side yards. Then click the yard-facing house edge used by the deck.</p></div><span className="flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-800"><MousePointer2 size={14} /> Select parcel + house edges</span></div>
     <div className="relative h-[390px] bg-[#eef3ef]">
@@ -51,6 +53,22 @@ export function PropertyContextPlan({ property, site, onSelectWall, onSelectFron
             <line role="button" tabIndex={0} aria-label={`Select house edge ${index + 1}, ${(length / 1000).toFixed(2)} metres`} onClick={() => onSelectWall(primary.id, index)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') onSelectWall(primary.id, index); }} x1={transform.x(start[0])} y1={transform.y(start[1])} x2={transform.x(end[0])} y2={transform.y(end[1])} stroke="transparent" strokeWidth="18" className={visible ? 'cursor-pointer' : 'pointer-events-none'} />
           </g>;
         })}
+        {selectedWallEdge !== null && wallLengthMm > 0 && (() => {
+          const s = primaryRing[selectedWallEdge];
+          const e = primaryRing[(selectedWallEdge + 1) % primaryRing.length];
+          const sx = transform.x(s[0]), sy = transform.y(s[1]), ex = transform.x(e[0]), ey = transform.y(e[1]);
+          return site.designWall.openings.map((opening) => {
+            const t0 = Math.max(0, Math.min(1, opening.offsetMm / wallLengthMm));
+            const t1 = Math.max(0, Math.min(1, (opening.offsetMm + opening.widthMm) / wallLengthMm));
+            const x0 = sx + (ex - sx) * t0, y0 = sy + (ey - sy) * t0, x1 = sx + (ex - sx) * t1, y1 = sy + (ey - sy) * t1;
+            const color = opening.kind === 'door' ? '#b4531e' : '#0e7490';
+            return <g key={`opening-${opening.id}`}>
+              <line x1={x0} y1={y0} x2={x1} y2={y1} stroke={color} strokeWidth={10} strokeLinecap="butt" />
+              <line x1={x0} y1={y0} x2={x1} y2={y1} stroke="#fff" strokeWidth={2.5} strokeLinecap="butt" strokeDasharray="1 6" />
+              <text x={(x0 + x1) / 2} y={(y0 + y1) / 2 - 9} textAnchor="middle" fontSize="9" fontWeight="800" fill={color} style={{ paintOrder: 'stroke', stroke: '#fff', strokeWidth: 3 }}>{opening.id}</text>
+            </g>;
+          });
+        })()}
         <text x="840" y="50" textAnchor="middle" fontSize="12" fontWeight="800" fill="#405249">N</text><path d="M840 78V58M834 64l6-8 6 8" fill="none" stroke="#405249" strokeWidth="2" />
         <text x="28" y="36" fontSize="11" fontWeight="800" fill="#176e52">MUNICIPAL PARCEL · {property.parcel.pid}</text>
         {primary && <text x={transform.x(primary.polygon[0][0])} y={transform.y(primary.polygon[0][1]) - 12} fontSize="11" fontWeight="800" fill="#263b31">PRIMARY HOUSE REFERENCE</text>}
