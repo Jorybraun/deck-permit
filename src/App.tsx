@@ -6,6 +6,7 @@ import { addCaptureEvidence, addTerrainGradePoint, assessExistingConditionCaptur
 import { lookupProperty, lookupPropertyFromAddress, PropertyLookupError, suggestAddresses } from './services/propertyLookup';
 import { lookupSnowLoad, lookupZoning } from './services/zoning';
 import { fetchSiteContext, type SiteContext } from './services/siteContext';
+import { openParcelRing, nearestEdgeIndex, yardReferenceFromFront } from './services/parcelYards';
 import { canonicalPlanFingerprint, generateCanonicalPlanSet } from './services/canonicalPlanSet';
 import { downloadVectorPlanPdf } from './services/vectorPlanPdf';
 import { downloadProjectCadExchange } from './services/projectCadExchange';
@@ -17,7 +18,7 @@ import { DesignStage } from './components/homeowner/DesignStage';
 import { PermitStage } from './components/homeowner/PermitStage';
 import { BuildersStage } from './components/homeowner/BuildersStage';
 import { FeedbackWidget } from './components/feedback/FeedbackWidget';
-import type { Address, LatLng, Property } from './types';
+import type { Address, Property } from './types';
 import { captureEvidenceFromFile, deleteCaptureFile, loadCaptureFile, saveCaptureFile } from './services/captureFileStorage';
 import { analyzeCapturePhotos } from './services/aiDesignStudio';
 
@@ -29,53 +30,21 @@ const STAGES: Array<{ id: ProjectStage; label: string; description: string; icon
   { id: 'builders', label: 'Builders', description: 'Consent-based matching', icon: <Hammer size={15} /> },
 ];
 
-/** Open a possibly-closed coordinate ring (drop the duplicate closing vertex). */
-function openParcelRing(ring: LatLng[]): LatLng[] {
-  return ring.length > 1 && ring[0][0] === ring[ring.length - 1][0] && ring[0][1] === ring[ring.length - 1][1] ? ring.slice(0, -1) : ring;
-}
-
-/** Index of the parcel edge whose midpoint is closest to a target point, or null. */
-function nearestEdgeIndex(ring: LatLng[], target: { lng: number; lat: number } | null): number | null {
-  if (!target) return null;
-  let best: number | null = null;
-  let bestDist = Infinity;
-  for (let i = 0; i < ring.length; i++) {
-    const a = ring[i];
-    const b = ring[(i + 1) % ring.length];
-    const midLng = (a[0] + b[0]) / 2;
-    const midLat = (a[1] + b[1]) / 2;
-    const d = (midLng - target.lng) ** 2 + (midLat - target.lat) ** 2;
-    if (d < bestDist) { bestDist = d; best = i; }
-  }
-  return best;
-}
-
 /**
- * Seed the yard orientation from the Town road map. The site-context service returns the
- * front/rear edge midpoints (WGS84); we match them to this client's own parcel ring by
- * position so the "front yard" is the edge facing the road — no dropdowns, and robust to
- * ring winding differences between the parcel and site-context fetches. The homeowner can
- * still override the selection on the plan.
+ * Seed the yard orientation from the Town road map as a SUGGESTION. The site-context service
+ * returns the road-facing edge midpoint (WGS84); we match it to this client's own parcel ring
+ * to pick the front, then derive rear = opposite edge and the compass facing from that SAME
+ * ring — so front/rear are always genuine opposite sides. The homeowner can retap to correct.
  */
 function applyRoadDerivedOrientation(site: SiteModel, property: Property, context: SiteContext | null): SiteModel {
   const ring = property.parcel ? openParcelRing(property.parcel.polygon) : [];
   const front = context?.yards?.front ?? null;
-  const rear = context?.yards?.rear ?? null;
   if (ring.length < 3 || !front) return site;
   const frontEdgeIndex = nearestEdgeIndex(ring, front);
-  let rearEdgeIndex = nearestEdgeIndex(ring, rear);
   if (frontEdgeIndex === null) return site;
-  if (rearEdgeIndex === frontEdgeIndex) rearEdgeIndex = null;
-  return updateSiteModel(site, {
-    yardReference: {
-      ...site.yardReference,
-      status: 'homeowner-selected',
-      frontEdgeIndex,
-      rearEdgeIndex,
-      selectedBy: 'Town road map (auto)',
-      selectedAt: new Date().toISOString(),
-    },
-  });
+  const lat = property.parcel!.center[1];
+  const yardReference = yardReferenceFromFront(site.yardReference, ring, frontEdgeIndex, lat, 'Town road map (auto)', new Date().toISOString(), context?.yards?.roadName ?? null);
+  return updateSiteModel(site, { yardReference });
 }
 
 /** Application module: composes the homeowner journey and provider effects around canonical project state. */

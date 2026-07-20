@@ -59,7 +59,7 @@ export class SiteContextService {
     ]);
 
     const elevations = (contours?.features || []).map((f) => Number(f.attributes.ElevIndex)).filter((n) => Number.isFinite(n));
-    const yards = classifyYards(rings[0], centroid[1], roads?.features);
+    const yards = classifyYards(rings[0], centroid[1], roads?.features, cleanStreet(attributes.FullAddress));
     const nearestWater = nearestLine(rings[0], centroid[1], highWater?.features);
     const zone = zoning?.features?.[0]?.attributes;
 
@@ -127,7 +127,7 @@ function ringCentroid(ring) {
  * substantial edge farthest from the road = rear. This replaces the manual
  * "pick which parcel edge is your front/rear line" dropdowns entirely.
  */
-function classifyYards(ring, lat, roadFeatures) {
+function classifyYards(ring, lat, roadFeatures, streetName) {
   const mpd = metersPerDegree(lat);
   const toM = (p) => [p[0] * mpd.x, p[1] * mpd.y];
   const roadSegs = [];
@@ -143,18 +143,31 @@ function classifyYards(ring, lat, roadFeatures) {
     const len = Math.hypot(dx, dy);
     if (len < 0.5) continue;
     const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
-    let roadDist = Infinity, attrs = null;
-    for (const seg of roadSegs) { const d = pointToSegment(mid, seg[0], seg[1]); if (d < roadDist) { roadDist = d; attrs = seg[2]; } }
-    edges.push({ index: i, lengthM: round(len, 1), bearing: round((Math.atan2(dx, dy) * 180) / Math.PI, 0), roadDistanceM: roadSegs.length ? round(roadDist, 1) : null, yard: 'side' });
+    // Track nearest road overall AND nearest road whose name matches the address street.
+    let roadDist = Infinity, attrs = null, streetDist = Infinity;
+    for (const seg of roadSegs) {
+      const d = pointToSegment(mid, seg[0], seg[1]);
+      if (d < roadDist) { roadDist = d; attrs = seg[2]; }
+      if (streetMatches(roadName(seg[2]), streetName) && d < streetDist) streetDist = d;
+    }
+    edges.push({ index: i, lengthM: round(len, 1), bearing: round((Math.atan2(dx, dy) * 180) / Math.PI, 0), roadDistanceM: roadSegs.length ? round(roadDist, 1) : null, streetDistanceM: Number.isFinite(streetDist) ? round(streetDist, 1) : null, yard: 'side' });
     edgeRoadAttrs.push(attrs);
   }
   const withRoad = edges.filter((e) => e.roadDistanceM != null);
   let frontEdgeIndex = null, rearEdgeIndex = null, roadDistanceM = null;
   if (withRoad.length) {
-    const front = withRoad.reduce((m, e) => (e.roadDistanceM < m.roadDistanceM ? e : m));
-    const rear = withRoad.filter((e) => e.lengthM > 3).reduce((m, e) => (e.roadDistanceM > m.roadDistanceM ? e : m), withRoad[0]);
+    // A house fronts its address street: if any edge is near a road segment whose name
+    // matches the address, pick the front from those; otherwise fall back to nearest-road.
+    const namedFront = withRoad.filter((e) => e.streetDistanceM != null);
+    const front = namedFront.length
+      ? namedFront.reduce((m, e) => (e.streetDistanceM < m.streetDistanceM ? e : m))
+      : withRoad.reduce((m, e) => (e.roadDistanceM < m.roadDistanceM ? e : m));
+    // Rear = the substantial edge farthest from the chosen front (opposite side of the lot).
+    const frontMid = midpointM(toM(ring[front.index]), toM(ring[front.index + 1]));
+    const rear = withRoad.filter((e) => e.lengthM > 3 && e.index !== front.index)
+      .reduce((m, e) => (distSq(midpointM(toM(ring[e.index]), toM(ring[e.index + 1])), frontMid) > distSq(midpointM(toM(ring[m.index]), toM(ring[m.index + 1])), frontMid) ? e : m), front);
     front.yard = 'front'; if (rear !== front) rear.yard = 'rear';
-    frontEdgeIndex = front.index; rearEdgeIndex = rear.index; roadDistanceM = front.roadDistanceM;
+    frontEdgeIndex = front.index; rearEdgeIndex = rear === front ? null : rear.index; roadDistanceM = front.roadDistanceM;
     roadAttrs = edgeRoadAttrs[edges.indexOf(front)];
   }
   // Midpoint of an edge in original WGS84 degrees (edge i spans ring[i]→ring[i+1]).
@@ -194,6 +207,15 @@ function bufferSpatial(geometry, meters) {
 function roadName(attrs) {
   if (!attrs) return null;
   return attrs.FullName || attrs.RoadName || attrs.StreetName || attrs.STREETNAME || attrs.NAME || attrs.Road_Name || null;
+}
+function midpointM(a, b) { return [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]; }
+function distSq(a, b) { const dx = a[0] - b[0], dy = a[1] - b[1]; return dx * dx + dy * dy; }
+/** True when a road-centerline name and an address street refer to the same street. */
+function streetMatches(roadNm, street) {
+  if (!roadNm || !street) return false;
+  const norm = (s) => String(s).toUpperCase().replace(/\b(ST|STREET|AVE|AVENUE|RD|ROAD|DR|DRIVE|WAY|PL|PLACE|CRES|CRESCENT|LANE|LN|BLVD|CRT|COURT)\b/g, '').replace(/[^A-Z0-9]/g, '');
+  const a = norm(roadNm), b = norm(street);
+  return !!a && !!b && (a.includes(b) || b.includes(a));
 }
 function uniq(arr) { return [...new Set(arr.filter(Boolean))]; }
 function round(v, d) { const p = 10 ** d; return Math.round(v * p) / p; }
