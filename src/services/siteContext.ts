@@ -4,6 +4,9 @@ export interface SiteContext {
   elevation: { minM: number | null; maxM: number | null; source: string };
   perimeter: { edges: Array<{ lengthM: number; bearing: number }>; perimeterM: number };
   road: { name: string | null; distanceM: number } | null;
+  // Road-derived yard orientation. Edge midpoints (WGS84) let the client match front/rear
+  // to its own parcel ring by position rather than by a fetch-dependent edge index.
+  yards?: { front: { lng: number; lat: number } | null; rear: { lng: number; lat: number } | null; roadName: string | null };
   environmentallySensitiveArea: { inEsa: boolean; names?: string[] };
   easements: Array<{ type: string }>;
   protectedTreesNearby: number;

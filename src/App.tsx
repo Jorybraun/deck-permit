@@ -5,7 +5,7 @@ import { generateFramingDesign, isFramingStale, type FramingDesign, type Generat
 import { addCaptureEvidence, addTerrainGradePoint, assessExistingConditionCapture, assessSiteModel, createExistingConditionCapture, createSiteModel, flipHouseWallDirection, promoteAcceptedAiOpening, recordAiPhotoAnalysis, removeCaptureEvidence, removeTerrainGradePoint, reviewAiPhotoObservation, rotateHouseWallAlignment, selectHouseWall, updateCaptureEvidence, updateSiteModel, updateTerrainGradePoint, type CaptureCategory, type CaptureEvidence, type CaptureEvidenceChanges, type SiteModel } from './domain/siteModel';
 import { lookupProperty, lookupPropertyFromAddress, PropertyLookupError, suggestAddresses } from './services/propertyLookup';
 import { lookupSnowLoad, lookupZoning } from './services/zoning';
-import { fetchSiteContext } from './services/siteContext';
+import { fetchSiteContext, type SiteContext } from './services/siteContext';
 import { canonicalPlanFingerprint, generateCanonicalPlanSet } from './services/canonicalPlanSet';
 import { downloadVectorPlanPdf } from './services/vectorPlanPdf';
 import { downloadProjectCadExchange } from './services/projectCadExchange';
@@ -17,7 +17,7 @@ import { DesignStage } from './components/homeowner/DesignStage';
 import { PermitStage } from './components/homeowner/PermitStage';
 import { BuildersStage } from './components/homeowner/BuildersStage';
 import { FeedbackWidget } from './components/feedback/FeedbackWidget';
-import type { Address } from './types';
+import type { Address, LatLng, Property } from './types';
 import { captureEvidenceFromFile, deleteCaptureFile, loadCaptureFile, saveCaptureFile } from './services/captureFileStorage';
 import { analyzeCapturePhotos } from './services/aiDesignStudio';
 
@@ -28,6 +28,55 @@ const STAGES: Array<{ id: ProjectStage; label: string; description: string; icon
   { id: 'permit', label: 'Permit', description: 'Plans & review', icon: <FileText size={15} /> },
   { id: 'builders', label: 'Builders', description: 'Consent-based matching', icon: <Hammer size={15} /> },
 ];
+
+/** Open a possibly-closed coordinate ring (drop the duplicate closing vertex). */
+function openParcelRing(ring: LatLng[]): LatLng[] {
+  return ring.length > 1 && ring[0][0] === ring[ring.length - 1][0] && ring[0][1] === ring[ring.length - 1][1] ? ring.slice(0, -1) : ring;
+}
+
+/** Index of the parcel edge whose midpoint is closest to a target point, or null. */
+function nearestEdgeIndex(ring: LatLng[], target: { lng: number; lat: number } | null): number | null {
+  if (!target) return null;
+  let best: number | null = null;
+  let bestDist = Infinity;
+  for (let i = 0; i < ring.length; i++) {
+    const a = ring[i];
+    const b = ring[(i + 1) % ring.length];
+    const midLng = (a[0] + b[0]) / 2;
+    const midLat = (a[1] + b[1]) / 2;
+    const d = (midLng - target.lng) ** 2 + (midLat - target.lat) ** 2;
+    if (d < bestDist) { bestDist = d; best = i; }
+  }
+  return best;
+}
+
+/**
+ * Seed the yard orientation from the Town road map. The site-context service returns the
+ * front/rear edge midpoints (WGS84); we match them to this client's own parcel ring by
+ * position so the "front yard" is the edge facing the road — no dropdowns, and robust to
+ * ring winding differences between the parcel and site-context fetches. The homeowner can
+ * still override the selection on the plan.
+ */
+function applyRoadDerivedOrientation(site: SiteModel, property: Property, context: SiteContext | null): SiteModel {
+  const ring = property.parcel ? openParcelRing(property.parcel.polygon) : [];
+  const front = context?.yards?.front ?? null;
+  const rear = context?.yards?.rear ?? null;
+  if (ring.length < 3 || !front) return site;
+  const frontEdgeIndex = nearestEdgeIndex(ring, front);
+  let rearEdgeIndex = nearestEdgeIndex(ring, rear);
+  if (frontEdgeIndex === null) return site;
+  if (rearEdgeIndex === frontEdgeIndex) rearEdgeIndex = null;
+  return updateSiteModel(site, {
+    yardReference: {
+      ...site.yardReference,
+      status: 'homeowner-selected',
+      frontEdgeIndex,
+      rearEdgeIndex,
+      selectedBy: 'Town road map (auto)',
+      selectedAt: new Date().toISOString(),
+    },
+  });
+}
 
 /** Application module: composes the homeowner journey and provider effects around canonical project state. */
 export function App() {
@@ -107,8 +156,9 @@ export function App() {
       const result = candidate ? await lookupPropertyFromAddress(candidate, addressText) : await lookupProperty(addressText);
       // The parcel-line ZONING field carries the repealed 2015 code; resolve the CURRENT
       // zone from the Town's Bylaw 2275 zoning layer so setback rules apply correctly.
+      let context: SiteContext | null = null;
       try {
-        const context = await fetchSiteContext(result.address.fullAddress);
+        context = await fetchSiteContext(result.address.fullAddress);
         if (context.zoning?.class) result.parcel.zoningCode = context.zoning.class;
       } catch { /* fall back to the parcel-line zoning code if the zoning layer is unavailable */ }
       let zoning = null;
@@ -119,13 +169,13 @@ export function App() {
         buildings: result.buildings,
         evidence: result.evidence,
         zoning,
-        // Yard orientation is selected explicitly from the parcel plan. Do not
-        // invent a front yard from latitude or a rectangular bounding box.
+        // Yard orientation is auto-derived from the Town road map (below), not invented
+        // from latitude or a bounding box. The homeowner can still override it on the plan.
         buildableEnvelope: null,
         snowLoad: lookupSnowLoad(result.address.coordinates[1], result.address.coordinates[0]),
       };
       project.setProperty(property);
-      project.setSite(createSiteModel(property));
+      project.setSite(applyRoadDerivedOrientation(createSiteModel(property), property, context));
       setResearch({ status: 'success' });
     } catch (reason) {
       setResearch({ status: 'error', message: reason instanceof Error ? reason.message : 'Property research failed.', suggestions: reason instanceof PropertyLookupError ? reason.suggestions : [] });

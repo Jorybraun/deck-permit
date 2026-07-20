@@ -78,9 +78,13 @@ export class SiteContextService {
       perimeter: { edges: yards.edges, perimeterM: round(yards.edges.reduce((s, e) => s + e.lengthM, 0), 1) },
       road: yards.roadDistanceM != null ? { name: roadName(yards.roadAttrs), distanceM: yards.roadDistanceM } : null,
       // Auto-detected yard orientation from the road — replaces manual front/rear/side selection.
+      // Edge midpoints are emitted in WGS84 degrees so the client can match them to its own
+      // parcel ring by position (robust to ring winding / start-vertex differences between fetches).
       yards: {
         frontEdgeIndex: yards.frontEdgeIndex,
         rearEdgeIndex: yards.rearEdgeIndex,
+        front: yards.frontMid ? { lng: yards.frontMid[0], lat: yards.frontMid[1] } : null,
+        rear: yards.rearMid ? { lng: yards.rearMid[0], lat: yards.rearMid[1] } : null,
         roadName: roadName(yards.roadAttrs),
         note: 'Front = lot edge facing the road; rear = opposite; others are side yards. Derived from municipal road + parcel geometry.',
       },
@@ -153,7 +157,9 @@ function classifyYards(ring, lat, roadFeatures) {
     frontEdgeIndex = front.index; rearEdgeIndex = rear.index; roadDistanceM = front.roadDistanceM;
     roadAttrs = edgeRoadAttrs[edges.indexOf(front)];
   }
-  return { edges, frontEdgeIndex, rearEdgeIndex, roadDistanceM, roadAttrs };
+  // Midpoint of an edge in original WGS84 degrees (edge i spans ring[i]→ring[i+1]).
+  const midOf = (idx) => (idx == null || !ring[idx] || !ring[idx + 1]) ? null : [(ring[idx][0] + ring[idx + 1][0]) / 2, (ring[idx][1] + ring[idx + 1][1]) / 2];
+  return { edges, frontEdgeIndex, rearEdgeIndex, frontMid: midOf(frontEdgeIndex), rearMid: midOf(rearEdgeIndex), roadDistanceM, roadAttrs };
 }
 function nearestLine(ring, lat, features) {
   if (!features?.length) return null;
