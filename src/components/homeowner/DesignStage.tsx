@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowDown, ArrowRight, ArrowUp, Layers3, Plus, RotateCw, Ruler, ShieldCheck, Trash2 } from 'lucide-react';
+import { AlertTriangle, ArrowDown, ArrowRight, ArrowUp, Layers3, Plus, RotateCw, Ruler, ShieldCheck, Sparkles, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { stairDepartureDirection, stairLandingCandidates, suggestedPlatformElevationForBoundary, suggestPointToPointStair, type AddPlatformInput, type AddStairInput, type ClosedBoundary, type DeckDesign, type DesignAssessment, type DeckPlatform, type DeckStair, type PlatformEdgeRole } from '../../domain/deckDesign';
 import { assessDeckLifeSafety, type StairLifeSafetyAssessment } from '../../domain/framingDesign';
@@ -85,8 +85,9 @@ export function DesignStage(props: DesignStageProps) {
   const openingCoordination = assessWallOpeningCoordination(props.design, props.site, props.property.parcel?.municipality || props.property.address?.locality || 'British Columbia');
   const openingIssues = openingCoordination.checks.filter((check) => check.status !== 'pass');
   const [designView, setDesignView] = useState<'plan' | 'elevation'>('plan');
+  const [chatOpen, setChatOpen] = useState(false);
   const planGrounding = useMemo(() => buildPlanGrounding(props.design, props.site, props.property, props.assessment, siteCompliance, openingCoordination), [props.design, props.site, props.property, props.assessment, siteCompliance, openingCoordination]);
-  return <main className="grid h-full min-h-0 bg-[#edf2ef] lg:grid-cols-[minmax(0,1fr)_330px]">
+  return <main className="relative grid h-full min-h-0 bg-[#edf2ef] lg:grid-cols-[minmax(0,1fr)_330px]">
     <section className="flex min-h-[560px] min-w-0 flex-col overflow-hidden" aria-label="Deck design canvas">
       <div className="flex min-h-12 items-center justify-between border-b border-slate-300 bg-slate-950 px-4 text-white">
         <div><strong className="text-xs">Linked architectural views</strong><span className="ml-2 text-[10px] text-slate-400">One model · plan position and vertical construction</span></div>
@@ -105,7 +106,6 @@ export function DesignStage(props: DesignStageProps) {
         <h2 className="mt-1 font-[Manrope] text-xl font-bold text-slate-950">Shape, levels & access</h2>
         <p className="mt-2 text-xs leading-5 text-slate-600">Draw platforms against the measured house. Each platform can move, change shape, and sit at its own elevation.</p>
       </div>
-      <DesignReviewChat grounding={planGrounding} hasDesign={props.design.platforms.length > 0} />
       <PlatformLayers design={props.design} site={props.site} onSelect={props.onSelectObject} onMove={props.onMovePlatformLayer} />
       {selected ? <PlatformInspector design={props.design} site={props.site} platform={selected} gradeElevationMm={terrainElevationAt(props.site.terrain, platformReferencePoint(selected)).elevationMm} onRename={props.onRenamePlatform} onSetElevation={props.onSetElevation} onSetPurpose={props.onSetPurpose} onRotate={props.onRotatePlatform} onSetFinish={props.onSetFinish} onSetFramingIntent={props.onSetFramingIntent} onSetEdgeRole={props.onSetEdgeRole} onSetEdgeLength={props.onSetEdgeLength} onInsertVertex={props.onInsertVertex} onRemove={props.onRemovePlatform} /> : selectedStair ? <StairInspector stair={selectedStair} safety={selectedStairSafety} design={props.design} onSetConstruction={props.onSetStairConstruction} onConnectLanding={props.onConnectStairLanding} onResizeSide={props.onResizeStairSide} onRemove={props.onRemoveStair} /> : <div className="p-5"><div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-5 text-center"><Layers3 className="mx-auto text-slate-400" size={24} /><strong className="mt-3 block text-sm text-slate-800">Select a platform or stair</strong><p className="mt-1 text-xs leading-5 text-slate-500">Click a deck area to edit it, or click a stair callout to inspect and remove that stair.</p></div></div>}
 
@@ -120,6 +120,8 @@ export function DesignStage(props: DesignStageProps) {
         <button type="button" onClick={props.onContinue} disabled={!props.design.platforms.length || props.assessment.errors.length > 0 || openingCoordination.status === 'blocked'} className="mt-4 flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-emerald-800 px-4 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40">{openingCoordination.status === 'blocked' ? 'Resolve opening conflicts first' : 'Review permit requirements'} <ArrowRight size={16} /></button>
       </div>
     </aside>
+    <DesignReviewChat grounding={planGrounding} hasDesign={props.design.platforms.length > 0} open={chatOpen} onClose={() => setChatOpen(false)} />
+    {!chatOpen && <button type="button" onClick={() => setChatOpen(true)} className="absolute bottom-4 left-4 z-20 flex min-h-11 items-center gap-2 rounded-full bg-violet-700 px-4 text-sm font-bold text-white shadow-lg hover:bg-violet-800"><Sparkles size={16} /> Ask about your plan</button>}
   </main>;
 }
 
