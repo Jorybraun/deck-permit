@@ -31,7 +31,7 @@ export function PropertyContextPlan({ property, site, onSelectWall, onSelectFron
         {setbackBands.map((band) => <g key={`setback-${band.index}`}>
           <polygon points={band.bandPoints} fill="#c2410c" fillOpacity={0.1} stroke="none" />
           <line x1={band.guide[0]} y1={band.guide[1]} x2={band.guide[2]} y2={band.guide[3]} stroke="#c2410c" strokeWidth={1.5} strokeDasharray="7 5" />
-          <text x={band.labelX} y={band.labelY} textAnchor="middle" fontSize="10" fontWeight="800" fill="#9a3412" style={{ paintOrder: 'stroke', stroke: '#fff', strokeWidth: 3 }}>{band.label}</text>
+          <text x={band.labelX} y={band.labelY} transform={`rotate(${band.angle} ${band.labelX} ${band.labelY})`} textAnchor="middle" fontSize="10" fontWeight="800" fill="#9a3412" style={{ paintOrder: 'stroke', stroke: '#fff', strokeWidth: 3 }}>{band.label}</text>
         </g>)}
         {parcelRing.map((start, index) => {
           const end = parcelRing[(index + 1) % parcelRing.length];
@@ -91,7 +91,7 @@ function mapTransform(property: Property): MapTransform | null {
 function points(ring: LatLng[], transform: MapTransform): string { return ring.map(([lng, lat]) => `${transform.x(lng)},${transform.y(lat)}`).join(' '); }
 function openRing(ring: LatLng[]): LatLng[] { return ring.length > 1 && ring[0][0] === ring[ring.length - 1][0] && ring[0][1] === ring[ring.length - 1][1] ? ring.slice(0, -1) : ring; }
 
-interface SetbackBand { index: number; bandPoints: string; guide: [number, number, number, number]; labelX: number; labelY: number; label: string; }
+interface SetbackBand { index: number; bandPoints: string; guide: [number, number, number, number]; labelX: number; labelY: number; label: string; angle: number; }
 
 /** Classify a parcel edge by the recorded yard orientation and read its zoning setback. */
 function classifyEdge(index: number, yardReference: SiteModel['yardReference'], zoning: NonNullable<Property['zoning']>): { label: string; meters: number } {
@@ -134,7 +134,10 @@ function buildSetbackBands(parcelRing: LatLng[], property: Property, site: SiteM
     const nlen = Math.hypot(nx, ny) || 1; nx /= nlen; ny /= nlen;
     const mx = (sx + ex) / 2, my = (sy + ey) / 2;
     if ((cx - mx) * nx + (cy - my) * ny < 0) { nx = -nx; ny = -ny; }
-    const labelInset = Math.max(18, Math.min(off * 0.6, 30));
+    const labelInset = Math.max(14, Math.min(off * 0.55, 26));
+    // Run the label ALONG the edge so it stays inside even on narrow bands; keep it upright.
+    let angle = (Math.atan2(ey - sy, ex - sx) * 180) / Math.PI;
+    if (angle > 90) angle -= 180; else if (angle < -90) angle += 180;
     bands.push({
       index,
       bandPoints: `${sx},${sy} ${ex},${ey} ${ex + nx * off},${ey + ny * off} ${sx + nx * off},${sy + ny * off}`,
@@ -142,6 +145,7 @@ function buildSetbackBands(parcelRing: LatLng[], property: Property, site: SiteM
       labelX: mx + nx * labelInset,
       labelY: my + ny * labelInset + 3,
       label: `${label} · ${meters.toFixed(1)} m`,
+      angle,
     });
   }
   return bands;
