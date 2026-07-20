@@ -5,6 +5,7 @@ import { generateFramingDesign, isFramingStale, type FramingDesign, type Generat
 import { addCaptureEvidence, addTerrainGradePoint, assessExistingConditionCapture, assessSiteModel, createExistingConditionCapture, createSiteModel, flipHouseWallDirection, promoteAcceptedAiOpening, recordAiPhotoAnalysis, removeCaptureEvidence, removeTerrainGradePoint, reviewAiPhotoObservation, rotateHouseWallAlignment, selectHouseWall, updateCaptureEvidence, updateSiteModel, updateTerrainGradePoint, type CaptureCategory, type CaptureEvidence, type CaptureEvidenceChanges, type SiteModel } from './domain/siteModel';
 import { lookupProperty, lookupPropertyFromAddress, PropertyLookupError, suggestAddresses } from './services/propertyLookup';
 import { lookupSnowLoad, lookupZoning } from './services/zoning';
+import { fetchSiteContext } from './services/siteContext';
 import { canonicalPlanFingerprint, generateCanonicalPlanSet } from './services/canonicalPlanSet';
 import { downloadVectorPlanPdf } from './services/vectorPlanPdf';
 import { downloadProjectCadExchange } from './services/projectCadExchange';
@@ -15,6 +16,7 @@ import { PropertyStage, type PropertyResearchState } from './components/homeowne
 import { DesignStage } from './components/homeowner/DesignStage';
 import { PermitStage } from './components/homeowner/PermitStage';
 import { BuildersStage } from './components/homeowner/BuildersStage';
+import { FeedbackWidget } from './components/feedback/FeedbackWidget';
 import type { Address } from './types';
 import { captureEvidenceFromFile, deleteCaptureFile, loadCaptureFile, saveCaptureFile } from './services/captureFileStorage';
 import { analyzeCapturePhotos } from './services/aiDesignStudio';
@@ -103,6 +105,12 @@ export function App() {
     project.setError(null);
     try {
       const result = candidate ? await lookupPropertyFromAddress(candidate, addressText) : await lookupProperty(addressText);
+      // The parcel-line ZONING field carries the repealed 2015 code; resolve the CURRENT
+      // zone from the Town's Bylaw 2275 zoning layer so setback rules apply correctly.
+      try {
+        const context = await fetchSiteContext(result.address.fullAddress);
+        if (context.zoning?.class) result.parcel.zoningCode = context.zoning.class;
+      } catch { /* fall back to the parcel-line zoning code if the zoning layer is unavailable */ }
       let zoning = null;
       try { zoning = lookupZoning(result.parcel); } catch { /* Parcel evidence remains useful while jurisdiction rules are unresolved. */ }
       const property = {
@@ -223,6 +231,14 @@ export function App() {
     </div>
     {navOpen && <button type="button" className="mobile-scrim lg:hidden" onClick={() => setNavOpen(false)} aria-label="Close navigation" />}
     {project.error && <div className="fixed bottom-4 left-1/2 z-[70] flex max-w-lg -translate-x-1/2 items-start gap-3 rounded-xl border border-red-200 bg-white px-4 py-3 text-sm text-red-800 shadow-2xl" role="alert"><span className="flex-1">{project.error}</span><button type="button" onClick={() => project.setError(null)} aria-label="Dismiss error"><X size={16} /></button></div>}
+    <FeedbackWidget context={{
+      stage: activeStage,
+      address: project.property.address?.fullAddress,
+      designFingerprint: project.site && project.framing ? canonicalPlanFingerprint({ property: project.property, site: project.site, design: project.design, framing: project.framing }) : undefined,
+      platformCount: project.design.platforms.length,
+      stairCount: project.design.stairs.length,
+      onScreenErrors: project.error ? [project.error] : [],
+    }} />
   </div>;
 }
 

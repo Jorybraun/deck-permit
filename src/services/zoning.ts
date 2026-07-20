@@ -31,6 +31,21 @@ const SIDNEY_ZONES: Record<string, SidneyZone> = {
     maxLotCoverage: 45,
     maxHeight: 10.5,
   },
+  R1ESA: {
+    zone: 'R1-ESA',
+    description: 'Neighbourhood Residential — Environmentally Sensitive Area',
+    setbacks: { front: 3.0, rear: 5.5, side: 2.0, exteriorSide: 3.0 },
+    maxLotCoverage: 35,
+    maxHeight: 10.5,
+  },
+  R2ESA: {
+    zone: 'R2-ESA',
+    description: 'Neighbourhood Residential — Environmentally Sensitive Area',
+    // Base row is lots ≤1000 m²; lookupZoning overrides for larger lots.
+    setbacks: { front: 4.5, rear: 5.5, side: 2.0, exteriorSide: 3.0 },
+    maxLotCoverage: 30,
+    maxHeight: 10.5,
+  },
   R3: {
     zone: 'R3',
     description: 'Neighbourhood Residential',
@@ -57,15 +72,21 @@ export function lookupZoning(parcel: Parcel): ZoningInfo {
     throw new Error(`The parcel zone “${parcel.zoningCode || 'unknown'}” is not yet supported by the deck rules engine.`);
   }
 
-  // R1 setbacks vary for lots at or below 400 m².
-  const setbacks = zoneCode === 'R1' && parcel.areaSqm <= 400
-    ? { front: 3.0, rear: 3.0, side: 1.2, exteriorSide: 3.0 }
-    : zone.setbacks;
+  // Some zones have lot-area-dependent setbacks (Bylaw 2275, §5.2.1–5.2.2).
+  let setbacks = zone.setbacks;
+  let maxLotCoverage = zone.maxLotCoverage;
+  if (zoneCode === 'R1' && parcel.areaSqm <= 400) {
+    setbacks = { front: 3.0, rear: 3.0, side: 1.2, exteriorSide: 3.0 };
+  } else if (zoneCode === 'R2ESA' && parcel.areaSqm > 1000) {
+    setbacks = { front: 4.5, rear: 7.5, side: 3.0, exteriorSide: 4.5 };
+    maxLotCoverage = 20;
+  }
 
+  const isEsa = zoneCode.endsWith('ESA');
   return {
     zone: zone.zone,
     setbacks,
-    maxLotCoverage: zone.maxLotCoverage,
+    maxLotCoverage,
     maxHeight: zone.maxHeight,
     source: 'Town of Sidney Zoning Bylaw No. 2275 (consolidated July 21, 2025), Sections 5.2.1–5.2.2',
     notes: [
@@ -73,6 +94,7 @@ export function lookupZoning(parcel: Parcel): ZoningInfo {
       'The displayed 10.5 m height limit is the lower-pitch limit; roofs steeper than 3:12 may be permitted up to 12.0 m.',
       'Street frontage and yard classification must be confirmed before relying on the setback envelope.',
       'Uncovered stairs and landings may have limited setback projections under Section 5.1.6; the design checker does not apply that exception automatically.',
+      ...(isEsa ? ['NATURAL BOUNDARY: on lots abutting the sea/water, no structure may be built within 15 m of the natural boundary (§5.2.3.b) — this governs a waterfront deck over the yard setbacks. Seawalls/retaining walls are exempt.'] : []),
     ],
   };
 }

@@ -8,14 +8,26 @@ import type { Property } from '../../types';
 
 interface AiDesignStudioPanelProps { intent: HomeownerIntent; property: Property; site: SiteModel; design: DeckDesign; onApply: (design: DeckDesign) => void }
 
+/** Tap-to-adjust options — the homeowner never writes a prompt; they tap what they want. */
+const ADJUSTMENTS = [
+  { key: 'dining', label: '🍽️ Bigger dining area', fragment: 'Enlarge the dining area.' },
+  { key: 'lounge', label: '🛋️ More lounging space', fragment: 'Add more lounging space.' },
+  { key: 'stairs', label: '🪜 Stairs to the yard', fragment: 'Add a stair down to the yard.' },
+  { key: 'wider', label: '↔️ Make it wider', fragment: 'Make the deck wider.' },
+  { key: 'simple', label: '🔨 Simpler to build', fragment: 'Prioritize a simple, low-cost, easy-to-build design.' },
+  { key: 'privacy', label: '🌿 More privacy', fragment: 'Add privacy screening where it overlooks neighbours.' },
+];
+
 /** Proposal invocation, deterministic checks, and an independent review invocation before owner acceptance. */
 export function AiDesignStudioPanel({ intent, property, site, design, onApply }: AiDesignStudioPanelProps) {
   const [capabilities, setCapabilities] = useState<AiDesignCapabilities | null>(null);
-  const [goal, setGoal] = useState('Improve this layout for outdoor living, clear circulation, attractive proportions, practical stairs, and straightforward construction.');
+  const [adjustments, setAdjustments] = useState<Set<string>>(new Set());
   const [status, setStatus] = useState<'idle' | 'designing' | 'checking' | 'reviewing' | 'complete'>('idle');
   const [result, setResult] = useState<AiDesignTeamResult | null>(null);
   const [error, setError] = useState('');
   const [applied, setApplied] = useState(false);
+  const goal = ['Design a great deck for outdoor living, clear circulation, attractive proportions, and a straightforward build.', ...ADJUSTMENTS.filter((item) => adjustments.has(item.key)).map((item) => item.fragment)].join(' ');
+  const toggleAdjustment = (key: string) => setAdjustments((prev) => { const next = new Set(prev); next.has(key) ? next.delete(key) : next.add(key); return next; });
 
   useEffect(() => { let active = true; void fetchAiDesignCapabilities().then((value) => { if (active) setCapabilities(value); }).catch((reason) => { if (active) setError(reason instanceof Error ? reason.message : 'AI capabilities are unavailable.'); }); return () => { active = false; }; }, []);
   const run = async () => {
@@ -33,8 +45,11 @@ export function AiDesignStudioPanel({ intent, property, site, design, onApply }:
   return <section className="border-b border-violet-200 bg-violet-50/40 p-5" aria-labelledby="ai-design-studio-title">
     <div className="flex items-start gap-3"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-violet-100 text-violet-800"><Sparkles size={17} /></span><div><h3 id="ai-design-studio-title" className="text-sm font-bold text-slate-950">AI design team</h3><p className="mt-1 text-[10px] leading-4 text-slate-600">Designer AI proposes a separate editable revision. Deterministic engines check it. An independent reviewer AI critiques it and cites those checks.</p></div></div>
     {capabilities && <div className={`mt-3 rounded-lg border p-3 ${configured ? 'border-violet-200 bg-white' : 'border-amber-200 bg-amber-50'}`}><div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[.08em]"><span className={`h-2 w-2 rounded-full ${configured ? 'bg-emerald-500' : 'bg-amber-500'}`} />{configured ? 'Cerebras design team available' : 'AI server not configured'}</div><p className="mt-1 text-[9px] leading-4 text-slate-600">{configured ? `Designer ${capabilities.designModel} · reviewer ${capabilities.reviewModel} · photos ${capabilities.photoModel} (${capabilities.photoBatchSize}/request; ${capabilities.photoSelectionLimit} selected max)` : 'Add CEREBRAS_API_KEY to .env.local and restart the API server. The key remains server-only.'}</p></div>}
-    <label className="mt-3 grid gap-1.5 text-[9px] font-bold uppercase tracking-[.1em] text-slate-500">What should the design team improve?<textarea value={goal} onChange={(event) => setGoal(event.target.value)} rows={3} disabled={busy} className="rounded-lg border border-slate-300 bg-white p-3 text-xs font-normal normal-case leading-5 tracking-normal text-slate-800 disabled:opacity-60" /></label>
-    <button type="button" onClick={() => void run()} disabled={!configured || busy || !goal.trim()} className="mt-3 flex min-h-10 w-full items-center justify-center gap-2 rounded-lg bg-violet-800 px-3 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-40">{busy ? <Loader2 size={14} className="animate-spin" /> : <Bot size={14} />}{statusLabel(status)}</button>
+    <div className="mt-3 grid gap-2">
+      <span className="text-[9px] font-bold uppercase tracking-[.1em] text-slate-500">Want any changes? <span className="font-normal normal-case tracking-normal text-slate-400">Optional — I'll design a great deck either way. Just tap.</span></span>
+      <div className="flex flex-wrap gap-1.5">{ADJUSTMENTS.map((item) => { const on = adjustments.has(item.key); return <button key={item.key} type="button" disabled={busy} onClick={() => toggleAdjustment(item.key)} aria-pressed={on} className={`rounded-full border px-2.5 py-1.5 text-[10px] font-semibold transition disabled:opacity-50 ${on ? 'border-violet-600 bg-violet-100 text-violet-900' : 'border-slate-300 bg-white text-slate-600 hover:border-violet-300'}`}>{item.label}</button>; })}</div>
+    </div>
+    <button type="button" onClick={() => void run()} disabled={!configured || busy} className="mt-3 flex min-h-10 w-full items-center justify-center gap-2 rounded-lg bg-violet-800 px-3 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-40">{busy ? <Loader2 size={14} className="animate-spin" /> : <Bot size={14} />}{statusLabel(status)}</button>
     {busy && <ol className="mt-3 grid grid-cols-3 gap-1 text-center text-[8px] font-bold uppercase tracking-[.06em] text-slate-500"><ProgressStep label="Propose" active={status === 'designing'} done={status !== 'designing'} /><ProgressStep label="Machine checks" active={status === 'checking'} done={status === 'reviewing'} /><ProgressStep label="Independent review" active={status === 'reviewing'} done={false} /></ol>}
     {error && <p role="alert" className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-[10px] leading-4 text-red-900">{error}</p>}
     {result && <div className="mt-4 grid gap-3">
@@ -47,4 +62,4 @@ export function AiDesignStudioPanel({ intent, property, site, design, onApply }:
 }
 
 function ProgressStep({ label, active, done }: { label: string; active: boolean; done: boolean }) { return <li className={`rounded-md border px-1 py-2 ${active ? 'border-violet-400 bg-white text-violet-900' : done ? 'border-emerald-200 bg-emerald-50 text-emerald-800' : 'border-slate-200 bg-slate-50'}`}>{done ? '✓ ' : ''}{label}</li>; }
-function statusLabel(status: 'idle' | 'designing' | 'checking' | 'reviewing' | 'complete') { return ({ idle: 'Generate and independently review', designing: 'Designer is creating a revision…', checking: 'Running deterministic checks…', reviewing: 'Independent reviewer is auditing…', complete: 'Generate another revision' })[status]; }
+function statusLabel(status: 'idle' | 'designing' | 'checking' | 'reviewing' | 'complete') { return ({ idle: 'Design my deck', designing: 'Designing your deck…', checking: 'Double-checking it…', reviewing: 'Reviewing for safety…', complete: 'Try another design' })[status]; }

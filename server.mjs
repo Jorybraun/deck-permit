@@ -4,6 +4,9 @@ import { dirname, join } from 'node:path';
 import { ReviewExchangeError, ReviewExchangeStore } from './server/reviewExchangeStore.mjs';
 import { MunicipalDeliveryError, MunicipalDeliveryService } from './server/municipalDelivery.mjs';
 import { AiDesignError, CerebrasDesignService } from './server/cerebrasDesignService.mjs';
+import { FeedbackError, FeedbackStore } from './server/feedbackStore.mjs';
+import { FeedbackAssistant, FeedbackAssistantError } from './server/feedbackAssistant.mjs';
+import { SiteContextError, SiteContextService } from './server/siteContext.mjs';
 
 const app = express();
 const port = Number(process.env.PORT || 4173);
@@ -18,6 +21,11 @@ const aiDesign = new CerebrasDesignService({
   designModel: process.env.CEREBRAS_DESIGN_MODEL,
   reviewModel: process.env.CEREBRAS_REVIEW_MODEL,
   photoModel: process.env.CEREBRAS_PHOTO_MODEL,
+});
+const feedbackStore = new FeedbackStore(dataDirectory);
+const feedbackAssistant = new FeedbackAssistant({
+  apiKey: process.env.CEREBRAS_API_KEY || process.env.VITE_CEREBRAS_API_KEY,
+  model: process.env.CEREBRAS_REVIEW_MODEL,
 });
 app.use(express.json({ limit: '22mb' }));
 const arcgisBase = 'https://services5.arcgis.com/MNn7A6yzK94Hggl3/arcgis/rest/services';
@@ -44,6 +52,38 @@ app.post('/api/ai/design-review', async (request, response, next) => {
 
 app.post('/api/ai/photo-analysis', async (request, response, next) => {
   try { response.status(201).set('cache-control', 'no-store').json(await aiDesign.analyzePhotos(request.body)); }
+  catch (error) { next(error); }
+});
+
+const siteContext = new SiteContextService();
+app.get('/api/site-context', async (request, response, next) => {
+  try {
+    const address = typeof request.query.address === 'string' ? request.query.address : '';
+    response.set('cache-control', 'public, max-age=300').json(await siteContext.forAddress(address));
+  } catch (error) { next(error); }
+});
+
+app.get('/api/feedback/capabilities', (_request, response) => {
+  response.set('cache-control', 'no-store').json({ schema: 'feedback-capabilities/v1', assistantConfigured: feedbackAssistant.configured });
+});
+
+app.post('/api/feedback/assist', async (request, response, next) => {
+  try { response.set('cache-control', 'no-store').json(await feedbackAssistant.chat(request.body?.messages, request.body?.context)); }
+  catch (error) { next(error); }
+});
+
+app.post('/api/feedback/draft', async (request, response, next) => {
+  try { response.status(201).set('cache-control', 'no-store').json(await feedbackAssistant.draft(request.body?.messages, request.body?.context)); }
+  catch (error) { next(error); }
+});
+
+app.post('/api/feedback', async (request, response, next) => {
+  try { response.status(201).set('cache-control', 'no-store').json(await feedbackStore.create(request.body)); }
+  catch (error) { next(error); }
+});
+
+app.get('/api/feedback', async (_request, response, next) => {
+  try { response.set('cache-control', 'no-store').json(await feedbackStore.list()); }
   catch (error) { next(error); }
 });
 
@@ -115,6 +155,9 @@ app.use((error, _request, response, _next) => {
   if (error instanceof ReviewExchangeError) return response.status(error.status).json({ error: error.code, message: error.message });
   if (error instanceof MunicipalDeliveryError) return response.status(error.status).json({ error: error.code, message: error.message });
   if (error instanceof AiDesignError) return response.status(error.status).json({ error: error.code, message: error.message });
+  if (error instanceof FeedbackError) return response.status(error.status).json({ error: error.code, message: error.message });
+  if (error instanceof FeedbackAssistantError) return response.status(error.status).json({ error: error.code, message: error.message });
+  if (error instanceof SiteContextError) return response.status(error.status).json({ error: error.code, message: error.message });
   if (error?.type === 'entity.too.large') return response.status(413).json({ error: 'payload-too-large', message: 'The package exceeds the 22 MB request limit.' });
   console.error('Unhandled server error', error);
   response.status(500).json({ error: 'server-error', message: 'The request could not be completed.' });

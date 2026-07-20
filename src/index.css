@@ -191,3 +191,11 @@
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
 }
+
+/* Expert feedback widget inputs */
+.fb-input {
+  width: 100%; border: 1px solid var(--line); border-radius: 8px; background: #fff;
+  padding: 8px 10px; font-size: 13px; color: var(--ink); line-height: 1.45;
+}
+.fb-input:focus { outline: 2px solid var(--forest); outline-offset: 1px; border-color: var(--forest); }
+textarea.fb-input { resize: vertical; min-height: 40px; }
