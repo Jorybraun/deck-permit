@@ -127,7 +127,7 @@ export function App() {
       // zone from the Town's Bylaw 2275 zoning layer so setback rules apply correctly.
       let context: SiteContext | null = null;
       try {
-        context = await fetchSiteContext(result.address.fullAddress);
+        context = await fetchSiteContext(result.address.fullAddress, { polygon: result.parcel.polygon, pid: result.parcel.pid, legalDescription: result.parcel.legalDescription, areaSqm: result.parcel.areaSqm, address: result.address.fullAddress });
         if (context.zoning?.class) result.parcel.zoningCode = context.zoning.class;
       } catch { /* fall back to the parcel-line zoning code if the zoning layer is unavailable */ }
       let zoning = null;

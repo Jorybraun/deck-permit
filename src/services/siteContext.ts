@@ -20,9 +20,22 @@ export interface SiteContext {
   };
 }
 
-/** Fetch the municipal site context (elevation, distances, triggers) for an address. */
-export async function fetchSiteContext(address: string): Promise<SiteContext> {
-  const response = await fetch(`/api/site-context?address=${encodeURIComponent(address)}`);
+interface SiteContextParcel { polygon: [number, number][]; pid?: string; legalDescription?: string; areaSqm?: number; address?: string | null }
+
+/**
+ * Fetch the municipal site context (elevation, distances, yard orientation, triggers).
+ * When the caller passes the parcel it already has, the analysis runs on THAT exact outline
+ * (POST) — so yard/front detection matches the drawn geometry. Falls back to address lookup.
+ */
+export async function fetchSiteContext(address: string, parcel?: SiteContextParcel): Promise<SiteContext> {
+  const useParcel = parcel && Array.isArray(parcel.polygon) && parcel.polygon.length >= 3;
+  const response = useParcel
+    ? await fetch('/api/site-context', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ rings: [parcel!.polygon], attributes: { FullAddress: parcel!.address || address, PID: parcel!.pid, LegalDesc: parcel!.legalDescription, LotAreaSqm: parcel!.areaSqm } }),
+      })
+    : await fetch(`/api/site-context?address=${encodeURIComponent(address)}`);
   const body = await response.json().catch(() => null);
   if (!response.ok) throw new Error((body && body.message) || 'The site context could not be loaded.');
   return body as SiteContext;

@@ -137,31 +137,43 @@ function classifyYards(ring, lat, roadFeatures, streetName) {
   });
   const edges = [];
   const edgeRoadAttrs = [];
+  const ALONGSIDE_THRESHOLD_M = 16; // a lot edge running within this of a road is "alongside" it
   for (let i = 0; i < ring.length - 1; i++) {
     const a = toM(ring[i]), b = toM(ring[i + 1]);
     const dx = b[0] - a[0], dy = b[1] - a[1];
     const len = Math.hypot(dx, dy);
     if (len < 0.5) continue;
-    const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
-    // Track nearest road overall AND nearest road whose name matches the address street.
-    let roadDist = Infinity, attrs = null, streetDist = Infinity;
-    for (const seg of roadSegs) {
-      const d = pointToSegment(mid, seg[0], seg[1]);
-      if (d < roadDist) { roadDist = d; attrs = seg[2]; }
-      if (streetMatches(roadName(seg[2]), streetName) && d < streetDist) streetDist = d;
+    // Sample along the edge: the FRONT is the edge that runs alongside the street for its
+    // length, not one that merely touches a road at a single corner (which mislabels long lots).
+    const samples = Math.max(2, Math.min(30, Math.round(len / 2)));
+    let nearestRoad = Infinity, nearestAttrs = null, alongRoad = 0, alongStreet = 0;
+    for (let s = 0; s <= samples; s++) {
+      const t = s / samples;
+      const pt = [a[0] + dx * t, a[1] + dy * t];
+      let dRoad = Infinity, dStreet = Infinity, attrs = null;
+      for (const seg of roadSegs) {
+        const d = pointToSegment(pt, seg[0], seg[1]);
+        if (d < dRoad) { dRoad = d; attrs = seg[2]; }
+        if (streetMatches(roadName(seg[2]), streetName) && d < dStreet) dStreet = d;
+      }
+      if (dRoad < nearestRoad) { nearestRoad = dRoad; nearestAttrs = attrs; }
+      if (dRoad <= ALONGSIDE_THRESHOLD_M) alongRoad++;
+      if (dStreet <= ALONGSIDE_THRESHOLD_M) alongStreet++;
     }
-    edges.push({ index: i, lengthM: round(len, 1), bearing: round((Math.atan2(dx, dy) * 180) / Math.PI, 0), roadDistanceM: roadSegs.length ? round(roadDist, 1) : null, streetDistanceM: Number.isFinite(streetDist) ? round(streetDist, 1) : null, yard: 'side' });
-    edgeRoadAttrs.push(attrs);
+    const n = samples + 1;
+    edges.push({ index: i, lengthM: round(len, 1), bearing: round((Math.atan2(dx, dy) * 180) / Math.PI, 0), roadDistanceM: roadSegs.length ? round(nearestRoad, 1) : null, alongRoadM: round((alongRoad / n) * len, 1), alongStreetM: round((alongStreet / n) * len, 1), yard: 'side' });
+    edgeRoadAttrs.push(nearestAttrs);
   }
   const withRoad = edges.filter((e) => e.roadDistanceM != null);
   let frontEdgeIndex = null, rearEdgeIndex = null, roadDistanceM = null;
   if (withRoad.length) {
-    // A house fronts its address street: if any edge is near a road segment whose name
-    // matches the address, pick the front from those; otherwise fall back to nearest-road.
-    const namedFront = withRoad.filter((e) => e.streetDistanceM != null);
-    const front = namedFront.length
-      ? namedFront.reduce((m, e) => (e.streetDistanceM < m.streetDistanceM ? e : m))
-      : withRoad.reduce((m, e) => (e.roadDistanceM < m.roadDistanceM ? e : m));
+    // Prefer the edge running alongside the address street; else alongside any road; else nearest.
+    const alongStreetEdges = withRoad.filter((e) => e.alongStreetM > 0.5);
+    const alongRoadEdges = withRoad.filter((e) => e.alongRoadM > 0.5);
+    const [pool, score] = alongStreetEdges.length ? [alongStreetEdges, (e) => e.alongStreetM]
+      : alongRoadEdges.length ? [alongRoadEdges, (e) => e.alongRoadM]
+      : [withRoad, (e) => -e.roadDistanceM];
+    const front = pool.reduce((m, e) => (score(e) > score(m) ? e : m));
     // Rear = the substantial edge farthest from the chosen front (opposite side of the lot).
     const frontMid = midpointM(toM(ring[front.index]), toM(ring[front.index + 1]));
     const rear = withRoad.filter((e) => e.lengthM > 3 && e.index !== front.index)

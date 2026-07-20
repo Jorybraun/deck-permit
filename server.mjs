@@ -63,6 +63,20 @@ app.get('/api/site-context', async (request, response, next) => {
   } catch (error) { next(error); }
 });
 
+// POST variant: analyze the SAME parcel outline the client already drew, so yard
+// orientation and setbacks are computed on the exact geometry shown (not a second fetch
+// that can return a different shape for the same address).
+app.post('/api/site-context', async (request, response, next) => {
+  try {
+    const { rings, attributes, address } = request.body || {};
+    if (Array.isArray(rings) && rings.length && Array.isArray(rings[0]) && rings[0].length >= 3) {
+      response.set('cache-control', 'no-store').json(await siteContext.forParcel(rings, attributes || {}));
+    } else {
+      response.set('cache-control', 'no-store').json(await siteContext.forAddress(typeof address === 'string' ? address : ''));
+    }
+  } catch (error) { next(error); }
+});
+
 app.get('/api/feedback/capabilities', (_request, response) => {
   response.set('cache-control', 'no-store').json({ schema: 'feedback-capabilities/v1', assistantConfigured: feedbackAssistant.configured });
 });
