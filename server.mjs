@@ -55,6 +55,11 @@ app.post('/api/ai/photo-analysis', async (request, response, next) => {
   catch (error) { next(error); }
 });
 
+app.post('/api/ai/design-chat', async (request, response, next) => {
+  try { response.status(201).set('cache-control', 'no-store').json(await aiDesign.discussDesign(request.body)); }
+  catch (error) { next(error); }
+});
+
 const siteContext = new SiteContextService();
 app.get('/api/site-context', async (request, response, next) => {
   try {

@@ -1,5 +1,5 @@
 import { AlertTriangle, ArrowDown, ArrowRight, ArrowUp, Layers3, Plus, RotateCw, Ruler, ShieldCheck, Trash2 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { stairDepartureDirection, stairLandingCandidates, suggestedPlatformElevationForBoundary, suggestPointToPointStair, type AddPlatformInput, type AddStairInput, type ClosedBoundary, type DeckDesign, type DesignAssessment, type DeckPlatform, type DeckStair, type PlatformEdgeRole } from '../../domain/deckDesign';
 import { assessDeckLifeSafety, type StairLifeSafetyAssessment } from '../../domain/framingDesign';
 import { assessExistingConditionFieldSurvey, assessSiteCompliance, assessWallOpeningCoordination, projectPropertyToLocal, terrainElevationAt, type SiteModel } from '../../domain/siteModel';
@@ -7,7 +7,8 @@ import type { Property } from '../../types';
 import type { HomeownerIntent } from '../../state/homeownerProjectStore';
 import { DeckElevationEditor } from '../design/DeckElevationEditor';
 import { DeckPlanEditor } from '../design/DeckPlanEditor';
-import { AiDesignStudioPanel } from './AiDesignStudioPanel';
+import { DesignReviewChat } from './DesignReviewChat';
+import type { SiteComplianceAssessment, WallOpeningCoordinationAssessment } from '../../domain/siteModel';
 
 interface DesignStageProps {
   design: DeckDesign;
@@ -46,6 +47,35 @@ interface DesignStageProps {
   onApplyAiDesign: (design: DeckDesign) => void;
 }
 
+/** Plain-text facts about the plan for the AI advisor — everything it may state must be here. */
+function buildPlanGrounding(design: DeckDesign, site: SiteModel, property: Property, assessment: DesignAssessment, compliance: SiteComplianceAssessment, openings: WallOpeningCoordinationAssessment): string {
+  const zoning = property.zoning;
+  const gradeMm = site.terrain.datum.elevationMm;
+  const platforms = design.platforms.map((platform, index) => {
+    const heightMm = Math.round(platform.elevationMm - gradeMm);
+    return `${platform.id || `P${index + 1}`} "${platform.name}" — ${platform.purpose ?? 'deck'}, ${heightMm} mm above grade (${heightMm <= 1200 ? 'low, gets projection allowance' : 'raised, strict setback'})`;
+  }).join('; ');
+  const coverage = compliance.coverage;
+  const setback = compliance.setbackStatus === 'reference-pass' ? 'PASS — modeled deck, stairs, and landings are inside the setback limits.'
+    : compliance.setbackStatus === 'orientation-required' ? 'front/rear not chosen yet — cannot check setbacks.'
+    : compliance.setbackStatus === 'reference-fail' ? `FAIL — ${compliance.setbackChecks.filter((check) => check.status === 'reference-fail').slice(0, 4).map((check) => `${check.yard} PL-${check.parcelEdgeIndex + 1}: ${(check.referenceDistanceMm / 1000).toFixed(2)} m vs ${(check.requiredMm / 1000).toFixed(2)} m required`).join('; ')}`
+    : 'unavailable.';
+  const openingIssues = openings.checks.filter((check) => check.status !== 'pass').slice(0, 4).map((check) => check.message);
+  const geometryIssues = [...assessment.errors, ...assessment.warnings].slice(0, 5).map((issue) => issue.message);
+  return [
+    `ADDRESS: ${property.address?.fullAddress ?? 'unknown'}`,
+    zoning ? `ZONING: ${zoning.zone} (Town of Sidney Bylaw 2275). Required setbacks — front ${zoning.setbacks.front} m, rear ${zoning.setbacks.rear} m, side ${zoning.setbacks.side} m, exterior-side ${zoning.setbacks.exteriorSide} m. Max lot coverage ${zoning.maxLotCoverage}%. Max height ${zoning.maxHeight} m.` : 'ZONING: not resolved.',
+    property.parcel?.areaSqm ? `LOT AREA: ${property.parcel.areaSqm} m².` : '',
+    'LOW-DECK RULE (§5.1.6.b): a deck ≤1.2 m above grade may project 3.0 m into the front/rear setbacks and 1.5 m into the side setbacks, but must stay ≥1.5 m from any lot line. A raised deck uses the strict setback.',
+    `DECK PLAN: ${design.platforms.length} platform(s), total ${assessment.areaSqM.toFixed(1)} m², ${design.stairs.length} stair(s).${platforms ? ` Platforms: ${platforms}.` : ''}`,
+    'LIVE CHECKS:',
+    `- Setbacks: ${setback}`,
+    coverage.referenceCoveragePercent != null ? `- Lot coverage: ${coverage.referenceCoveragePercent.toFixed(1)}% used of ${coverage.maximumCoveragePercent?.toFixed(1) ?? '—'}% allowed (${coverage.status}).` : '- Lot coverage: not computed.',
+    `- Doors/windows coordination: ${openings.status}.${openingIssues.length ? ` Issues: ${openingIssues.join(' | ')}` : ''}`,
+    `- Geometry: ${assessment.errors.length} error(s), ${assessment.warnings.length} warning(s).${geometryIssues.length ? ` ${geometryIssues.join(' | ')}` : ''}`,
+  ].filter(Boolean).join('\n');
+}
+
 /** Composes the plan canvas with exact properties for the selected construction region. */
 export function DesignStage(props: DesignStageProps) {
   const selected = props.design.platforms.find((platform) => platform.id === props.design.selectedObjectId) || null;
@@ -55,6 +85,7 @@ export function DesignStage(props: DesignStageProps) {
   const openingCoordination = assessWallOpeningCoordination(props.design, props.site, props.property.parcel?.municipality || props.property.address?.locality || 'British Columbia');
   const openingIssues = openingCoordination.checks.filter((check) => check.status !== 'pass');
   const [designView, setDesignView] = useState<'plan' | 'elevation'>('plan');
+  const planGrounding = useMemo(() => buildPlanGrounding(props.design, props.site, props.property, props.assessment, siteCompliance, openingCoordination), [props.design, props.site, props.property, props.assessment, siteCompliance, openingCoordination]);
   return <main className="grid h-full min-h-0 bg-[#edf2ef] lg:grid-cols-[minmax(0,1fr)_330px]">
     <section className="flex min-h-[560px] min-w-0 flex-col overflow-hidden" aria-label="Deck design canvas">
       <div className="flex min-h-12 items-center justify-between border-b border-slate-300 bg-slate-950 px-4 text-white">
@@ -74,7 +105,7 @@ export function DesignStage(props: DesignStageProps) {
         <h2 className="mt-1 font-[Manrope] text-xl font-bold text-slate-950">Shape, levels & access</h2>
         <p className="mt-2 text-xs leading-5 text-slate-600">Draw platforms against the measured house. Each platform can move, change shape, and sit at its own elevation.</p>
       </div>
-      <AiDesignStudioPanel intent={props.intent} property={props.property} site={props.site} design={props.design} onApply={props.onApplyAiDesign} />
+      <DesignReviewChat grounding={planGrounding} hasDesign={props.design.platforms.length > 0} />
       <PlatformLayers design={props.design} site={props.site} onSelect={props.onSelectObject} onMove={props.onMovePlatformLayer} />
       {selected ? <PlatformInspector design={props.design} site={props.site} platform={selected} gradeElevationMm={terrainElevationAt(props.site.terrain, platformReferencePoint(selected)).elevationMm} onRename={props.onRenamePlatform} onSetElevation={props.onSetElevation} onSetPurpose={props.onSetPurpose} onRotate={props.onRotatePlatform} onSetFinish={props.onSetFinish} onSetFramingIntent={props.onSetFramingIntent} onSetEdgeRole={props.onSetEdgeRole} onSetEdgeLength={props.onSetEdgeLength} onInsertVertex={props.onInsertVertex} onRemove={props.onRemovePlatform} /> : selectedStair ? <StairInspector stair={selectedStair} safety={selectedStairSafety} design={props.design} onSetConstruction={props.onSetStairConstruction} onConnectLanding={props.onConnectStairLanding} onResizeSide={props.onResizeStairSide} onRemove={props.onRemoveStair} /> : <div className="p-5"><div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-5 text-center"><Layers3 className="mx-auto text-slate-400" size={24} /><strong className="mt-3 block text-sm text-slate-800">Select a platform or stair</strong><p className="mt-1 text-xs leading-5 text-slate-500">Click a deck area to edit it, or click a stair callout to inspect and remove that stair.</p></div></div>}
 

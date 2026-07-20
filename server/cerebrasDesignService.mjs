@@ -136,6 +136,39 @@ export class CerebrasDesignService {
     });
   }
 
+  // Free-text conversational review of the homeowner's OWN plan, grounded in the deterministic
+  // facts the client passes (live checks, zoning, bylaw notes). Not structured output — a chat.
+  async discussDesign({ grounding, messages }) {
+    requireConfigured(this.apiKey);
+    const convo = (Array.isArray(messages) ? messages : [])
+      .filter((m) => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string')
+      .slice(-12)
+      .map((m) => ({ role: m.role, content: cleanText(m.content, 4000) }));
+    if (!convo.length) throw new AiDesignError(400, 'invalid-chat-input', 'At least one message is required.');
+    const system = [
+      'You are a friendly, expert building-permit advisor helping a homeowner in the Town of Sidney, BC with THEIR deck plan.',
+      'You are reviewing and discussing a plan they drew — you did not design it. Be encouraging but honest.',
+      'Ground every statement in the PROJECT FACTS below (live geometry checks, zoning setbacks, lot coverage, door/window and stair checks, bylaw notes). Never invent rules or numbers; if a fact is not given, say you are not sure and suggest how to confirm.',
+      'When something fails or is missing, say so plainly and give the single most useful next change. Plain English over jargon; explain any code term in one clause.',
+      'You are a helper, not the authority — never claim the plan is permit-approved; the Town has final say. Keep replies short (2–6 sentences) unless asked for more.',
+      'Write in plain sentences only — no markdown, asterisks, bold, headers, or bullet symbols.',
+      '',
+      'PROJECT FACTS:',
+      cleanText(grounding, 12000),
+    ].join('\n');
+    const response = await this.fetchImpl(CEREBRAS_CHAT_COMPLETIONS_URL, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${this.apiKey}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ model: this.reviewModel, messages: [{ role: 'system', content: system }, ...convo], max_completion_tokens: 700 }),
+    });
+    const body = await response.json().catch(() => null);
+    if (response.status === 429) { const retryAfter = response.headers.get('retry-after'); throw new AiDesignError(429, 'cerebras-rate-limited', `Cerebras hit its rate limit. Wait${retryAfter ? ` ${retryAfter} seconds` : ' a moment'} and try again.`); }
+    if (!response.ok) throw new AiDesignError(response.status >= 500 ? 502 : response.status, 'cerebras-request-failed', body?.error?.message || body?.message || 'The Cerebras request could not be completed.');
+    const reply = cleanText(body?.choices?.[0]?.message?.content, 4000);
+    if (!reply) throw new AiDesignError(502, 'cerebras-empty-output', 'The advisor returned no reply — try again.');
+    return { reply, generation: { provider: 'cerebras', model: this.reviewModel, responseId: body.id || '', generatedAt: new Date().toISOString() } };
+  }
+
   async #structuredResponse({ model, schemaName, schema, system, user, content, maxCompletionTokens }) {
     if (Buffer.byteLength(JSON.stringify(schema)) > 5_000) throw new AiDesignError(500, 'ai-schema-too-large', 'The structured-output schema exceeds the Cerebras 5,000-byte limit.');
     const response = await this.fetchImpl(CEREBRAS_CHAT_COMPLETIONS_URL, {

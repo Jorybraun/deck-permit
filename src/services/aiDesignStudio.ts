@@ -250,6 +250,13 @@ async function requestJson<T>(url: string, init?: RequestInit): Promise<T> {
   return body as T;
 }
 
+export interface DesignChatMessage { role: 'user' | 'assistant'; content: string }
+
+/** Conversational review of the homeowner's own plan, grounded in the facts we pass. */
+export async function discussDesignPlan(input: { grounding: string; messages: DesignChatMessage[] }): Promise<{ reply: string }> {
+  return requestJson<{ reply: string }>('/api/ai/design-chat', { method: 'POST', body: JSON.stringify(input), headers: { 'content-type': 'application/json' } });
+}
+
 function blobToDataUrl(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => { const reader = new FileReader(); reader.onerror = () => reject(new AiDesignStudioError('A private photo could not be prepared for analysis.', 'photo-read-failed')); reader.onload = () => resolve(String(reader.result)); reader.readAsDataURL(blob); });
 }
