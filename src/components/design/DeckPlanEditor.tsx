@@ -2,7 +2,7 @@ import { Check, ChevronDown, CircleDollarSign, FlipHorizontal2, Footprints, Hand
 import { useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type WheelEvent as ReactWheelEvent } from 'react';
 import { boundaryCenter, boundaryFromPoints, findHighestPlatformBelowPoint, nearestPlatformEdgePoint, proposePointToPointStairGeometry, rotateBoundary, stairDepartureDirection, suggestedPlatformElevationForBoundary } from '../../domain/deckDesign';
 import type { AddPlatformInput, ClosedBoundary, DeckDesign, DeckPlatform, DeckStair, PointMm } from '../../domain/deckDesign';
-import { deriveReferenceSetbackGuides, projectPropertyToLocal, terrainElevationAt, type LocalPropertyGeometry, type ReferenceSetbackGuide, type SiteModel } from '../../domain/siteModel';
+import { deriveReferenceSetbackGuides, deriveDeckSetbackGuides, projectPropertyToLocal, terrainElevationAt, type LocalPropertyGeometry, type ReferenceSetbackGuide, type SiteModel } from '../../domain/siteModel';
 import type { Property } from '../../types';
 import { estimateProject } from '../../services/projectEstimate';
 import { ANGLE_SNAP_DEG, constrainDraftPoint, formatAngle, interiorAngleDeg, lineAngleDeg, snapDraggedVertex, snapPointToSmartGuides, type SmartGuideResult } from './draftingGeometry';
@@ -77,6 +77,10 @@ export function DeckPlanEditor({ design, site, property, canUndo, canRedo, onAdd
   const [drawHelpOpen, setDrawHelpOpen] = useState(true);
   const propertyGeometry = useMemo(() => projectPropertyToLocal(property, site), [property, site]);
   const setbackGuides = useMemo(() => deriveReferenceSetbackGuides(property, propertyGeometry, site), [property, propertyGeometry, site]);
+  // A low, uncovered deck (≤1.2 m above grade) may project into the setbacks (§5.1.6.b), so the
+  // buildable envelope grows as the deck sits lower. Height = tallest platform above grade.
+  const deckHeightMm = design.platforms.length ? Math.max(...design.platforms.map((platform) => platform.elevationMm - site.terrain.datum.elevationMm)) : 0;
+  const deckGuides = useMemo(() => deriveDeckSetbackGuides(property, propertyGeometry, site, deckHeightMm), [property, propertyGeometry, site, deckHeightMm]);
   const estimate = useMemo(() => estimateProject(design), [design]);
   const transform = useMemo(() => createTransform(design, site, propertyGeometry, viewMode, zoom, pan), [design, site, propertyGeometry, viewMode, zoom, pan]);
   const selectedPlatform = design.platforms.find((platform) => platform.id === design.selectedObjectId) || null;
@@ -474,7 +478,7 @@ export function DeckPlanEditor({ design, site, property, canUndo, canRedo, onAdd
           <filter id="platform-shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="3" stdDeviation="3" floodColor="#274335" floodOpacity=".16" /></filter>
         </defs>
         <rect data-background="true" width={VIEW_WIDTH} height={VIEW_HEIGHT} fill="url(#architect-grid)" />
-        <SiteContext site={site} geometry={propertyGeometry} setbackGuides={setbackGuides} transform={transform} viewMode={viewMode} />
+        <SiteContext site={site} geometry={propertyGeometry} setbackGuides={setbackGuides} deckGuides={deckGuides} transform={transform} viewMode={viewMode} />
         <g data-testid="existing-design-layers" pointerEvents={existingLayersPointerEvents(mode)}>
           {design.platforms.map((platform) => <PlatformShape key={platform.id} platform={platform} boundary={displayedBoundary(platform)} selected={selectedPlatform?.id === platform.id} detectedLanding={detectedLanding?.id === platform.id} transform={transform} interactionMode={mode} stairSourceEdgeId={stairSource?.platformId === platform.id ? stairSource.edgeId : null} onSelect={(event) => connectStairPlatform(event, platform)} onRotate={(event) => beginPlatformRotate(event, platform)} onVertex={(event, index) => handleVertexPointerDown(event, platform, index)} onEdge={(event, index) => handleEdgePointerDown(event, platform, index)} />)}
           {design.stairs.map((stair) => {
@@ -555,11 +559,18 @@ function createTransform(design: DeckDesign, site: SiteModel, geometry: LocalPro
   return { scale, x: (value) => offsetX + value * scale, y: (value) => offsetY + value * scale, fromScreenX: (value) => (value - offsetX) / scale, fromScreenY: (value) => (value - offsetY) / scale };
 }
 
-function SiteContext({ site, geometry, setbackGuides, transform, viewMode }: { site: SiteModel; geometry: LocalPropertyGeometry | null; setbackGuides: ReferenceSetbackGuide[]; transform: Transform; viewMode: ViewMode }) {
+function SiteContext({ site, geometry, setbackGuides, deckGuides, transform, viewMode }: { site: SiteModel; geometry: LocalPropertyGeometry | null; setbackGuides: ReferenceSetbackGuide[]; deckGuides: ReferenceSetbackGuide[]; transform: Transform; viewMode: ViewMode }) {
   const selectedBuilding = geometry?.buildings.find((building) => building.id === geometry.selectedBuildingId);
   if (!geometry || !selectedBuilding) return <FallbackHouseReference site={site} transform={transform} />;
   return <g pointerEvents="none">
     <polygon points={svgPoints(geometry.parcel, transform)} fill={viewMode === 'property' ? 'rgba(220,241,228,.55)' : 'none'} stroke="#23805e" strokeWidth={viewMode === 'property' ? 3 : 2} strokeDasharray="9 5" />
+    {deckGuides.length > 0 && <g aria-label="Low-deck projection limit">{deckGuides.map((guide) => {
+      const guideMid = midpoint(guide.guideStartMm, guide.guideEndMm);
+      return <g key={`deck-${guide.id}`}>
+        <line x1={transform.x(guide.guideStartMm[0])} y1={transform.y(guide.guideStartMm[1])} x2={transform.x(guide.guideEndMm[0])} y2={transform.y(guide.guideEndMm[1])} stroke="#15803d" strokeWidth="2" strokeDasharray="4 3" />
+        <text x={transform.x(guideMid[0])} y={transform.y(guideMid[1]) + 12} textAnchor="middle" fontSize="8" fontWeight="900" fill="#15803d" paintOrder="stroke" stroke="white" strokeWidth="3">LOW DECK · {formatM(guide.requiredMm)}</text>
+      </g>;
+    })}</g>}
     {setbackGuides.length > 0 && <g aria-label="Recorded zoning setback guides">{setbackGuides.map((guide) => {
       const propertyMid = midpoint(guide.propertyStartMm, guide.propertyEndMm);
       const guideMid = midpoint(guide.guideStartMm, guide.guideEndMm);

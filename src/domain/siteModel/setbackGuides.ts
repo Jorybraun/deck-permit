@@ -20,12 +20,24 @@ export interface ReferenceSetbackGuide {
   source: string;
 }
 
+// Town of Sidney Zoning Bylaw No. 2275, §5.1.6.b — an unenclosed, uncovered deck/landing
+// no more than 1.2 m above grade may project into a required yard (3.0 m where the setback is
+// ≥4.5 m, 1.5 m where it is <4.5 m), provided it stays ≥1.5 m from any lot line.
+export const DECK_PROJECTION_MAX_HEIGHT_MM = 1200;
+const DECK_MIN_FROM_LOT_LINE_MM = 1500;
+export function deckEffectiveSetbackMm(requiredMm: number): number {
+  const projectionMm = requiredMm >= 4500 ? 3000 : 1500;
+  return Math.max(requiredMm - projectionMm, DECK_MIN_FROM_LOT_LINE_MM);
+}
+
 /**
  * Creates independent per-edge reference guides. These are intentionally not
  * joined into a fake buildable polygon: corner intersections, projections,
  * easements, and municipal interpretations remain separate review conditions.
+ * `setbackMm` optionally overrides the strict zoning distance per yard (used to draw the
+ * more generous low-deck projection envelope).
  */
-export function deriveReferenceSetbackGuides(property: Property, geometry: LocalPropertyGeometry | null, site: SiteModel): ReferenceSetbackGuide[] {
+export function deriveReferenceSetbackGuides(property: Property, geometry: LocalPropertyGeometry | null, site: SiteModel, setbackMm?: (yard: ReferenceYard, strictMm: number) => number): ReferenceSetbackGuide[] {
   const zoning = property.zoning;
   if (!geometry || !zoning || site.yardReference.status === 'unselected') return [];
   const front = site.yardReference.frontEdgeIndex;
@@ -36,7 +48,8 @@ export function deriveReferenceSetbackGuides(property: Property, geometry: Local
     const end = parcel[(parcelEdgeIndex + 1) % parcel.length];
     const yard = parcelEdgeIndex === front ? 'front' : parcelEdgeIndex === site.yardReference.exteriorSideEdgeIndex ? 'exterior-side' : parcelEdgeIndex === rear ? 'rear' : 'interior-side';
     const requiredM = yard === 'front' ? zoning.setbacks.front : yard === 'rear' ? zoning.setbacks.rear : yard === 'exterior-side' ? zoning.setbacks.exteriorSide : zoning.setbacks.side;
-    const requiredMm = Math.round(requiredM * 1000);
+    const strictMm = Math.round(requiredM * 1000);
+    const requiredMm = setbackMm ? setbackMm(yard, strictMm) : strictMm;
     const inward = inwardNormal(start, end, parcel);
     const guideStartMm = offset(start, inward, requiredMm);
     const guideEndMm = offset(end, inward, requiredMm);
@@ -54,6 +67,18 @@ export function deriveReferenceSetbackGuides(property: Property, geometry: Local
       source: zoning.source,
     };
   });
+}
+
+/**
+ * The low-deck projection envelope (§5.1.6.b). Returns [] for a raised deck (>1.2 m above
+ * grade) since it gets no projection allowance, and only includes edges where a low deck
+ * may actually reach past the strict setback.
+ */
+export function deriveDeckSetbackGuides(property: Property, geometry: LocalPropertyGeometry | null, site: SiteModel, deckHeightMm: number): ReferenceSetbackGuide[] {
+  if (deckHeightMm > DECK_PROJECTION_MAX_HEIGHT_MM) return [];
+  const strict = deriveReferenceSetbackGuides(property, geometry, site);
+  const deck = deriveReferenceSetbackGuides(property, geometry, site, (_yard, strictMm) => deckEffectiveSetbackMm(strictMm));
+  return deck.filter((guide, index) => strict[index] && guide.requiredMm < strict[index].requiredMm);
 }
 
 function inwardNormal(start: PointMm, end: PointMm, polygon: PointMm[]): PointMm {
