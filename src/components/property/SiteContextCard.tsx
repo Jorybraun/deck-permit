@@ -4,14 +4,17 @@ import { fetchSiteContext, type SiteContext } from '../../services/siteContext';
 
 interface SiteContextCardProps {
   address?: string;
+  parcel?: { polygon: [number, number][]; pid?: string; legalDescription?: string; areaSqm?: number };
 }
 
 /**
  * Friendly "here's what I found about your place" card. Pulls the municipal site
  * context for the address and shows the homeowner what the app already knows — and,
- * warmly, which permit forms it has already handled for them.
+ * warmly, which permit forms it has already handled for them. It analyzes the SAME
+ * parcel the app drew (not a second address lookup) so the card, the drawing, and the
+ * setback engine never disagree about the lot or its zone.
  */
-export function SiteContextCard({ address }: SiteContextCardProps) {
+export function SiteContextCard({ address, parcel }: SiteContextCardProps) {
   const [context, setContext] = useState<SiteContext | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -19,12 +22,12 @@ export function SiteContextCard({ address }: SiteContextCardProps) {
     if (!address) return;
     let active = true;
     setLoading(true);
-    fetchSiteContext(address)
+    fetchSiteContext(address, parcel ? { ...parcel, address } : undefined)
       .then((result) => { if (active) setContext(result); })
       .catch(() => { if (active) setContext(null); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [address]);
+  }, [address, parcel?.pid]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!address) return null;
 
