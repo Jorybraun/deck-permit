@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react';
 import { AlertTriangle, ArrowRight, Check, CheckCircle2, CircleDot, Download, ExternalLink, FileCheck2, FileText, GitBranch, HardHat, Layers3, Printer, RefreshCw, Ruler, ShieldCheck, X } from 'lucide-react';
 import type { DeckDesign } from '../../domain/deckDesign';
 import type { FramingCheck, FramingDesign, FramingReviewGate } from '../../domain/framingDesign';
-import { assessExistingConditionFieldSurvey, type SiteModel } from '../../domain/siteModel';
+import { assessExistingConditionFieldSurvey, assessSiteCompliance, projectPropertyToLocal, type SiteModel } from '../../domain/siteModel';
+import { SidneySubmissionPanel } from './SidneySubmissionPanel';
 import { buildCanonicalReviewIssue } from '../../services/canonicalReviewIssue';
 import { canonicalPlanFingerprint } from '../../services/canonicalPlanSet';
 import { evaluateCanonicalPermitReadiness } from '../../services/canonicalPermitReadiness';
@@ -46,6 +47,7 @@ interface PermitStageProps {
 /** Composes reviewable framing evidence and permit readiness from canonical project state. */
 export function PermitStage({ property, site, design, framing, framingStale, designErrors, siteErrors, siteWarnings, reviewPublication, architecturalReviewPublication, reviewIssueRevision, professionalReviewCycles, verificationEvidence, sidneyApplication, permitSubmissionHistory, onGenerateFraming, onDownloadReviewSet, onDownloadCadExchange, onDownloadCalculationReport, onBackToDesign, onContinue, onPublishReview, onPublishArchitecturalReview, onImportReview, onAddVerificationEvidence, onUpdateSidneyApplication, onRecordPermitSubmission, onResolveRedline }: PermitStageProps) {
   const fieldSurveyCurrent = assessExistingConditionFieldSurvey(site).current;
+  const siteCompliance = useMemo(() => assessSiteCompliance(property, projectPropertyToLocal(property, site), site, design), [property, site, design]);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewSheetIndex, setPreviewSheetIndex] = useState(0);
   const [previewZoom, setPreviewZoom] = useState(100);
@@ -119,6 +121,8 @@ export function PermitStage({ property, site, design, framing, framingStale, des
         <StatusCard icon={<GitBranch size={20} />} label="Framing graph" value={!framing ? 'Not generated' : framingStale ? 'Stale · regenerate' : `${framing.joists.length + framing.beams.length + framing.posts.length} members`} tone={framingCurrent ? 'success' : 'warning'} />
         <StatusCard icon={<HardHat size={20} />} label="Professional gates" value={framing ? `${requiredGates.length} required` : 'Generate to identify'} tone={requiredGates.length ? 'warning' : framing ? 'success' : 'warning'} />
       </section>
+
+      <SidneySubmissionPanel property={property} compliance={siteCompliance} />
 
       {framingStale && framing && <div role="alert" className="flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950"><AlertTriangle size={18} className="mt-0.5 shrink-0" /><div><strong>Framing is out of date.</strong><p className="mt-1 text-xs leading-5">The deck, stair, site, or governing input changed after this proposal was generated. The old members remain visible for comparison but cannot be used in the current permit set.</p></div></div>}
 
