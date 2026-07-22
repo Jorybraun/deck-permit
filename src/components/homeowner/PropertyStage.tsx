@@ -31,6 +31,7 @@ interface PropertyStageProps {
   onRemoveTerrainPoint: (pointId: string) => void;
   captureAssessment: ExistingConditionCaptureAssessment;
   capturePreviewUrls: Record<string, string>;
+  captureAnalyzing: boolean;
   onAddCaptureFiles: (category: CaptureCategory, files: File[]) => Promise<void>;
   onUpdateCaptureEvidence: (evidenceId: string, changes: CaptureEvidenceChanges) => void;
   onRemoveCaptureEvidence: (evidenceId: string) => Promise<void>;
@@ -41,7 +42,7 @@ interface PropertyStageProps {
 }
 
 /** Lets a homeowner research a parcel and turn reference geometry into explicit field inputs. */
-export function PropertyStage({ property, site, research, onResearch, onResearchAddress, onSuggestAddresses, onSelectWall, onUpdateSite, onUpdateTerrainDatum, onAddTerrainPoint, onUpdateTerrainPoint, onRemoveTerrainPoint, captureAssessment, capturePreviewUrls, onAddCaptureFiles, onUpdateCaptureEvidence, onRemoveCaptureEvidence, onAnalyzeCapture, onReviewAiObservation, onPromoteAiOpening, onContinue }: PropertyStageProps) {
+export function PropertyStage({ property, site, research, onResearch, onResearchAddress, onSuggestAddresses, onSelectWall, onUpdateSite, onUpdateTerrainDatum, onAddTerrainPoint, onUpdateTerrainPoint, onRemoveTerrainPoint, captureAssessment, capturePreviewUrls, captureAnalyzing, onAddCaptureFiles, onUpdateCaptureEvidence, onRemoveCaptureEvidence, onAnalyzeCapture, onReviewAiObservation, onPromoteAiOpening, onContinue }: PropertyStageProps) {
   const [address, setAddress] = useState(property.address?.fullAddress || '');
   const [addressOptions, setAddressOptions] = useState<Address[]>([]);
   const [suggestionStatus, setSuggestionStatus] = useState<'idle' | 'loading' | 'ready'>('idle');
@@ -109,7 +110,7 @@ export function PropertyStage({ property, site, research, onResearch, onResearch
         <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between"><div><h3 className="font-[Manrope] text-lg font-bold text-slate-950">Design wall measurements</h3><p className="mt-1 text-sm text-slate-600">Use the exterior wall where the deck will connect or sit beside the house.</p></div><span className={`rounded-full px-3 py-1 text-xs font-bold ${site.status === 'field-input-unverified' ? 'bg-amber-100 text-amber-900' : 'bg-slate-100 text-slate-600'}`}>{site.status === 'field-input-unverified' ? 'Field values recorded · unverified' : 'Reference only'}</span></div>
           <p className="mt-1 text-xs text-slate-500">Add photos of the wall and yard — the AI reads them to fill the wall size, doors, and windows. Fine-tune anything by hand under “Verify for permit” below.</p>
-          <ExistingConditionCapturePanel capture={site.capture} assessment={captureAssessment} previewUrls={capturePreviewUrls} onAddFiles={onAddCaptureFiles} onUpdateEvidence={onUpdateCaptureEvidence} onRemoveEvidence={onRemoveCaptureEvidence} onAnalyze={onAnalyzeCapture} onReviewAiObservation={onReviewAiObservation} linkedAiOpeningRefs={site.designWall.openings.flatMap((opening) => opening.sourceAiObservationRefs || [])} onPromoteAiOpening={onPromoteAiOpening} />
+          <ExistingConditionCapturePanel capture={site.capture} assessment={captureAssessment} previewUrls={capturePreviewUrls} analyzing={captureAnalyzing} onAddFiles={onAddCaptureFiles} onUpdateEvidence={onUpdateCaptureEvidence} onRemoveEvidence={onRemoveCaptureEvidence} onAnalyze={onAnalyzeCapture} onReviewAiObservation={onReviewAiObservation} linkedAiOpeningRefs={site.designWall.openings.flatMap((opening) => opening.sourceAiObservationRefs || [])} onPromoteAiOpening={onPromoteAiOpening} />
           <WallOpeningEditor site={site} onUpdateOpenings={(openings) => { const openingIds = new Set(openings.map((opening) => opening.id)); onUpdateSite({ capture: { ...site.capture, wallCalibrations: (site.capture.wallCalibrations || []).filter((record) => openingIds.has(record.openingId)) } }, { openings }); }} />
           <details className="group mt-5 overflow-hidden rounded-xl border border-slate-200 bg-slate-50/70">
             <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3"><span className="text-sm font-bold text-slate-700">Verify measurements for permit <span className="font-normal text-slate-500">— optional, for a real filing</span></span><span className="text-xs font-semibold text-emerald-800 group-open:hidden">Show</span><span className="hidden text-xs font-semibold text-emerald-800 group-open:inline">Hide</span></summary>
@@ -157,12 +158,29 @@ function WallOpeningEditor({ site, onUpdateOpenings }: { site: SiteModel; onUpda
       sourceEvidenceIds: [],
     }]);
   };
+  const linkedRefs = new Set(openings.flatMap((opening) => opening.sourceAiObservationRefs || []));
+  const suggestions = (site.capture.aiAnalyses || []).flatMap((analysis) => analysis.observations
+    .filter((observation) => (observation.kind === 'door' || observation.kind === 'window') && observation.decision !== 'homeowner-rejected')
+    .map((observation) => ({ kind: observation.kind as 'door' | 'window', confidence: observation.confidence, sourceEvidenceId: observation.sourceEvidenceId, ref: `${analysis.id}:${observation.id}` })))
+    .filter((item) => !linkedRefs.has(item.ref));
+  const openingFromObservation = (kind: 'door' | 'window', sourceEvidenceId: string, ref: string, current: SiteModel['designWall']['openings']) => {
+    const widthMm = kind === 'door' ? 900 : 1200;
+    const starterOffset = Math.min(Math.max(0, current.filter((opening) => opening.kind === kind).length * 1600 + 600), Math.max(0, site.designWall.lengthMm - widthMm));
+    return { id: nextOpeningId(current.map((opening) => opening.id), kind), kind, offsetMm: starterOffset, widthMm, sillHeightMm: kind === 'door' ? 750 : 900, heightMm: kind === 'door' ? 2100 : 1200, evidenceStatus: 'photo-observed' as const, sourceEvidenceIds: [sourceEvidenceId], sourceAiObservationRefs: [ref] };
+  };
+  const addSuggestion = (item: typeof suggestions[number]) => onUpdateOpenings([...openings, openingFromObservation(item.kind, item.sourceEvidenceId, item.ref, openings)]);
+  const addAllSuggestions = () => onUpdateOpenings(suggestions.reduce((next, item) => [...next, openingFromObservation(item.kind, item.sourceEvidenceId, item.ref, next)], openings));
   return <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4">
     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-      <div className="flex gap-2"><DoorOpen size={18} className="mt-0.5 shrink-0 text-slate-600" /><div><h4 className="text-sm font-bold text-slate-900">Doors and windows on the design wall</h4><p className="mt-1 max-w-2xl text-xs leading-5 text-slate-600">Photos can prove an opening exists. Offset, width, sill and head remain provisional until measured. These openings appear in plan, elevation, CAD, and conflict review.</p></div></div>
-      <div className="flex shrink-0 flex-wrap gap-2"><button type="button" onClick={() => add('door')} className="flex min-h-9 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-[10px] font-bold text-slate-700"><Plus size={13} /> Door</button><button type="button" onClick={() => add('window')} className="flex min-h-9 items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 text-[10px] font-bold text-slate-700"><Plus size={13} /> Window</button></div>
+      <div className="flex gap-2"><DoorOpen size={18} className="mt-0.5 shrink-0 text-slate-600" /><div><h4 className="text-sm font-bold text-slate-900">Doors &amp; windows on your wall</h4><p className="mt-1 max-w-2xl text-xs leading-5 text-slate-600">You don't type these in — add photos of the wall and I'll spot the doors and windows for you, then you tap to confirm. Exact width and height stay provisional until they're measured.</p></div></div>
+      <div className="flex shrink-0 flex-col items-end gap-1"><span className="text-[8px] font-bold uppercase tracking-[.08em] text-slate-400">Add by hand</span><div className="flex flex-wrap gap-2"><button type="button" onClick={() => add('door')} className="flex min-h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 text-[10px] font-semibold text-slate-500"><Plus size={12} /> Door</button><button type="button" onClick={() => add('window')} className="flex min-h-8 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 text-[10px] font-semibold text-slate-500"><Plus size={12} /> Window</button></div></div>
     </div>
-    {!openings.length ? <p className="mt-4 rounded-lg border border-dashed border-slate-300 bg-white p-4 text-center text-xs text-slate-500">No openings recorded on this wall yet. Add every door and rear-wall window visible in the photo set.</p> : <div className="mt-4 grid gap-3">{openings.map((opening) => {
+    {suggestions.length > 0 && <div className="mt-4 rounded-lg border border-emerald-300 bg-emerald-50 p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2"><p className="text-xs font-bold text-emerald-900">I spotted {suggestions.length} opening{suggestions.length === 1 ? '' : 's'} in your photos</p>{suggestions.length > 1 && <button type="button" onClick={addAllSuggestions} className="rounded-lg bg-emerald-700 px-3 py-1.5 text-[10px] font-bold text-white">Add all {suggestions.length}</button>}</div>
+      <div className="mt-2 flex flex-wrap gap-2">{suggestions.map((item) => <button key={item.ref} type="button" onClick={() => addSuggestion(item)} className="flex min-h-9 items-center gap-1.5 rounded-lg border border-emerald-400 bg-white px-3 text-[11px] font-semibold text-emerald-900"><Plus size={13} /> {item.kind === 'door' ? 'Door' : 'Window'} <span className="font-mono text-[9px] text-emerald-600">{Math.round(item.confidence * 100)}%</span></button>)}</div>
+      <p className="mt-2 text-[9px] leading-4 text-emerald-800">Tap one to add it to your wall. It lands as a provisional opening you can nudge; size is confirmed when it's measured.</p>
+    </div>}
+    {!openings.length ? <p className="mt-4 rounded-lg border border-dashed border-slate-300 bg-white p-4 text-center text-xs text-slate-500">{suggestions.length ? 'Tap an opening I found above to add it to your wall.' : "No doors or windows on this wall yet. Add photos of the wall and I'll find them for you — or add one by hand."}</p> : <div className="mt-4 grid gap-3">{openings.map((opening) => {
       const evidenceStatus = opening.evidenceStatus || 'field-measured';
       const verifiedMeasurement = evidenceStatus === 'field-measured' || evidenceStatus === 'professional-verified';
       const statusLabel = evidenceStatus === 'professional-verified' ? 'Professional verified' : evidenceStatus === 'field-measured' ? 'Field measured' : evidenceStatus === 'scaled-photo-derived' ? 'Scaled photo · verify in field' : 'Photo observed · dimensions provisional';

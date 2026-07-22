@@ -115,6 +115,7 @@ export class CerebrasDesignService {
           'All dimensions remain not-measured unless a calibrated reference workflow is explicitly supplied.',
           'Use confidence as an observation aid, never as verification.',
           'Call out doors, windows, wall planes, grade, existing decks/landings/stairs, vents/services, drainage, and obstructions when visible.',
+          'For each source photo, classify which single existing-condition view it best represents using the category enum; use "unsorted" when you cannot tell confidently.',
           'Return no more than 20 distinct observations for this one- or two-image batch and keep descriptions concise.',
         ],
       }),
@@ -268,7 +269,7 @@ const DESIGN_REVIEW_SCHEMA = {
 
 const PHOTO_ANALYSIS_SCHEMA = {
   type: 'object', additionalProperties: false,
-  required: ['schema', 'summary', 'observations', 'unknowns'],
+  required: ['schema', 'summary', 'observations', 'classifications', 'unknowns'],
   properties: {
     schema: { type: 'string', enum: ['ai-photo-observation-draft/v1'] }, summary: { type: 'string' },
     observations: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['sourceEvidenceId', 'kind', 'confidence', 'description', 'measurementStatus', 'boundingBox', 'uncertainties'], properties: {
@@ -276,6 +277,10 @@ const PHOTO_ANALYSIS_SCHEMA = {
       confidence: { type: 'number', minimum: 0, maximum: 1 }, description: { type: 'string' }, measurementStatus: { type: 'string', enum: ['not-measured'] },
       boundingBox: { anyOf: [{ type: 'object', additionalProperties: false, required: ['x', 'y', 'width', 'height'], properties: { x: { type: 'number', minimum: 0, maximum: 1 }, y: { type: 'number', minimum: 0, maximum: 1 }, width: { type: 'number', minimum: 0, maximum: 1 }, height: { type: 'number', minimum: 0, maximum: 1 } } }, { type: 'null' }] },
       uncertainties: { type: 'array', items: { type: 'string' } },
+    } } },
+    classifications: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['sourceEvidenceId', 'category', 'confidence'], properties: {
+      sourceEvidenceId: { type: 'string' }, category: { type: 'string', enum: ['house-overview', 'design-wall', 'door-threshold', 'grade-context', 'wall-assembly', 'obstruction', 'survey-or-sketch', 'unsorted'] },
+      confidence: { type: 'number', minimum: 0, maximum: 1 },
     } } },
     unknowns: { type: 'array', items: { type: 'string' } },
   },

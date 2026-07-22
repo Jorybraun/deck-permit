@@ -129,11 +129,36 @@ export function categoryTitle(category: CaptureCategory): string {
     'wall-assembly': 'Visible wall assembly',
     obstruction: 'Obstructions and services',
     'survey-or-sketch': 'Survey or measured sketch',
+    unsorted: 'Not sorted yet',
   } satisfies Record<CaptureCategory, string>)[category];
 }
 
 export function defaultObservationTag(category: CaptureCategory): CaptureObservationTag {
-  return ({ 'house-overview': 'house-context', 'design-wall': 'complete-wall', 'door-threshold': 'threshold-grade', 'grade-context': 'grade-slope', 'wall-assembly': 'visible-foundation', obstruction: 'obstruction-service', 'survey-or-sketch': 'measured-sketch' } satisfies Record<CaptureCategory, CaptureObservationTag>)[category];
+  return ({ 'house-overview': 'house-context', 'design-wall': 'complete-wall', 'door-threshold': 'threshold-grade', 'grade-context': 'grade-slope', 'wall-assembly': 'visible-foundation', obstruction: 'obstruction-service', 'survey-or-sketch': 'measured-sketch', unsorted: 'house-context' } satisfies Record<CaptureCategory, CaptureObservationTag>)[category];
+}
+
+/** Confidence at or above which a scene classification auto-fills the photo's category. */
+export const AI_CLASSIFICATION_APPLY_THRESHOLD = 0.55;
+
+/**
+ * Records the AI's per-photo scene guess on each evidence record, and auto-applies a confident
+ * guess as the photo's category — but only while the photo is still 'unsorted', so a category the
+ * homeowner has already chosen (or a prior confident auto-fill they left in place) is never
+ * overridden. The AI guess is always kept so the UI can surface a low-confidence "unsure" state.
+ */
+export function applyPhotoClassifications(capture: ExistingConditionCapture, analysis: AiPhotoAnalysisDraft): ExistingConditionCapture {
+  const byEvidence = new Map<string, { category: CaptureCategory; confidence: number }>();
+  for (const classification of analysis.classifications || []) {
+    if (!byEvidence.has(classification.sourceEvidenceId)) byEvidence.set(classification.sourceEvidenceId, { category: classification.category, confidence: classification.confidence });
+  }
+  if (!byEvidence.size) return capture;
+  return { ...capture, evidence: capture.evidence.map((record) => {
+    const guess = byEvidence.get(record.id);
+    if (!guess) return record;
+    const confident = Number.isFinite(guess.confidence) && guess.confidence >= AI_CLASSIFICATION_APPLY_THRESHOLD && guess.category !== 'unsorted';
+    const category = confident && record.category === 'unsorted' ? guess.category : record.category;
+    return { ...record, aiCategoryGuess: guess.category, aiCategoryConfidence: guess.confidence, category };
+  }) };
 }
 
 export function observationTagLabel(tag: CaptureObservationTag): string {

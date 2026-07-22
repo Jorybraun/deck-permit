@@ -101,7 +101,7 @@ export async function analyzeCapturePhotos(records: CaptureEvidence[], projectCo
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ photos: batch, projectContext }),
     });
     const sourceIds = new Set(batch.map((photo) => photo.evidenceId));
-    if (raw.schema !== 'ai-photo-observation-draft/v1' || raw.observations.some((observation) => !sourceIds.has(observation.sourceEvidenceId))) throw new AiDesignStudioError('The Cerebras photo draft referenced an unknown source image.', 'invalid-photo-analysis');
+    if (raw.schema !== 'ai-photo-observation-draft/v1' || raw.observations.some((observation) => !sourceIds.has(observation.sourceEvidenceId)) || (raw.classifications || []).some((classification) => !sourceIds.has(classification.sourceEvidenceId))) throw new AiDesignStudioError('The Cerebras photo draft referenced an unknown source image.', 'invalid-photo-analysis');
     drafts.push(raw);
   }
   const latest = drafts[drafts.length - 1];
@@ -110,6 +110,7 @@ export async function analyzeCapturePhotos(records: CaptureEvidence[], projectCo
     summary: drafts.length === 1 ? drafts[0].summary : `Cerebras analyzed ${photos.length} sources in ${drafts.length} source-bounded batches. ${drafts.map((draft) => draft.summary).join(' ')}`,
     generation: { ...latest.generation, responseId: drafts.map((draft) => draft.generation.responseId).filter(Boolean).join(',') },
     observations: drafts.flatMap((draft) => draft.observations.map((observation) => ({ ...observation, id: crypto.randomUUID(), decision: 'proposed' as const }))),
+    classifications: drafts.flatMap((draft) => draft.classifications || []),
     unknowns: [...new Set(drafts.flatMap((draft) => draft.unknowns))],
   };
 }

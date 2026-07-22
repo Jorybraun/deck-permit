@@ -26,6 +26,8 @@ interface DeckPlanEditorProps {
   onRotateProperty: () => void;
   onUndo: () => void;
   onRedo: () => void;
+  selectedEdgeId: string | null;
+  onSelectEdge: (edgeId: string | null) => void;
 }
 
 type EditorMode = 'select' | 'draw' | 'insert' | 'remove' | 'stairs' | 'pan';
@@ -51,7 +53,7 @@ const MIN_ZOOM = .5;
 const MAX_ZOOM = 8;
 
 /** UI module: edits architectural platform boundaries without owning durable design state. */
-export function DeckPlanEditor({ design, site, property, canUndo, canRedo, onAddPlatform, onUpdatePlatformBoundary, onRotatePlatform, onSelectObject, onConnectStair, onSetStairConstruction, onMoveStair, onResizeStairSide, onOpenProperty, onMirrorProperty, onRotateProperty, onUndo, onRedo }: DeckPlanEditorProps) {
+export function DeckPlanEditor({ design, site, property, canUndo, canRedo, onAddPlatform, onUpdatePlatformBoundary, onRotatePlatform, onSelectObject, onConnectStair, onSetStairConstruction, onMoveStair, onResizeStairSide, onOpenProperty, onMirrorProperty, onRotateProperty, onUndo, onRedo, selectedEdgeId, onSelectEdge }: DeckPlanEditorProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const wheelDeltaRef = useRef(0);
   const [mode, setMode] = useState<EditorMode>('select');
@@ -131,7 +133,7 @@ export function DeckPlanEditor({ design, site, property, canUndo, canRedo, onAdd
       return;
     }
     if (!isBackground) return;
-    if (mode !== 'draw') { onSelectObject(null); return; }
+    if (mode !== 'draw') { onSelectObject(null); onSelectEdge(null); return; }
     const constrained = constrainDraftPoint(worldPoint(event), draft, angleSnapEnabled && !event.altKey);
     const first = draft[0];
     const point = first && draft.length >= 3 && distance(constrained, first) <= closeTargetMm(transform.scale) ? first : constrained;
@@ -161,6 +163,7 @@ export function DeckPlanEditor({ design, site, property, canUndo, canRedo, onAdd
     setPreview({ platformId: platform.id, boundary: platform.boundary });
     setDragRulers(null);
     onSelectObject(platform.id);
+    onSelectEdge(kind === 'edge' && index !== undefined ? platform.edges[index]?.id ?? null : null);
     if (kind === 'vertex') setMessage('Drag the corner. Smart guides align with other nodes and the rulers show X, Y, and direct distances.');
   };
 
@@ -175,6 +178,7 @@ export function DeckPlanEditor({ design, site, property, canUndo, canRedo, onAdd
     setPreview({ platformId: platform.id, boundary: platform.boundary, rotationDeltaDeg: 0 });
     setDragRulers(null);
     onSelectObject(platform.id);
+    onSelectEdge(null);
     setMessage(`Rotate ${platform.name}. The angle snaps every ${ANGLE_SNAP_DEG}°; hold Alt for a free angle.`);
   };
 
@@ -480,7 +484,7 @@ export function DeckPlanEditor({ design, site, property, canUndo, canRedo, onAdd
         <rect data-background="true" width={VIEW_WIDTH} height={VIEW_HEIGHT} fill="url(#architect-grid)" />
         <SiteContext site={site} geometry={propertyGeometry} setbackGuides={setbackGuides} deckGuides={deckGuides} transform={transform} viewMode={viewMode} />
         <g data-testid="existing-design-layers" pointerEvents={existingLayersPointerEvents(mode)}>
-          {design.platforms.map((platform) => <PlatformShape key={platform.id} platform={platform} boundary={displayedBoundary(platform)} selected={selectedPlatform?.id === platform.id} detectedLanding={detectedLanding?.id === platform.id} transform={transform} interactionMode={mode} stairSourceEdgeId={stairSource?.platformId === platform.id ? stairSource.edgeId : null} onSelect={(event) => connectStairPlatform(event, platform)} onRotate={(event) => beginPlatformRotate(event, platform)} onVertex={(event, index) => handleVertexPointerDown(event, platform, index)} onEdge={(event, index) => handleEdgePointerDown(event, platform, index)} />)}
+          {design.platforms.map((platform) => <PlatformShape key={platform.id} platform={platform} boundary={displayedBoundary(platform)} selected={selectedPlatform?.id === platform.id} selectedEdgeId={selectedPlatform?.id === platform.id ? selectedEdgeId : null} detectedLanding={detectedLanding?.id === platform.id} transform={transform} interactionMode={mode} stairSourceEdgeId={stairSource?.platformId === platform.id ? stairSource.edgeId : null} onSelect={(event) => connectStairPlatform(event, platform)} onRotate={(event) => beginPlatformRotate(event, platform)} onVertex={(event, index) => handleVertexPointerDown(event, platform, index)} onEdge={(event, index) => handleEdgePointerDown(event, platform, index)} />)}
           {design.stairs.map((stair) => {
             const visibleStair = stairPreview?.stairId === stair.id ? { ...stair, widthMm: stairPreview.widthMm, directionDeg: stairPreview.directionDeg, startMm: stairPreview.startMm, endMm: stairPreview.endMm } : stair;
             const sourcePlatformId = stair.from.kind === 'platform' ? stair.from.platformId : null;
@@ -603,7 +607,7 @@ function FallbackHouseReference({ site, transform }: { site: SiteModel; transfor
   return <g pointerEvents="none"><rect x={x} y={y} width={width} height={height} fill="#d5ddd8" stroke="#394b42" strokeWidth="2" strokeDasharray="8 5" /><line x1={x} y1={transform.y(0)} x2={x + width} y2={transform.y(0)} stroke="#d65d2e" strokeWidth="5" /><text x={x + 14} y={y + 24} fontSize="11" fontWeight="700" fill="#38483f">UNVERIFIED HOUSE ENVELOPE · NO WALL SELECTED</text><text x={x + 14} y={y + 42} fontSize="9" fontWeight="600" fill="#62726a">Return to Property and select the yard-facing roofline edge.</text></g>;
 }
 
-function PlatformShape({ platform, boundary, selected, detectedLanding, transform, interactionMode, stairSourceEdgeId, onSelect, onRotate, onVertex, onEdge }: { platform: DeckPlatform; boundary: ClosedBoundary; selected: boolean; detectedLanding: boolean; transform: Transform; interactionMode: EditorMode; stairSourceEdgeId: string | null; onSelect: (event: ReactPointerEvent<SVGPolygonElement>) => void; onRotate: (event: ReactPointerEvent<SVGCircleElement>) => void; onVertex: (event: ReactPointerEvent<SVGCircleElement>, index: number) => void; onEdge: (event: ReactPointerEvent<SVGLineElement>, index: number) => void }) {
+function PlatformShape({ platform, boundary, selected, selectedEdgeId, detectedLanding, transform, interactionMode, stairSourceEdgeId, onSelect, onRotate, onVertex, onEdge }: { platform: DeckPlatform; boundary: ClosedBoundary; selected: boolean; selectedEdgeId: string | null; detectedLanding: boolean; transform: Transform; interactionMode: EditorMode; stairSourceEdgeId: string | null; onSelect: (event: ReactPointerEvent<SVGPolygonElement>) => void; onRotate: (event: ReactPointerEvent<SVGCircleElement>) => void; onVertex: (event: ReactPointerEvent<SVGCircleElement>, index: number) => void; onEdge: (event: ReactPointerEvent<SVGLineElement>, index: number) => void }) {
   const points = boundary.vertices.map((vertex) => `${transform.x(vertex.xMm)},${transform.y(vertex.yMm)}`).join(' ');
   const centerX = average(boundary.vertices.map((vertex) => transform.x(vertex.xMm)));
   const centerY = average(boundary.vertices.map((vertex) => transform.y(vertex.yMm)));
@@ -617,11 +621,14 @@ function PlatformShape({ platform, boundary, selected, detectedLanding, transfor
       const end = boundary.vertices[(index + 1) % boundary.vertices.length];
       const x1 = transform.x(start.xMm); const y1 = transform.y(start.yMm); const x2 = transform.x(end.xMm); const y2 = transform.y(end.yMm);
       const source = stairSourceEdgeId === platform.edges[index]?.id;
+      const isSelectedEdge = platform.edges[index]?.id === selectedEdgeId;
+      const midX = (x1 + x2) / 2; const midY = (y1 + y2) / 2;
       return <g key={`${platform.id}-edge-${index}`}>
         {source && <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="#087553" strokeWidth="10" strokeLinecap="round" pointerEvents="none" />}
-        <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="transparent" strokeWidth="22" onPointerDown={(event) => onEdge(event, index)} className={interactionMode === 'insert' || interactionMode === 'stairs' ? 'cursor-crosshair' : 'cursor-grab'} aria-label={`${platform.name} edge ${index + 1}`} />
-        <rect x={(x1 + x2) / 2 - 39} y={(y1 + y2) / 2 - 9} width="78" height="18" rx="4" fill="white" stroke="#aebdb5" pointerEvents="none" />
-        <text x={(x1 + x2) / 2} y={(y1 + y2) / 2 + 3} textAnchor="middle" fontSize="8.5" fontWeight="700" fill="#315e57" pointerEvents="none">{formatM(Math.hypot(end.xMm - start.xMm, end.yMm - start.yMm))} · {formatAngle(lineAngleDeg([start.xMm, start.yMm], [end.xMm, end.yMm]))}</text>
+        {isSelectedEdge && <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="#c2712c" strokeWidth="9" strokeLinecap="round" pointerEvents="none" />}
+        <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="transparent" strokeWidth="22" onPointerDown={(event) => onEdge(event, index)} className={interactionMode === 'insert' || interactionMode === 'stairs' ? 'cursor-crosshair' : 'cursor-pointer'} aria-label={`${platform.name} edge ${index + 1}`} />
+        <rect x={midX - 46} y={midY - 9} width="92" height="18" rx="4" fill={isSelectedEdge ? '#fbe9d6' : 'white'} stroke={isSelectedEdge ? '#c2712c' : '#aebdb5'} strokeWidth={isSelectedEdge ? 1.6 : 1} pointerEvents="none" />
+        <text x={midX} y={midY + 3} textAnchor="middle" fontSize="8.5" fontWeight={isSelectedEdge ? 800 : 700} fill={isSelectedEdge ? '#9a4a12' : '#315e57'} pointerEvents="none">E{index + 1} · {formatM(Math.hypot(end.xMm - start.xMm, end.yMm - start.yMm))} · {formatAngle(lineAngleDeg([start.xMm, start.yMm], [end.xMm, end.yMm]))}</text>
         {interactionMode === 'insert' && <g pointerEvents="none"><circle cx={(x1 + x2) / 2} cy={(y1 + y2) / 2 - 22} r="9" fill="#087553" /><text x={(x1 + x2) / 2} y={(y1 + y2) / 2 - 18.5} textAnchor="middle" fontSize="12" fontWeight="800" fill="white">+</text></g>}
       </g>;
     })}

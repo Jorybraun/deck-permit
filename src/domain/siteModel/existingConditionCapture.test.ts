@@ -1,8 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { addCaptureEvidence, assessExistingConditionCapture, captureObservationSummary, createExistingConditionCapture, promoteAcceptedAiOpening, recordAiPhotoAnalysis, removeCaptureEvidence, reviewAiPhotoObservation, updateCaptureEvidence } from './existingConditionCapture';
+import { addCaptureEvidence, applyPhotoClassifications, assessExistingConditionCapture, captureObservationSummary, createExistingConditionCapture, promoteAcceptedAiOpening, recordAiPhotoAnalysis, removeCaptureEvidence, reviewAiPhotoObservation, updateCaptureEvidence } from './existingConditionCapture';
 import { createSiteModel } from './siteModel';
 import { emptyProperty } from '../../state/homeownerProjectStore';
-import type { CaptureCategory } from './types';
+import type { AiPhotoAnalysisDraft, CaptureCategory } from './types';
+
+const analysisWith = (classifications: AiPhotoAnalysisDraft['classifications']): AiPhotoAnalysisDraft => ({
+  schema: 'ai-photo-observation-draft/v1', id: 'analysis-1', summary: 'Sorted photos', unknowns: [],
+  generation: { model: 'test', responseId: 'response', generatedAt: '2026-07-18T12:00:00.000Z' }, observations: [], classifications,
+});
 
 const evidence = (id: string, category: CaptureCategory) => ({
   id, category, label: '', fileName: `${id}.jpg`, mimeType: 'image/jpeg', byteSize: 1000,
@@ -48,6 +53,33 @@ describe('ExistingConditionCapture public contract', () => {
     expect(capture.aiAnalyses?.[0].observations[0].decision).toBe('homeowner-accepted');
     expect(removeCaptureEvidence(capture, '1').aiAnalyses?.[0].observations).toHaveLength(0);
     expect(() => recordAiPhotoAnalysis(capture, { ...capture.aiAnalyses![0], id: 'bad', observations: [{ ...capture.aiAnalyses![0].observations[0], sourceEvidenceId: 'missing' }] })).toThrow(/admitted source photo/);
+  });
+
+  it('applies confident scene guesses, keeps uncertain photos unsorted, and never overrides a hand-set category', () => {
+    let capture = createExistingConditionCapture();
+    capture = addCaptureEvidence(capture, evidence('1', 'unsorted'));
+    capture = addCaptureEvidence(capture, evidence('2', 'unsorted'));
+    capture = addCaptureEvidence(capture, evidence('3', 'unsorted'));
+    capture = addCaptureEvidence(capture, evidence('4', 'unsorted'));
+    // The homeowner already sorted photo 4 by hand.
+    capture = updateCaptureEvidence(capture, '4', { category: 'grade-context' });
+
+    capture = applyPhotoClassifications(capture, analysisWith([
+      { sourceEvidenceId: '1', category: 'design-wall', confidence: .82 },
+      { sourceEvidenceId: '2', category: 'unsorted', confidence: .2 },
+      { sourceEvidenceId: '3', category: 'door-threshold', confidence: .4 },
+      { sourceEvidenceId: '4', category: 'obstruction', confidence: .95 },
+    ]));
+
+    const byId = Object.fromEntries(capture.evidence.map((record) => [record.id, record]));
+    // Confident, non-unsorted guess on an unsorted photo is applied.
+    expect(byId['1']).toMatchObject({ category: 'design-wall', aiCategoryGuess: 'design-wall', aiCategoryConfidence: .82 });
+    // An explicitly 'unsorted' guess stays unsorted but the guess is recorded.
+    expect(byId['2']).toMatchObject({ category: 'unsorted', aiCategoryGuess: 'unsorted', aiCategoryConfidence: .2 });
+    // A low-confidence guess leaves the photo unsorted while remembering the guess for the "unsure" UI.
+    expect(byId['3']).toMatchObject({ category: 'unsorted', aiCategoryGuess: 'door-threshold', aiCategoryConfidence: .4 });
+    // A category the homeowner already chose is never overridden, even by a confident guess.
+    expect(byId['4']).toMatchObject({ category: 'grade-context', aiCategoryGuess: 'obstruction', aiCategoryConfidence: .95 });
   });
 
   it('explicitly promotes an accepted door or window observation into one source-bound provisional opening', () => {

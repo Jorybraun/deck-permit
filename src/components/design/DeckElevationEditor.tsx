@@ -71,8 +71,13 @@ export function DeckElevationEditor({ design, site, onSelectObject, onSetElevati
 
     <div className="relative min-h-0 flex-1 overflow-auto">
       <svg ref={svgRef} width={model.contentWidth} height={model.contentHeight} viewBox={`0 0 ${model.contentWidth} ${model.contentHeight}`} role="application" aria-label="Deck side elevation editor" className="block shrink-0 touch-none select-none" onPointerMove={moveElevation} onPointerUp={finishElevation} onPointerCancel={finishElevation}>
-        <defs><pattern id="elevation-grid" width="25" height="25" patternUnits="userSpaceOnUse"><path d="M25 0H0V25" fill="none" stroke="#d5ded8" strokeWidth=".7" /></pattern></defs>
+        <defs>
+          <pattern id="elevation-grid" width="25" height="25" patternUnits="userSpaceOnUse"><path d="M25 0H0V25" fill="none" stroke="#d5ded8" strokeWidth=".7" /></pattern>
+          <pattern id="soil-hatch" width="12" height="12" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="12" height="12" fill="#e9e0cf" /><line x1="0" y1="0" x2="0" y2="12" stroke="#d3c4a6" strokeWidth="1.2" /></pattern>
+          <pattern id="concrete-fill" width="7" height="7" patternUnits="userSpaceOnUse"><rect width="7" height="7" fill="#d3d7d4" /><circle cx="2" cy="2" r=".7" fill="#8b968d" /><circle cx="5" cy="5" r=".6" fill="#8b968d" /><circle cx="5.5" cy="1.5" r=".4" fill="#9aa49b" /></pattern>
+        </defs>
         <rect width={model.contentWidth} height={model.contentHeight} fill="url(#elevation-grid)" />
+        <rect x="45" y={model.groundY} width={model.contentWidth - 90} height={model.contentHeight - model.groundY} fill="url(#soil-hatch)" pointerEvents="none" />
         <line x1="45" y1={model.groundY} x2={model.contentWidth - 45} y2={model.groundY} stroke="#43564c" strokeWidth="3" />
         <text x="52" y={model.groundY + 20} fontSize="10" fontWeight="800" fill="#43564c">PROJECT DATUM / LOCAL GRADE · EL. {site.terrain.datum.elevationMm} mm</text>
         <HouseElevation model={model} />
@@ -152,7 +157,15 @@ function PlatformElevation({ item, selected, model, axis, onSelect, onBeginDrag 
   const postXs = x2 - x1 < 90 ? [(x1 + x2) / 2] : [x1 + (x2 - x1) * .18, x2 - (x2 - x1) * .18];
   const guardHeightMm = item.elevationMm - item.gradeMm > 1800 ? 1070 : 900;
   return <g role="button" tabIndex={0} aria-label={`${item.platform.name} side elevation, ${item.elevationMm} millimetres`} onClick={onSelect} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onSelect(); } }} className="cursor-pointer">
-    {postXs.map((postX, index) => <g key={index} pointerEvents="none"><line x1={postX} y1={framingBottom} x2={postX} y2={gradeY} stroke="#76512f" strokeWidth="10" /><rect x={postX - 18} y={gradeY} width="36" height="12" fill="#d3d7d4" stroke="#5d6962" strokeWidth="2" /><text x={postX + 9} y={(framingBottom + gradeY) / 2} transform={`rotate(-90 ${postX + 9} ${(framingBottom + gradeY) / 2})`} textAnchor="middle" fontSize="7" fontWeight="800" fill="#6f4d30">PRELIM. POST</text></g>)}
+    {postXs.map((postX, index) => {
+      const pierW = 16; const pierDepth = Math.max(14, Math.round(300 * model.elevationScale)); const padW = Math.max(40, Math.round(650 * model.projectionScale)); const padH = Math.max(10, Math.round(160 * model.elevationScale));
+      return <g key={index} pointerEvents="none">
+        <line x1={postX} y1={framingBottom} x2={postX} y2={gradeY} stroke="#76512f" strokeWidth="10" />
+        <rect x={postX - pierW / 2} y={gradeY} width={pierW} height={pierDepth + padH} fill="url(#concrete-fill)" stroke="#6b756d" strokeWidth="1.5" />
+        <rect x={postX - padW / 2} y={gradeY + pierDepth} width={padW} height={padH} fill="url(#concrete-fill)" stroke="#6b756d" strokeWidth="1.5" />
+        <text x={postX + 9} y={(framingBottom + gradeY) / 2} transform={`rotate(-90 ${postX + 9} ${(framingBottom + gradeY) / 2})`} textAnchor="middle" fontSize="7" fontWeight="800" fill="#6f4d30">PRELIM. POST</text>
+      </g>;
+    })}
     <rect x={x1} y={surfaceY} width={Math.max(3, x2 - x1)} height={decking} fill="#b87942" stroke={selected ? '#087553' : '#60472f'} strokeWidth={selected ? 4 : 2} />
     <rect x={x1} y={surfaceY + decking} width={Math.max(3, x2 - x1)} height={joists} fill="#e2bc8e" stroke="#76512f" strokeWidth="2" />
     <line x1={x1} y1={surfaceY + decking + joists + beam / 2} x2={x2} y2={surfaceY + decking + joists + beam / 2} stroke="#34473d" strokeWidth={beam} />

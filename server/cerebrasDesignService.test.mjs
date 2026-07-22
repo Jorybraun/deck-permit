@@ -33,16 +33,25 @@ describe('CerebrasDesignService', () => {
     await expect(new CerebrasDesignService().proposeDesign({ intent: {}, property: {}, site: {}, design: {} })).rejects.toMatchObject({ status: 503, code: 'ai-not-configured' });
   });
 
-  it('binds photo inputs to evidence IDs and leaves dimensions unmeasured', async () => {
+  it('binds photo inputs to evidence IDs, requests a per-photo scene classification, and leaves dimensions unmeasured', async () => {
     const fetchImpl = vi.fn(async (_url, init) => {
       const request = JSON.parse(init.body);
       expect(request.model).toBe('gemma-4-31b');
       expect(request.messages[1].content[1]).toMatchObject({ type: 'image_url', image_url: { url: 'data:image/jpeg;base64,eA==' } });
-      return new Response(JSON.stringify({ id: 'photo-response', choices: [{ message: { role: 'assistant', content: JSON.stringify({ schema: 'ai-photo-observation-draft/v1', summary: 'Rear wall', observations: [{ sourceEvidenceId: 'photo-1', kind: 'window', confidence: .9, description: 'Window visible', measurementStatus: 'not-measured', boundingBox: null, uncertainties: [] }], unknowns: [] }) } }] }), { status: 200, headers: { 'content-type': 'application/json' } });
+      // The structured schema requires a classifications array with a constrained category enum.
+      const schema = request.response_format.json_schema.schema;
+      expect(schema.required).toContain('classifications');
+      expect(schema.properties.classifications.items.properties.category.enum).toContain('unsorted');
+      expect(schema.properties.classifications.items.properties.category.enum).toContain('design-wall');
+      expect(Buffer.byteLength(JSON.stringify(schema))).toBeLessThanOrEqual(5_000);
+      // The prompt instructs the model to classify each photo's best-matching view.
+      expect(request.messages[1].content[0].text).toContain('classify which single existing-condition view');
+      return new Response(JSON.stringify({ id: 'photo-response', choices: [{ message: { role: 'assistant', content: JSON.stringify({ schema: 'ai-photo-observation-draft/v1', summary: 'Rear wall', observations: [{ sourceEvidenceId: 'photo-1', kind: 'window', confidence: .9, description: 'Window visible', measurementStatus: 'not-measured', boundingBox: null, uncertainties: [] }], classifications: [{ sourceEvidenceId: 'photo-1', category: 'design-wall', confidence: .88 }], unknowns: [] }) } }] }), { status: 200, headers: { 'content-type': 'application/json' } });
     });
     const service = new CerebrasDesignService({ apiKey: 'test-key', fetchImpl });
     const result = await service.analyzePhotos({ photos: [{ evidenceId: 'photo-1', sha256: 'a'.repeat(64), label: 'Rear wall', dataUrl: 'data:image/jpeg;base64,eA==' }] });
     expect(result.observations[0]).toMatchObject({ sourceEvidenceId: 'photo-1', measurementStatus: 'not-measured' });
+    expect(result.classifications[0]).toMatchObject({ sourceEvidenceId: 'photo-1', category: 'design-wall', confidence: .88 });
   });
 
   it('rejects unsupported or oversized photo batches before sending them', async () => {

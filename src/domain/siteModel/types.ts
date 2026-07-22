@@ -168,7 +168,7 @@ export interface TerrainElevationResult {
   verificationStatus: TerrainVerificationStatus;
 }
 
-export type CaptureCategory = 'house-overview' | 'design-wall' | 'door-threshold' | 'grade-context' | 'wall-assembly' | 'obstruction' | 'survey-or-sketch';
+export type CaptureCategory = 'house-overview' | 'design-wall' | 'door-threshold' | 'grade-context' | 'wall-assembly' | 'obstruction' | 'survey-or-sketch' | 'unsorted';
 export type CaptureEvidenceStatus = 'recorded-unverified' | 'homeowner-confirmed' | 'professional-verified';
 export type CaptureObservationTag = 'house-context' | 'complete-wall' | 'wall-corners' | 'door-opening' | 'window-opening' | 'threshold-grade' | 'grade-slope' | 'drainage-path' | 'visible-foundation' | 'cladding-condition' | 'obstruction-service' | 'scale-reference' | 'measured-sketch';
 
@@ -188,6 +188,9 @@ export interface CaptureEvidence {
   viewpoint?: string;
   referenceLabel?: string;
   referenceDimensionMm?: number | null;
+  /** The AI's guess of which required view this photo shows; the homeowner may override it. */
+  aiCategoryGuess?: CaptureCategory;
+  aiCategoryConfidence?: number;
 }
 
 export type AiPhotoObservationKind = 'house-wall' | 'door' | 'window' | 'landing' | 'stair' | 'grade' | 'vent-service' | 'drainage' | 'obstruction' | 'other';
@@ -203,11 +206,19 @@ export interface AiPhotoObservationDraft {
   decision: 'proposed' | 'homeowner-accepted' | 'homeowner-rejected';
 }
 
+export interface AiSceneClassification {
+  sourceEvidenceId: string;
+  category: CaptureCategory;
+  confidence: number;
+}
+
 export interface AiPhotoAnalysisDraft {
   schema: 'ai-photo-observation-draft/v1';
   id: string;
   summary: string;
   observations: AiPhotoObservationDraft[];
+  /** Per-photo guess of which required existing-condition view each source photo best shows. */
+  classifications?: AiSceneClassification[];
   unknowns: string[];
   generation: { model: string; responseId: string; generatedAt: string };
 }
@@ -246,7 +257,7 @@ export interface PhotoWallCalibration {
   warnings: string[];
 }
 
-export type CaptureEvidenceChanges = Partial<Pick<CaptureEvidence, 'category' | 'label' | 'notes' | 'status' | 'observationTags' | 'viewpoint' | 'referenceLabel' | 'referenceDimensionMm'>>;
+export type CaptureEvidenceChanges = Partial<Pick<CaptureEvidence, 'category' | 'label' | 'notes' | 'status' | 'observationTags' | 'viewpoint' | 'referenceLabel' | 'referenceDimensionMm' | 'aiCategoryGuess' | 'aiCategoryConfidence'>>;
 
 /** Metadata for locally stored private capture files; bytes are owned by capture-file storage. */
 export interface ExistingConditionCapture {
