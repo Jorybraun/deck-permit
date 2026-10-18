@@ -2,6 +2,7 @@
 
 import hashlib
 import io
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -69,6 +70,19 @@ class PipeyArchiveTest(unittest.TestCase):
                 blob = b"blob " + str(len(content)).encode() + b"\0" + content
                 self.assertEqual(hashlib.sha1(blob).hexdigest(), digest)
                 self.assertEqual(bool(entry.mode & 0o111), mode == "100755")
+
+    def test_pipey_manifest_uses_sorted_compact_json(self):
+        entry = self.archive.getmember("pipey-interview.json")
+        source = self.archive.extractfile(entry)
+        self.assertIsNotNone(source)
+        manifest_bytes = source.read()
+        expected = json.dumps(
+            json.loads(manifest_bytes),
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode()
+        self.assertEqual(manifest_bytes, expected)
 
 
 if __name__ == "__main__":

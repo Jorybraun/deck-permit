@@ -117,6 +117,9 @@ That initial run reproduced the isolation settings. Subsequently, the actual
 PIPEY validator at `3afe81a72e3ad69e3fc06bd0849e960539313d75` passed all seven
 stages against the complete staged challenge archive. This is local source/runtime
 evidence, not browser/provider proof, candidate assessment or release approval.
+Production source-upload submission preserves exact uploaded bytes and requires
+the manifest's RFC 8785 canonical JSON serialization. The archived manifest uses
+PIPEY's existing canonical serializer; its semantic values are unchanged.
 
 That PIPEY branch adds the exact `node_fixture_*` policy family alongside the
 original Python fixture, with all eight version/digest pins required. Unknown,
