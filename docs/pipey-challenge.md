@@ -1,6 +1,6 @@
 # Using deck-permit as a PIPEY challenge
 
-Status: **archive preparation only; not a valid or approved challenge yet.**
+Status: **complete challenge content; local validation passed; not an approved challenge.**
 This does not change the Deck Permit application or authorize real candidate work.
 
 ## Reuse the existing format
@@ -20,7 +20,7 @@ The integration reference above was inspected at
 `80efb6355925cb75d22d6c92502a4dc1d6167f60`; it is not a claim that the integration
 has been merged or deployed.
 
-Before this repository can be approved, add the existing format's root files:
+The adaptation uses the existing format's files:
 
 | File | Purpose |
 | --- | --- |
@@ -61,7 +61,21 @@ committed revision, set `PIPEY_ARCHIVE_REF` to its full SHA. These are packaging
 tests, **not** PIPEY validation, a GitHub-provider test or candidate-launch proof.
 The real GitHub download must also be checked before acceptance.
 
-## Runtime work still required
+## Selected exercise and published role
+
+`TASK.md` asks for a typed, pure comparison of two existing `ProjectEstimate`
+values and visible regression tests. It does not change the app's pricing formula,
+add UI/provider calls or supply a solution. `rubric.json` is public evidence
+guidance, not hidden grading.
+
+`role-brief.json` is byte-for-byte the public snapshot from PIPEY's server-generated
+authoring kit for `role_public_d3d52cca-9df7-46c2-9859-a1f8bec9f562`, publication 1.
+Its digest is `sha256:29ecb63a7f6cb6f37b3f618aabac662f3ab3dead35ab7e620d88fb3a669f1d85`.
+The existing confirmed requirement `req_9d30418435e14a8e` is implementing a typed
+TypeScript function and covering its behavior with an automated test. Both rubric
+criteria map to it. This is an explicitly fictional, non-selection test role.
+
+## Offline runtime
 
 This is a React/TypeScript/Vite application, not the Python-only fictional starter.
 Its existing commands are `npm ci`, `npm run lint`, `npm test`, `npm run build`
@@ -72,13 +86,43 @@ restricted writable paths and bounded command timeouts. Running `npm ci` inside
 that validator is not an offline setup solution. The retained desktop Dockerfile
 does not provision this application's locked dependencies.
 
-Before adding a runnable manifest, prepare and verify an approved, digest-pinned
-desktop runtime containing the required Node toolchain and locked dependency
-artifacts, then prove dependency resolution and Vite's writable cache/output paths
-under the actual validator limits. Do not quietly enable network access, weaken
-the validator or substitute static source inspection for build/test execution.
-If supporting the app requires a runtime-policy change, implement and review that
-separately in PIPEY rather than claiming this repository's metadata grants it.
+`environment/Dockerfile` extends the retained digest-pinned desktop with a
+checksum-pinned Node 24.16.0 distribution and dependencies from the unchanged npm
+lockfile. Installation happens at image build time, with lifecycle scripts disabled.
+Only the Dockerfile and two package manifests belong in its build context; never
+send a developer checkout, credentials, `.env` or private material to an image build.
+No candidate source, solution or private evaluator is baked into the runtime.
+
+`environment/commands.mjs` checks the image's package/lockfile bytes, performs
+TypeScript compilation and runs the visible Vitest suite. Vite cache, reports and
+optional build output go under `reports/`. Zero, failed or skipped tests cannot
+produce a passing verification report. Setup does not run `npm ci` or download
+anything. The extra `build` command is a developer check, not a fourth PIPEY stage.
+
+`pipey-interview.json` pins the locally built OCI index
+`sha256:76e8ad15685900cf27e64bd094246e686318aa547a6c7e92672ff5da00452044`.
+Its Linux/amd64 manifest is
+`sha256:3f10ee5ccf77e6fe8abe48f430a2d32822795a6d188c4c73cfd918c71ef1f3db`;
+BuildKit reported config digest
+`sha256:10844088bfd31cfec7e5c33da879c831eb50adc1804bfdd94f665ab85776606e`.
+These are different identities, not interchangeable image pins. The image is
+currently local only; registry publication and real Sandbox qualification remain
+required before candidate launch.
+
+Local isolated-container evidence: setup, TypeScript health, 179/179 visible tests
+and the optional production build passed. A changed lockfile and a failing test
+with a stale success report both correctly failed. This used no runtime network,
+a read-only image, dropped capabilities, non-root commands and bounded resources.
+That initial run reproduced the isolation settings. Subsequently, the actual
+PIPEY validator at `3afe81a72e3ad69e3fc06bd0849e960539313d75` passed all seven
+stages against the complete staged challenge archive. This is local source/runtime
+evidence, not browser/provider proof, candidate assessment or release approval.
+
+That PIPEY branch adds the exact `node_fixture_*` policy family alongside the
+original Python fixture, with all eight version/digest pins required. Unknown,
+modified or mixed policies fail before Docker starts. The PIPEY change still needs
+separate review and integration; a repository policy file does not grant itself
+permission. Runtime network remains denied.
 
 The app's AI, municipal lookup and delivery integrations are outside an offline
 exercise. A task must use explicit fictional/local data and avoid those external
@@ -87,15 +131,20 @@ interview check pass. Existing development behavior remains unchanged.
 
 ## Remaining acceptance order
 
-1. Choose the published role and a relevant bounded task; author the public
-   instructions and rubric from that role, without inventing requirements.
-2. Prepare the offline Node runtime and command reports; bind its verified image
-   and the real public role/policy pins in the existing manifest contract.
-3. Use the recruiter UI to import the real GitHub URL. Prove failure, retry and
+1. Review and integrate the PIPEY compatibility changes; publish and qualify the
+   pinned runtime for real Sandbox use. Local role/policy/runtime binding is done.
+2. Use the recruiter UI to import the real GitHub URL. Prove failure, retry and
    reload; validation must genuinely pass before approval becomes available.
-4. Approve explicitly, invite a consenting test candidate and prove the actual
+3. Approve explicitly, invite a consenting test participant and prove the actual
    computer opens the exact imported files and executable flags, including
    reload/recovery. Keep private assessment material absent.
 
-Archive preparation alone satisfies none of the last three gates. No deployment
+The PIPEY compatibility branch adds explicit branch URLs without changing the
+default branch. Use `https://github.com/Jorybraun/deck-permit/tree/devin/1792360593-pipey-challenge-archive`
+after that support is integrated, rather than the repository root URL. Imports
+must resolve this branch to one immutable commit/tree and download by that commit.
+The live branch import remains unproven. Do not change the default branch, merge
+or substitute a local archive and call that the real GitHub browser journey.
+
+Repository content alone satisfies none of these integration gates. No deployment
 or real-candidate release is authorized by this document.

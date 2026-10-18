@@ -1,0 +1,17 @@
+{
+  "formatVersion": "pipey.challenge/1",
+  "classification": "fictional_non_calibrated",
+  "instructions": "Candidate-visible evidence guidance for a non-selection engineering test. A human reviewer records concrete implementation and visible-test evidence, missing behavior and limitations. Do not infer ability beyond the work, assign a score or rank, recommend hiring, or claim selection validity.",
+  "criteria": [
+    {
+      "criterionRef": "criterion_typed_estimate_comparison",
+      "requirementRef": "req_9d30418435e14a8e",
+      "observation": "Identify the exported TypeScript comparison function and return type. Describe observed signed endpoint and area differences, line-ID matching and input preservation against TASK.md. Record missing or contrary evidence explicitly. Do not assess building-code expertise or pricing accuracy."
+    },
+    {
+      "criterionRef": "criterion_visible_comparison_tests",
+      "requirementRef": "req_9d30418435e14a8e",
+      "observation": "Identify visible automated tests demonstrating unchanged values, increases and decreases, reordered lines, one-decimal area differences and input preservation. Record their actual outcomes and any coverage gaps. Passing existing baseline tests alone does not establish that the requested comparison was implemented."
+    }
+  ]
+}

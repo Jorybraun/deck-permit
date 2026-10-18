@@ -1,3 +1,6 @@
+.vite-temp/
+reports/*
+!reports/README.md
 node_modules/
 dist/
 .deck-permit-data/
