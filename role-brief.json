@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "pipey.recruiter.PublishedRole.v2",
+  "publicRef": "role_public_d3d52cca-9df7-46c2-9859-a1f8bec9f562",
+  "state": "published",
+  "publicationRevision": 1,
+  "publishedAt": "2026-10-17T07:16:29.651Z",
+  "title": "PIPEY B1 — TypeScript authoring test only",
+  "company": "PIPEY Test Company",
+  "description": "Fictional local test role, not a real vacancy. Build a small typed TypeScript function and add an automated test. No candidates will be contacted.",
+  "location": "Remote (test only)",
+  "remotePolicy": null,
+  "requirements": [
+    {
+      "requirementId": "req_9d30418435e14a8e",
+      "text": "Implement a typed TypeScript function and cover its behavior with an automated test.",
+      "priority": "must"
+    }
+  ]
+}
